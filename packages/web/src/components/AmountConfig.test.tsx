@@ -1,0 +1,31 @@
+import { render, screen, fireEvent } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { AmountConfig } from './AmountConfig.js';
+
+describe('AmountConfig', () => {
+  it('renders mode toggle', () => {
+    render(<AmountConfig mode="uniform" format="integer" uniformAmount="" />);
+    expect(screen.getByText('Uniform')).toBeInTheDocument();
+    expect(screen.getByText('Variable')).toBeInTheDocument();
+  });
+  it('renders amount input for uniform mode', () => {
+    render(<AmountConfig mode="uniform" format="integer" uniformAmount="1000" />);
+    expect(screen.getByDisplayValue('1000')).toBeInTheDocument();
+  });
+  it('hides amount input for variable mode', () => {
+    render(<AmountConfig mode="variable" format="integer" uniformAmount="" />);
+    expect(screen.queryByPlaceholderText(/amount/i)).toBeNull();
+  });
+  it('calls onModeChange', () => {
+    const onModeChange = vi.fn();
+    render(<AmountConfig mode="uniform" format="integer" uniformAmount="" onModeChange={onModeChange} />);
+    fireEvent.click(screen.getByText('Variable'));
+    expect(onModeChange).toHaveBeenCalledWith('variable');
+  });
+  it('calls onAmountChange', () => {
+    const onAmountChange = vi.fn();
+    render(<AmountConfig mode="uniform" format="integer" uniformAmount="" onAmountChange={onAmountChange} />);
+    fireEvent.change(screen.getByPlaceholderText(/amount/i), { target: { value: '500' } });
+    expect(onAmountChange).toHaveBeenCalledWith('500');
+  });
+});
