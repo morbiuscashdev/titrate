@@ -17,21 +17,6 @@ export type WalletStepResult = {
   readonly operatorAllowance: bigint | null;
 };
 
-/**
- * Attempts to write text to the system clipboard (macOS only).
- * Silently no-ops if pbcopy is unavailable.
- */
-async function copyToClipboard(text: string): Promise<boolean> {
-  try {
-    const { exec } = await import('node:child_process');
-    const { promisify } = await import('node:util');
-    const execAsync = promisify(exec);
-    await execAsync(`echo -n ${JSON.stringify(text)} | pbcopy`);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /**
  * Resolves the private key from the password prompt or env var.
@@ -96,10 +81,7 @@ export async function walletStep(
 
   const { address: hotAddress, privateKey: hotPrivateKey } = deriveHotWallet(signature as Hex);
 
-  const copied = await copyToClipboard(hotPrivateKey);
-  process.stdout.write(
-    `  Hot wallet derived: ${formatAddress(hotAddress)}${copied ? ' (private key copied to clipboard)' : ''}\n`,
-  );
+  process.stdout.write(`  Hot wallet derived: ${formatAddress(hotAddress)}\n`);
 
   const hotWalletClient = createSignerClient(hotPrivateKey as Hex, campaign.rpcUrl);
 
