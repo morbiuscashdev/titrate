@@ -1,10 +1,12 @@
 import { intro, outro, isCancel } from '@clack/prompts';
+import { join } from 'node:path';
 import { campaignStep } from './steps/campaign.js';
 import { addressesStep } from './steps/addresses.js';
 import { filtersStep } from './steps/filters.js';
 import { amountsStep } from './steps/amounts.js';
 import { walletStep } from './steps/wallet.js';
 import { distributeStep } from './steps/distribute.js';
+import { createFileStorage } from '@titrate/storage-fs';
 
 /**
  * Runs the interactive Titrate wizard from start to finish.
@@ -23,8 +25,10 @@ import { distributeStep } from './steps/distribute.js';
 export async function runWizard(): Promise<void> {
   intro('Titrate — Airdrop Wizard');
 
+  const storage = createFileStorage(join(process.cwd(), '.titrate'));
+
   // --- Step 1: Campaign Setup ---
-  const campaign = await campaignStep();
+  const campaign = await campaignStep(storage);
   if (isCancel(campaign)) {
     outro('Cancelled.');
     return;
@@ -64,7 +68,7 @@ export async function runWizard(): Promise<void> {
   }
 
   // --- Step 6: Review & Distribute ---
-  const result = await distributeStep(campaign, filters, amounts, wallet);
+  const result = await distributeStep(campaign, filters, amounts, wallet, storage);
   if (isCancel(result)) {
     outro('Cancelled.');
     return;

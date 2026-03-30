@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createFileStorage } from '@titrate/storage-fs';
+import { createFileStorage } from '../src/index.js';
 import type { Storage, StoredCampaign, StoredBatch, StoredWallet } from '@titrate/sdk';
 
 describe('FileStorage', () => {
