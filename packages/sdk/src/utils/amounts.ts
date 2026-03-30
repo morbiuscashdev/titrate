@@ -1,3 +1,5 @@
+import type { AmountFormat } from '../types.js';
+
 /**
  * Converts a decimal string to a bigint scaled by the given number of decimals.
  *
@@ -25,7 +27,7 @@ export function decimalToInteger(decimalStr: string, decimals: number): bigint {
  */
 export function parseVariableAmounts(
   rawAmounts: readonly (string | null)[],
-  format: 'integer' | 'decimal',
+  format: AmountFormat,
   decimals: number,
 ): bigint[] {
   return rawAmounts.map((raw) => {
