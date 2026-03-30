@@ -6,6 +6,8 @@
     "build": "npm run build --workspaces",
     "test": "npm run test --workspaces",
     "test:sdk": "npm run test -w packages/sdk",
-    "test:contracts": "npm run test -w packages/contracts"
+    "test:contracts": "npm run test -w packages/contracts",
+    "coverage:sdk": "cd packages/sdk && npx vitest run --coverage",
+    "coverage:contracts": "cd packages/contracts && forge coverage"
   }
 }
