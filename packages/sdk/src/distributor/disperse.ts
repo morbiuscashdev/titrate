@@ -1,6 +1,5 @@
 import type { Address, Hex, PublicClient, WalletClient } from 'viem';
 import type { BatchResult, BatchAttempt, ProgressCallback } from '../types.js';
-import { chunk } from '../utils/chunk.js';
 import TitrateSimpleArtifact from './artifacts/TitrateSimple.json' with { type: 'json' };
 import TitrateFullArtifact from './artifacts/TitrateFull.json' with { type: 'json' };
 
@@ -11,6 +10,13 @@ function getAbi(variant: 'simple' | 'full'): never {
 const ZERO_BYTES32 =
   '0x0000000000000000000000000000000000000000000000000000000000000000' as Hex;
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address;
+
+/**
+ * Live filter function applied per-batch before sending.
+ * Receives candidate addresses, returns only those that should still receive tokens.
+ * Used to filter out addresses that received tokens between batches.
+ */
+export type LiveFilter = (addresses: readonly Address[]) => Promise<readonly Address[]>;
 
 export type DisperseParams = {
   readonly contractAddress: Address;
@@ -23,6 +29,7 @@ export type DisperseParams = {
   readonly walletClient: WalletClient;
   readonly publicClient: PublicClient;
   readonly batchSize?: number;
+  readonly liveFilter?: LiveFilter;
   readonly onProgress?: ProgressCallback;
 };
 
@@ -37,14 +44,94 @@ export type DisperseSimpleParams = {
   readonly walletClient: WalletClient;
   readonly publicClient: PublicClient;
   readonly batchSize?: number;
+  readonly liveFilter?: LiveFilter;
   readonly onProgress?: ProgressCallback;
 };
 
 /**
- * Disperses variable token amounts to multiple recipients, batching as needed.
- * For native token, pass the zero address as `token`.
+ * Fills a batch by streaming through candidates and applying a live filter.
+ * Pulls addresses from the source starting at `cursor`, filters each chunk,
+ * and accumulates until `batchSize` is reached or the source is exhausted.
  *
- * @param params - Disperse parameters
+ * Returns the filled batch and the new cursor position.
+ */
+async function fillBatch(
+  candidates: readonly Address[],
+  cursor: number,
+  batchSize: number,
+  liveFilter: LiveFilter | undefined,
+  filterChunkSize = 500,
+): Promise<{ addresses: Address[]; newCursor: number }> {
+  const batch: Address[] = [];
+
+  while (batch.length < batchSize && cursor < candidates.length) {
+    const needed = batchSize - batch.length;
+    const windowSize = liveFilter
+      ? Math.min(needed + Math.ceil(needed * 0.25), candidates.length - cursor, filterChunkSize)
+      : Math.min(needed, candidates.length - cursor);
+    const window = candidates.slice(cursor, cursor + windowSize);
+    cursor += window.length;
+
+    const passed = liveFilter ? await liveFilter(window) : window;
+    for (const addr of passed) {
+      batch.push(addr);
+      if (batch.length >= batchSize) break;
+    }
+  }
+
+  return { addresses: batch, newCursor: cursor };
+}
+
+/**
+ * Same as fillBatch but also carries parallel amounts from a paired array.
+ * Addresses that fail the live filter have their amounts dropped too.
+ */
+async function fillBatchWithAmounts(
+  candidates: readonly Address[],
+  candidateAmounts: readonly bigint[],
+  cursor: number,
+  batchSize: number,
+  liveFilter: LiveFilter | undefined,
+  filterChunkSize = 500,
+): Promise<{ addresses: Address[]; amounts: bigint[]; newCursor: number }> {
+  const batchAddrs: Address[] = [];
+  const batchAmounts: bigint[] = [];
+
+  while (batchAddrs.length < batchSize && cursor < candidates.length) {
+    const needed = batchSize - batchAddrs.length;
+    const windowSize = liveFilter
+      ? Math.min(needed + Math.ceil(needed * 0.25), candidates.length - cursor, filterChunkSize)
+      : Math.min(needed, candidates.length - cursor);
+    const windowAddrs = candidates.slice(cursor, cursor + windowSize);
+    const windowAmounts = candidateAmounts.slice(cursor, cursor + windowSize);
+    cursor += windowSize;
+
+    if (liveFilter) {
+      const passed = new Set((await liveFilter(windowAddrs)).map((a) => a.toLowerCase()));
+      for (let j = 0; j < windowAddrs.length; j++) {
+        if (!passed.has(windowAddrs[j].toLowerCase())) continue;
+        batchAddrs.push(windowAddrs[j]);
+        batchAmounts.push(windowAmounts[j]);
+        if (batchAddrs.length >= batchSize) break;
+      }
+    } else {
+      for (let j = 0; j < windowAddrs.length; j++) {
+        batchAddrs.push(windowAddrs[j]);
+        batchAmounts.push(windowAmounts[j]);
+        if (batchAddrs.length >= batchSize) break;
+      }
+    }
+  }
+
+  return { addresses: batchAddrs, amounts: batchAmounts, newCursor: cursor };
+}
+
+/**
+ * Disperses variable token amounts to multiple recipients.
+ * Streams through the recipient list, applying an optional live filter per-batch.
+ * If the filter removes addresses, more are pulled from the source to fill the batch.
+ *
+ * @param params - Disperse parameters including optional liveFilter
  * @returns Array of batch results with tx hashes and attempt logs
  */
 export async function disperseTokens(params: DisperseParams): Promise<BatchResult[]> {
@@ -59,24 +146,29 @@ export async function disperseTokens(params: DisperseParams): Promise<BatchResul
     walletClient,
     publicClient,
     batchSize = 200,
+    liveFilter,
     onProgress,
   } = params;
 
   const abi = getAbi(variant);
   const isNative = token === ZERO_ADDRESS;
-  const recipientBatches = chunk([...recipients], batchSize);
-  const amountBatches = chunk([...amounts], batchSize);
   const results: BatchResult[] = [];
+  let cursor = 0;
+  let batchIndex = 0;
 
-  for (let i = 0; i < recipientBatches.length; i++) {
-    const batchRecipients = recipientBatches[i];
-    const batchAmounts = amountBatches[i];
+  while (cursor < recipients.length) {
+    const { addresses: batchRecipients, amounts: batchAmounts, newCursor } =
+      await fillBatchWithAmounts(recipients, amounts, cursor, batchSize, liveFilter);
+    cursor = newCursor;
+
+    if (batchRecipients.length === 0) break;
+
     const totalValue = isNative ? batchAmounts.reduce((sum, a) => sum + a, 0n) : 0n;
 
     onProgress?.({
       type: 'batch',
-      batchIndex: i,
-      totalBatches: recipientBatches.length,
+      batchIndex,
+      totalBatches: Math.ceil(recipients.length / batchSize),
       status: 'signing',
     });
 
@@ -95,33 +187,34 @@ export async function disperseTokens(params: DisperseParams): Promise<BatchResul
       publicClient,
     });
 
-    const batchResult: BatchResult = {
-      batchIndex: i,
+    results.push({
+      batchIndex,
       recipients: batchRecipients,
       amounts: batchAmounts,
       attempts: [attempt],
       confirmedTxHash: attempt.outcome === 'confirmed' ? attempt.txHash : null,
       blockNumber: null,
-    };
-
-    results.push(batchResult);
+    });
 
     onProgress?.({
       type: 'batch',
-      batchIndex: i,
-      totalBatches: recipientBatches.length,
+      batchIndex,
+      totalBatches: Math.ceil(recipients.length / batchSize),
       status: attempt.outcome === 'confirmed' ? 'confirmed' : 'failed',
     });
+
+    batchIndex++;
   }
 
   return results;
 }
 
 /**
- * Disperses a uniform token amount to multiple recipients, batching as needed.
- * For native token, pass the zero address as `token`.
+ * Disperses a uniform token amount to multiple recipients.
+ * Streams through the recipient list, applying an optional live filter per-batch.
+ * If the filter removes addresses, more are pulled from the source to fill the batch.
  *
- * @param params - Disperse simple parameters (single amount for all recipients)
+ * @param params - Disperse simple parameters including optional liveFilter
  * @returns Array of batch results with tx hashes and attempt logs
  */
 export async function disperseTokensSimple(
@@ -138,22 +231,29 @@ export async function disperseTokensSimple(
     walletClient,
     publicClient,
     batchSize = 200,
+    liveFilter,
     onProgress,
   } = params;
 
   const abi = getAbi(variant);
   const isNative = token === ZERO_ADDRESS;
-  const recipientBatches = chunk([...recipients], batchSize);
   const results: BatchResult[] = [];
+  let cursor = 0;
+  let batchIndex = 0;
 
-  for (let i = 0; i < recipientBatches.length; i++) {
-    const batchRecipients = recipientBatches[i];
+  while (cursor < recipients.length) {
+    const { addresses: batchRecipients, newCursor } =
+      await fillBatch(recipients, cursor, batchSize, liveFilter);
+    cursor = newCursor;
+
+    if (batchRecipients.length === 0) break;
+
     const totalValue = isNative ? amount * BigInt(batchRecipients.length) : 0n;
 
     onProgress?.({
       type: 'batch',
-      batchIndex: i,
-      totalBatches: recipientBatches.length,
+      batchIndex,
+      totalBatches: Math.ceil(recipients.length / batchSize),
       status: 'signing',
     });
 
@@ -172,23 +272,23 @@ export async function disperseTokensSimple(
       publicClient,
     });
 
-    const batchResult: BatchResult = {
-      batchIndex: i,
+    results.push({
+      batchIndex,
       recipients: batchRecipients,
       amounts: batchRecipients.map(() => amount),
       attempts: [attempt],
       confirmedTxHash: attempt.outcome === 'confirmed' ? attempt.txHash : null,
       blockNumber: null,
-    };
-
-    results.push(batchResult);
+    });
 
     onProgress?.({
       type: 'batch',
-      batchIndex: i,
-      totalBatches: recipientBatches.length,
+      batchIndex,
+      totalBatches: Math.ceil(recipients.length / batchSize),
       status: attempt.outcome === 'confirmed' ? 'confirmed' : 'failed',
     });
+
+    batchIndex++;
   }
 
   return results;

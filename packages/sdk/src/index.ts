@@ -95,6 +95,7 @@ export type {
   VerifyResult,
   DisperseParams,
   DisperseSimpleParams,
+  LiveFilter,
   ApproveOperatorParams,
   IncreaseAllowanceParams,
   GetAllowanceParams,

@@ -5,7 +5,7 @@ export { verifyContract } from './verify.js';
 export type { VerifyParams, VerifyResult } from './verify.js';
 
 export { disperseTokens, disperseTokensSimple } from './disperse.js';
-export type { DisperseParams, DisperseSimpleParams } from './disperse.js';
+export type { DisperseParams, DisperseSimpleParams, LiveFilter } from './disperse.js';
 
 export { approveOperator, increaseOperatorAllowance, getAllowance } from './allowance.js';
 export type { ApproveOperatorParams, IncreaseAllowanceParams, GetAllowanceParams } from './allowance.js';
