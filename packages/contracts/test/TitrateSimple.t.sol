@@ -5,6 +5,54 @@ import "forge-std/Test.sol";
 import "../src/TitrateSimple.sol";
 import "./helpers/MockERC20.sol";
 
+/// @dev A contract that unconditionally rejects incoming ETH transfers.
+contract SimpleETHRejecter {
+    receive() external payable {
+        revert("ETH rejected");
+    }
+}
+
+/// @dev A contract that rejects ETH only when a flag is set, used to simulate
+/// a sender that cannot accept the dust refund from _refundDust.
+contract SimpleConditionalRejecter {
+    bool public rejectETH;
+    TitrateSimple public distributor;
+
+    constructor(TitrateSimple _distributor) {
+        distributor = _distributor;
+    }
+
+    function setRejectETH(bool _reject) external {
+        rejectETH = _reject;
+    }
+
+    receive() external payable {
+        if (rejectETH) revert("ETH rejected");
+    }
+
+    function callDisperse(
+        address[] calldata recipients,
+        uint256[] calldata amounts
+    ) external payable {
+        distributor.disperse{value: msg.value}(address(0), recipients, amounts);
+    }
+
+    function callDisperseSimple(
+        address[] calldata recipients,
+        uint256 amount
+    ) external payable {
+        distributor.disperseSimple{value: msg.value}(address(0), recipients, amount);
+    }
+}
+
+/// @dev A contract that always reverts — used to trigger the failed external
+/// call branch in disperseCall.
+contract AlwaysRevertingTarget {
+    fallback() external payable {
+        revert("always reverts");
+    }
+}
+
 contract TitrateSimpleTest is Test {
     TitrateSimple public distributor;
     MockERC20 public token;
@@ -143,5 +191,84 @@ contract TitrateSimpleTest is Test {
 
     function test_bytecode_is_deterministic() public view {
         assertTrue(address(distributor).code.length > 0);
+    }
+
+    // ─── Branch coverage additions ────────────────────────────────────────────
+
+    /// @dev Covers line 49: require(targets.length == values.length)
+    /// targets.length=2, calldatas.length=2 (matches), values.length=1 (mismatch)
+    function test_disperseCall_reverts_mismatched_targets_values() public {
+        address[] memory targets = new address[](2);
+        targets[0] = alice; targets[1] = bob;
+        bytes[] memory calldatas = new bytes[](2);
+        calldatas[0] = ""; calldatas[1] = "";
+        uint256[] memory values = new uint256[](1); // mismatch
+
+        vm.expectRevert();
+        distributor.disperseCall(targets, calldatas, values);
+    }
+
+    /// @dev Covers line 52: require(ok) in disperseCall loop
+    /// Uses a target contract that always reverts to trigger the false branch.
+    function test_disperseCall_reverts_on_failed_external_call() public {
+        AlwaysRevertingTarget target = new AlwaysRevertingTarget();
+
+        address[] memory targets = new address[](1);
+        targets[0] = address(target);
+        bytes[] memory calldatas = new bytes[](1);
+        calldatas[0] = "";
+        uint256[] memory values = new uint256[](1);
+
+        vm.expectRevert();
+        distributor.disperseCall(targets, calldatas, values);
+    }
+
+    /// @dev Covers line 63: require(ok) in _sendNative
+    /// Sends ETH to an ETH-rejecting contract via disperse(address(0), ...).
+    function test_sendNative_reverts_on_recipient_rejection() public {
+        SimpleETHRejecter rejecter = new SimpleETHRejecter();
+        vm.deal(sender, 5 ether);
+
+        address[] memory recipients = new address[](1);
+        recipients[0] = address(rejecter);
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 1 ether;
+
+        vm.prank(sender);
+        vm.expectRevert();
+        distributor.disperse{value: 1 ether}(address(0), recipients, amounts);
+    }
+
+    /// @dev Covers line 73: require(ok) in _sendNativeSimple
+    /// Sends ETH to an ETH-rejecting contract via disperseSimple(address(0), ...).
+    function test_sendNativeSimple_reverts_on_recipient_rejection() public {
+        SimpleETHRejecter rejecter = new SimpleETHRejecter();
+        vm.deal(sender, 5 ether);
+
+        address[] memory recipients = new address[](1);
+        recipients[0] = address(rejecter);
+
+        vm.prank(sender);
+        vm.expectRevert();
+        distributor.disperseSimple{value: 1 ether}(address(0), recipients, 1 ether);
+    }
+
+    /// @dev Covers line 99: require(ok) in _refundDust
+    /// The caller (SimpleConditionalRejecter) rejects ETH so _refundDust fails.
+    function test_refundDust_reverts_when_sender_rejects_eth() public {
+        SimpleConditionalRejecter rejecter = new SimpleConditionalRejecter(distributor);
+        vm.deal(address(rejecter), 10 ether);
+
+        address[] memory recipients = new address[](1);
+        recipients[0] = alice;
+        uint256[] memory amounts = new uint256[](1);
+        amounts[0] = 0.5 ether; // send less than 1 ether so there is dust
+
+        // Enable ETH rejection so when _refundDust tries to return 0.5 ether
+        // to the rejecter, its receive() reverts.
+        rejecter.setRejectETH(true);
+
+        vm.expectRevert();
+        rejecter.callDisperse{value: 1 ether}(recipients, amounts);
     }
 }
