@@ -1,18 +1,11 @@
 import type { Address, Hex, PublicClient, WalletClient } from 'viem';
 import type { BatchResult, BatchAttempt, ProgressCallback } from '../types.js';
 import { chunk } from '../utils/chunk.js';
-import { createRequire } from 'module';
+import TitrateSimpleArtifact from './artifacts/TitrateSimple.json' with { type: 'json' };
+import TitrateFullArtifact from './artifacts/TitrateFull.json' with { type: 'json' };
 
-const require = createRequire(import.meta.url);
-
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-const TitrateSimpleArtifact = require('./artifacts/TitrateSimple.json');
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-const TitrateFullArtifact = require('./artifacts/TitrateFull.json');
-
-function getAbi(variant: 'simple' | 'full'): unknown[] {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return, @typescript-eslint/no-unsafe-member-access
-  return variant === 'simple' ? TitrateSimpleArtifact.abi : TitrateFullArtifact.abi;
+function getAbi(variant: 'simple' | 'full'): never {
+  return (variant === 'simple' ? TitrateSimpleArtifact.abi : TitrateFullArtifact.abi) as never;
 }
 
 const ZERO_BYTES32 =
@@ -87,7 +80,7 @@ export async function disperseTokens(params: DisperseParams): Promise<BatchResul
       status: 'signing',
     });
 
-    const args =
+    const args: readonly unknown[] =
       variant === 'simple'
         ? [token, batchRecipients, batchAmounts]
         : [token, from, batchRecipients, batchAmounts, campaignId];
@@ -164,7 +157,7 @@ export async function disperseTokensSimple(
       status: 'signing',
     });
 
-    const args =
+    const args: readonly unknown[] =
       variant === 'simple'
         ? [token, batchRecipients, amount]
         : [token, from, batchRecipients, amount, campaignId];
@@ -203,7 +196,7 @@ export async function disperseTokensSimple(
 
 type ExecuteBatchParams = {
   readonly contractAddress: Address;
-  readonly abi: unknown[];
+  readonly abi: never;
   readonly functionName: string;
   readonly args: readonly unknown[];
   readonly value: bigint;
@@ -220,7 +213,7 @@ async function executeBatch(params: ExecuteBatchParams): Promise<BatchAttempt> {
     const gasEstimate = await publicClient
       .estimateContractGas({
         address: contractAddress,
-        abi: abi as never,
+        abi,
         functionName,
         args: args as never,
         value,
@@ -232,12 +225,13 @@ async function executeBatch(params: ExecuteBatchParams): Promise<BatchAttempt> {
 
     const hash = await walletClient.writeContract({
       address: contractAddress,
-      abi: abi as never,
+      abi,
       functionName,
       args: args as never,
       value,
       gas: paddedGas,
       account: walletClient.account!,
+      chain: undefined,
     });
 
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
@@ -251,7 +245,7 @@ async function executeBatch(params: ExecuteBatchParams): Promise<BatchAttempt> {
       timestamp,
       outcome: receipt.status === 'success' ? 'confirmed' : 'reverted',
     };
-  } catch (err) {
+  } catch {
     return {
       txHash: '0x' as Hex,
       nonce: 0,

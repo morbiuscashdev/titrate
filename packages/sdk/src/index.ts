@@ -46,3 +46,57 @@ export type {
   StoredBatch,
   StoredWallet,
 } from './storage/index.js';
+
+// Utils
+export { chunk } from './utils/chunk.js';
+export { withRetry } from './utils/retry.js';
+export type { RetryOptions } from './utils/retry.js';
+
+// Scanner
+export {
+  scanBlocks,
+  resolveBlockByTimestamp,
+  scanTransferEvents,
+  getAddressProperties,
+  createTitrateState,
+  adjustRange,
+  shrinkRange,
+} from './scanner/index.js';
+export type {
+  BlockRange,
+  ScanOptions,
+  ScanTransferOptions,
+  PropertyType,
+  AddressProperties,
+  GetPropertiesOptions,
+  TitrateState,
+} from './scanner/index.js';
+
+// Pipeline
+export { createPipeline, deserializePipeline } from './pipeline/index.js';
+export type { Pipeline } from './pipeline/index.js';
+
+// Distributor
+export {
+  deployDistributor,
+  getContractSourceTemplate,
+  verifyContract,
+  disperseTokens,
+  disperseTokensSimple,
+  approveOperator,
+  increaseOperatorAllowance,
+  getAllowance,
+  checkRecipients,
+} from './distributor/index.js';
+export type {
+  DeployParams,
+  DeployResult,
+  VerifyParams,
+  VerifyResult,
+  DisperseParams,
+  DisperseSimpleParams,
+  ApproveOperatorParams,
+  IncreaseAllowanceParams,
+  GetAllowanceParams,
+  CheckRecipientsParams,
+} from './distributor/index.js';

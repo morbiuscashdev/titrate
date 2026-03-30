@@ -57,6 +57,7 @@ export async function deployContract(
     abi: abi as never,
     bytecode,
     account: ctx.walletClient.account!,
+    chain: undefined,
   });
   const receipt = await ctx.publicClient.waitForTransactionReceipt({ hash });
   if (!receipt.contractAddress) throw new Error('Deploy failed: no contract address');
@@ -66,7 +67,7 @@ export async function deployContract(
 /** Mine N empty blocks (useful for scanner tests). */
 export async function mineBlocks(ctx: AnvilContext, count: number): Promise<void> {
   for (let i = 0; i < count; i++) {
-    await ctx.publicClient.request({ method: 'evm_mine' as never, params: [] });
+    await ctx.publicClient.request({ method: 'evm_mine' as never, params: [] as never });
   }
 }
 
@@ -80,6 +81,7 @@ export async function fundAddress(
     to,
     value: amount,
     account: ctx.walletClient.account!,
+    chain: undefined,
   });
   await ctx.publicClient.waitForTransactionReceipt({ hash });
 }

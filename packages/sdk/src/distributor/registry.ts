@@ -1,11 +1,6 @@
 import type { Address, Hex, PublicClient } from 'viem';
-import { createRequire } from 'module';
+import TitrateFullArtifact from './artifacts/TitrateFull.json' with { type: 'json' };
 
-const require = createRequire(import.meta.url);
-
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-const TitrateFullArtifact = require('./artifacts/TitrateFull.json');
-// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
 const fullAbi = TitrateFullArtifact.abi as never;
 
 export type CheckRecipientsParams = {

@@ -1,11 +1,6 @@
 import type { Address, Hex, PublicClient, WalletClient } from 'viem';
-import { createRequire } from 'module';
+import TitrateFullArtifact from './artifacts/TitrateFull.json' with { type: 'json' };
 
-const require = createRequire(import.meta.url);
-
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-const TitrateFullArtifact = require('./artifacts/TitrateFull.json');
-// eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
 const fullAbi = TitrateFullArtifact.abi as never;
 
 export type ApproveOperatorParams = {
@@ -43,6 +38,7 @@ export async function approveOperator(params: ApproveOperatorParams): Promise<He
     functionName: 'approve',
     args: [operator, selector, amount],
     account: walletClient.account!,
+    chain: undefined,
   });
 
   await publicClient.waitForTransactionReceipt({ hash });
@@ -66,6 +62,7 @@ export async function increaseOperatorAllowance(
     functionName: 'increaseAllowance',
     args: [operator, selector, amount],
     account: walletClient.account!,
+    chain: undefined,
   });
 
   await publicClient.waitForTransactionReceipt({ hash });

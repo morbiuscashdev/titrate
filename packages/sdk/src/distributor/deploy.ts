@@ -1,12 +1,7 @@
 import type { Address, Hex, PublicClient, WalletClient } from 'viem';
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
-
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-const TitrateSimpleArtifact = require('./artifacts/TitrateSimple.json');
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-const TitrateFullArtifact = require('./artifacts/TitrateFull.json');
+import type { ContractArtifact } from '../types.js';
+import TitrateSimpleArtifact from './artifacts/TitrateSimple.json' with { type: 'json' };
+import TitrateFullArtifact from './artifacts/TitrateFull.json' with { type: 'json' };
 
 export type DeployParams = {
   readonly variant: 'simple' | 'full';
@@ -22,9 +17,8 @@ export type DeployResult = {
   readonly name: string;
 };
 
-function getArtifact(variant: 'simple' | 'full'): { abi: unknown[]; bytecode: string } {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-return
-  return variant === 'simple' ? TitrateSimpleArtifact : TitrateFullArtifact;
+function getArtifact(variant: 'simple' | 'full'): ContractArtifact {
+  return (variant === 'simple' ? TitrateSimpleArtifact : TitrateFullArtifact) as ContractArtifact;
 }
 
 /**
@@ -49,8 +43,9 @@ export async function deployDistributor(params: DeployParams): Promise<DeployRes
 
   const hash = await walletClient.deployContract({
     abi: artifact.abi as never,
-    bytecode: artifact.bytecode as Hex,
+    bytecode: artifact.bytecode,
     account: walletClient.account!,
+    chain: undefined,
   });
 
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
