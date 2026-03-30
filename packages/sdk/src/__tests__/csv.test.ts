@@ -143,3 +143,138 @@ describe('flagConflicts', () => {
     expect(result.conflicts).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// parseCSV — pathological / hardening tests
+// ---------------------------------------------------------------------------
+
+const ADDR1 = '0x1234567890abcdef1234567890abcdef12345678';
+const ADDR2 = '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd';
+
+describe('parseCSV — BOM stripping', () => {
+  it('strips UTF-8 BOM from the start of content', () => {
+    const csv = `\uFEFFaddress,amount\n${ADDR1},100`;
+    const result = parseCSV(csv);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].address).toBe(ADDR1);
+    expect(result.rows[0].amount).toBe('100');
+  });
+
+  it('parses normally when no BOM is present', () => {
+    const csv = `address,amount\n${ADDR1},100`;
+    const result = parseCSV(csv);
+    expect(result.rows).toHaveLength(1);
+  });
+});
+
+describe('parseCSV — quoted fields', () => {
+  it('strips quotes from a quoted address field', () => {
+    const csv = `address,amount\n"${ADDR1}",100`;
+    const result = parseCSV(csv);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].address).toBe(ADDR1);
+  });
+
+  it('handles embedded comma in a quoted amount field', () => {
+    const csv = `address,amount\n"${ADDR1}","1,000"`;
+    const result = parseCSV(csv);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].amount).toBe('1,000');
+  });
+
+  it('handles escaped double-quotes inside quoted fields', () => {
+    // RFC 4180: "" inside a quoted field represents a literal "
+    const csv = `address,amount\n"${ADDR1}","100""extra"`;
+    const result = parseCSV(csv);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].amount).toBe('100"extra');
+  });
+
+  it('strips leading/trailing whitespace inside quotes', () => {
+    const csv = `address,amount\n"  ${ADDR1}  ",100`;
+    const result = parseCSV(csv);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].address).toBe(ADDR1);
+  });
+
+  it('strips leading/trailing spaces from amount', () => {
+    const csv = `address,amount\n${ADDR1},  200  `;
+    const result = parseCSV(csv);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].amount).toBe('200');
+  });
+});
+
+describe('parseCSV — comment lines', () => {
+  it('skips lines starting with #', () => {
+    const csv = `address,amount\n# this is a comment\n${ADDR1},100\n# another comment\n${ADDR2},200`;
+    const result = parseCSV(csv);
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows[0].address).toBe(ADDR1);
+    expect(result.rows[1].address).toBe(ADDR2);
+  });
+
+  it('handles CSV with only comments and no data rows', () => {
+    const csv = `# comment only\n# another comment`;
+    const result = parseCSV(csv);
+    expect(result.rows).toHaveLength(0);
+    expect(result.hasAmounts).toBe(false);
+  });
+});
+
+describe('parseCSV — semicolon delimiter', () => {
+  it('auto-detects semicolon delimiter', () => {
+    const csv = `address;amount\n${ADDR1};100\n${ADDR2};200`;
+    const result = parseCSV(csv);
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows[0].address).toBe(ADDR1);
+    expect(result.rows[0].amount).toBe('100');
+    expect(result.hasAmounts).toBe(true);
+  });
+
+  it('handles semicolon-only headers', () => {
+    const csv = `address;amount\n${ADDR1};50`;
+    const result = parseCSV(csv);
+    expect(result.rows[0].amount).toBe('50');
+  });
+});
+
+describe('parseCSV — empty and header-only inputs', () => {
+  it('returns empty rows for just whitespace', () => {
+    const result = parseCSV('   \n  \n ');
+    expect(result.rows).toHaveLength(0);
+    expect(result.hasAmounts).toBe(false);
+  });
+
+  it('returns empty rows for empty string', () => {
+    const result = parseCSV('');
+    expect(result.rows).toHaveLength(0);
+  });
+
+  it('returns empty rows for CSV with only a header row', () => {
+    const result = parseCSV('address,amount');
+    expect(result.rows).toHaveLength(0);
+    expect(result.hasAmounts).toBe(true);
+  });
+});
+
+describe('parseCSV — mixed line endings', () => {
+  it('handles CRLF line endings', () => {
+    const csv = `address,amount\r\n${ADDR1},100\r\n${ADDR2},200`;
+    const result = parseCSV(csv);
+    expect(result.rows).toHaveLength(2);
+    expect(result.rows[0].amount).toBe('100');
+  });
+
+  it('handles legacy CR-only line endings', () => {
+    const csv = `address,amount\r${ADDR1},100\r${ADDR2},200`;
+    const result = parseCSV(csv);
+    expect(result.rows).toHaveLength(2);
+  });
+
+  it('handles mixed CRLF and LF line endings', () => {
+    const csv = `address,amount\r\n${ADDR1},100\n${ADDR2},200`;
+    const result = parseCSV(csv);
+    expect(result.rows).toHaveLength(2);
+  });
+});
