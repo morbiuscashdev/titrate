@@ -1,0 +1,67 @@
+# Titrate — Progress Checkpoint
+
+## Date: 2026-03-29 (updated)
+
+## What Was Accomplished
+
+### Phase 1: Contracts + SDK Foundation (complete)
+- Monorepo scaffold (npm workspaces, Foundry, Vitest)
+- TitrateSimple.sol — minimal distributor (disperse, disperseSimple, disperseCall)
+- TitrateFull.sol — full distributor (selector-scoped allowance, on-chain registry, multicall, delegatecall)
+- Artifact extraction script (bytecode stability with metadata.bytecodeHash=none)
+- SDK modules: types, storage interface, chains, CSV, wallet (EIP-712 derivation), encode (transfer, native, swap, raw)
+
+### Phase 1B: Scanner, Pipeline, Distributor (complete)
+- Scanner: block scanning, Transfer event log scanning with dynamic range titration, address property lookups (balance, code, nonce)
+- Pipeline: composable set operations (sources + filters), serializable configs
+- Distributor: deploy, verify, disperse (streaming per-batch LiveFilter), allowance, registry
+- All filters refactored to extract pure testable logic from RPC-dependent executors
+
+### Phase 2: TUI (complete)
+- Filesystem storage adapter implementing SDK Storage interface
+- CLI commands: collect, deploy, distribute, derive-wallet, run
+- Interactive wizard with 6 steps (campaign, addresses, filters, amounts, wallet/contract, distribute)
+- End-to-end tests against Anvil
+
+### Coverage Improvements
+- TitrateFull: 100% lines/statements/branches/functions
+- TitrateSimple: 100% lines/statements/branches/functions
+- SDK: 99.78% statements, 99.47% branches, 100% functions
+
+### Storage Adapter Extraction (complete)
+- Extracted `packages/tui/src/storage/` into standalone `@titrate/storage-fs` package
+- Created `@titrate/storage-idb` package using `idb` v8 + `fake-indexeddb` for tests
+- Both packages implement `Storage` from `@titrate/sdk`; BigInt fields serialized to strings in IDB
+- TUI updated to import `createFileStorage` from `@titrate/storage-fs`; old storage dir deleted
+- storage-fs: 8/8 tests pass; storage-idb: 8/8 tests pass; TUI storage tests: 8/8 pass
+
+### Key Refactors
+- Streaming batch fill with LiveFilter (replaces pre-chunk approach)
+- Pipeline filters extracted to pure helpers for testability
+- Hot wallet key never persisted — memory only
+- Method selectors shown as human-readable dropdown in wizard
+
+### Hardening (complete)
+- Fuzz tests: 6 Foundry fuzz suites (256 runs each) for allowance math, registry append-only, refund dust
+- Property tests: 6 SDK property tests (100 iterations each) for wallet determinism, dedup idempotency, filter composition
+- Gas optimization: custom errors, cached array lengths, single-SLOAD allowance deduction
+- Auto-resume: filesystem batch persistence, resume from last completed batch on re-run
+- Contract verification: real Solidity source templates embedded, name substitution for block explorer API
+
+## Test Counts
+- Contracts: 49 tests (15 Simple + 34 Full, including 6 fuzz suites)
+- SDK: 172 tests across 8 files
+- TUI: 8 storage tests + 5 e2e tests
+- storage-fs: 8 tests
+- storage-idb: 8 tests
+- Total: 250 tests
+
+## Commit Count
+43 commits, clean linear history
+
+## Current State
+All tests green (requires Anvil on port 8545 for SDK integration + TUI e2e tests)
+
+## Next Steps
+- Phase 3: Web app (Vite + React + IndexedDB + Reown)
+- `@titrate/storage-idb` is ready for use as the web app's storage layer via `createIDBStorage()`
