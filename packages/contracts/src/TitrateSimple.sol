@@ -9,6 +9,10 @@ interface IERC20 {
 /// @notice Minimal batch distributor. No auth, no registry.
 contract TitrateSimple {
 
+    error LengthMismatch();
+    error CallFailed();
+    error RefundFailed();
+
     /// @notice Distribute variable token amounts to each recipient
     /// @param token ERC-20 address, or address(0) for native
     function disperse(
@@ -16,7 +20,7 @@ contract TitrateSimple {
         address[] calldata recipients,
         uint256[] calldata amounts
     ) external payable {
-        require(recipients.length == amounts.length);
+        if (recipients.length != amounts.length) revert LengthMismatch();
         if (token == address(0)) {
             _sendNative(recipients, amounts);
             _refundDust();
@@ -45,11 +49,12 @@ contract TitrateSimple {
         bytes[] calldata calldatas,
         uint256[] calldata values
     ) external payable {
-        require(targets.length == calldatas.length);
-        require(targets.length == values.length);
-        for (uint256 i; i < targets.length; ) {
+        if (targets.length != calldatas.length) revert LengthMismatch();
+        if (targets.length != values.length) revert LengthMismatch();
+        uint256 len = targets.length;
+        for (uint256 i; i < len; ) {
             (bool ok, ) = targets[i].call{value: values[i]}(calldatas[i]);
-            require(ok);
+            if (!ok) revert CallFailed();
             unchecked { ++i; }
         }
         _refundDust();
@@ -58,9 +63,10 @@ contract TitrateSimple {
     function _sendNative(
         address[] calldata recipients, uint256[] calldata amounts
     ) internal {
-        for (uint256 i; i < recipients.length; ) {
+        uint256 len = recipients.length;
+        for (uint256 i; i < len; ) {
             (bool ok, ) = recipients[i].call{value: amounts[i]}("");
-            require(ok);
+            if (!ok) revert CallFailed();
             unchecked { ++i; }
         }
     }
@@ -68,9 +74,10 @@ contract TitrateSimple {
     function _sendNativeSimple(
         address[] calldata recipients, uint256 amount
     ) internal {
-        for (uint256 i; i < recipients.length; ) {
+        uint256 len = recipients.length;
+        for (uint256 i; i < len; ) {
             (bool ok, ) = recipients[i].call{value: amount}("");
-            require(ok);
+            if (!ok) revert CallFailed();
             unchecked { ++i; }
         }
     }
@@ -78,7 +85,8 @@ contract TitrateSimple {
     function _sendToken(
         address token, address[] calldata recipients, uint256[] calldata amounts
     ) internal {
-        for (uint256 i; i < recipients.length; ) {
+        uint256 len = recipients.length;
+        for (uint256 i; i < len; ) {
             IERC20(token).transferFrom(msg.sender, recipients[i], amounts[i]);
             unchecked { ++i; }
         }
@@ -87,7 +95,8 @@ contract TitrateSimple {
     function _sendTokenSimple(
         address token, address[] calldata recipients, uint256 amount
     ) internal {
-        for (uint256 i; i < recipients.length; ) {
+        uint256 len = recipients.length;
+        for (uint256 i; i < len; ) {
             IERC20(token).transferFrom(msg.sender, recipients[i], amount);
             unchecked { ++i; }
         }
@@ -96,7 +105,7 @@ contract TitrateSimple {
     function _refundDust() internal {
         if (address(this).balance > 0) {
             (bool ok, ) = msg.sender.call{value: address(this).balance}("");
-            require(ok);
+            if (!ok) revert RefundFailed();
         }
     }
 }

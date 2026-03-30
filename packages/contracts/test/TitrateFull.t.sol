@@ -127,7 +127,7 @@ contract TitrateFullTest is Test {
         amounts[0] = 100e8;
 
         vm.prank(hot);
-        vm.expectRevert("not authorized for this method");
+        vm.expectRevert(TitrateFull.NotAuthorized.selector);
         distributor.disperse(address(token), cold, recipients, amounts, bytes32(0));
     }
 
@@ -139,7 +139,7 @@ contract TitrateFullTest is Test {
         recipients[0] = alice; recipients[1] = bob;
 
         vm.prank(hot);
-        vm.expectRevert("insufficient allowance");
+        vm.expectRevert(TitrateFull.InsufficientAllowance.selector);
         distributor.disperseSimple(address(token), cold, recipients, 100e8, bytes32(0));
     }
 
@@ -211,7 +211,7 @@ contract TitrateFullTest is Test {
         amounts[0] = 1 ether;
 
         vm.prank(hot);
-        vm.expectRevert("native: from must be sender");
+        vm.expectRevert(TitrateFull.NativeFromMustBeSender.selector);
         distributor.disperse{value: 1 ether}(address(0), cold, recipients, amounts, bytes32(0));
     }
 

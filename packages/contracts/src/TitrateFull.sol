@@ -9,6 +9,13 @@ interface IERC20 {
 /// @notice Batch distributor with operator allowance, on-chain registry, and multicall.
 contract TitrateFull {
 
+    error LengthMismatch();
+    error NotAuthorized();
+    error NativeFromMustBeSender();
+    error InsufficientAllowance();
+    error CallFailed();
+    error RefundFailed();
+
     // ─── Operator Allowance ─────────────────────────────
     // mapping(owner => operator => selector => allowance)
     mapping(address => mapping(address => mapping(bytes4 => uint256)))
@@ -32,7 +39,8 @@ contract TitrateFull {
         address[] calldata recipients
     ) external view returns (bool[] memory) {
         bool[] memory results = new bool[](recipients.length);
-        for (uint256 i; i < recipients.length; ) {
+        uint256 len = recipients.length;
+        for (uint256 i; i < len; ) {
             results[i] = registry[distributor][campaignId][recipients[i]];
             unchecked { ++i; }
         }
@@ -48,7 +56,7 @@ contract TitrateFull {
         uint256[] calldata amounts,
         bytes32 campaignId
     ) external payable {
-        require(recipients.length == amounts.length);
+        if (recipients.length != amounts.length) revert LengthMismatch();
         bool isNative = token == address(0);
         address source = _resolveSource(from, isNative, this.disperse.selector);
 
@@ -93,12 +101,13 @@ contract TitrateFull {
         bytes32 campaignId,
         address[] calldata registryRecipients
     ) external payable {
-        require(targets.length == calldatas.length);
-        require(targets.length == values.length);
+        if (targets.length != calldatas.length) revert LengthMismatch();
+        if (targets.length != values.length) revert LengthMismatch();
 
-        for (uint256 i; i < targets.length; ) {
+        uint256 len = targets.length;
+        for (uint256 i; i < len; ) {
             (bool ok, ) = targets[i].call{value: values[i]}(calldatas[i]);
-            require(ok);
+            if (!ok) revert CallFailed();
             if (campaignId != bytes32(0) && registryRecipients.length > i)
                 _recordIfNeeded(msg.sender, campaignId, registryRecipients[i]);
             unchecked { ++i; }
@@ -112,10 +121,11 @@ contract TitrateFull {
     function multicall(bytes[] calldata data)
         external payable returns (bytes[] memory results)
     {
-        results = new bytes[](data.length);
-        for (uint256 i; i < data.length; ) {
+        uint256 len = data.length;
+        results = new bytes[](len);
+        for (uint256 i; i < len; ) {
             (bool ok, bytes memory result) = address(this).delegatecall(data[i]);
-            require(ok);
+            if (!ok) revert CallFailed();
             results[i] = result;
             unchecked { ++i; }
         }
@@ -127,24 +137,20 @@ contract TitrateFull {
         internal view returns (address)
     {
         if (from == address(0)) return msg.sender;
-        require(!isNative, "native: from must be sender");
-        require(
-            allowance[from][msg.sender][selector] > 0,
-            "not authorized for this method"
-        );
+        if (isNative) revert NativeFromMustBeSender();
+        if (allowance[from][msg.sender][selector] == 0) revert NotAuthorized();
         return from;
     }
 
     function _deductAllowance(address from, bytes4 selector, uint256 total) internal {
-        require(
-            allowance[from][msg.sender][selector] >= total,
-            "insufficient allowance"
-        );
-        allowance[from][msg.sender][selector] -= total;
+        uint256 current = allowance[from][msg.sender][selector];
+        if (current < total) revert InsufficientAllowance();
+        allowance[from][msg.sender][selector] = current - total;
     }
 
     function _sum(uint256[] calldata values) internal pure returns (uint256 total) {
-        for (uint256 i; i < values.length; ) {
+        uint256 len = values.length;
+        for (uint256 i; i < len; ) {
             total += values[i];
             unchecked { ++i; }
         }
@@ -154,9 +160,10 @@ contract TitrateFull {
         address[] calldata recipients, uint256[] calldata amounts,
         address source, bytes32 campaignId
     ) internal {
-        for (uint256 i; i < recipients.length; ) {
+        uint256 len = recipients.length;
+        for (uint256 i; i < len; ) {
             (bool ok, ) = recipients[i].call{value: amounts[i]}("");
-            require(ok);
+            if (!ok) revert CallFailed();
             _recordIfNeeded(source, campaignId, recipients[i]);
             unchecked { ++i; }
         }
@@ -166,9 +173,10 @@ contract TitrateFull {
         address[] calldata recipients, uint256 amount,
         address source, bytes32 campaignId
     ) internal {
-        for (uint256 i; i < recipients.length; ) {
+        uint256 len = recipients.length;
+        for (uint256 i; i < len; ) {
             (bool ok, ) = recipients[i].call{value: amount}("");
-            require(ok);
+            if (!ok) revert CallFailed();
             _recordIfNeeded(source, campaignId, recipients[i]);
             unchecked { ++i; }
         }
@@ -179,7 +187,8 @@ contract TitrateFull {
         address[] calldata recipients, uint256[] calldata amounts,
         bytes32 campaignId
     ) internal {
-        for (uint256 i; i < recipients.length; ) {
+        uint256 len = recipients.length;
+        for (uint256 i; i < len; ) {
             IERC20(token).transferFrom(source, recipients[i], amounts[i]);
             _recordIfNeeded(source, campaignId, recipients[i]);
             unchecked { ++i; }
@@ -191,7 +200,8 @@ contract TitrateFull {
         address[] calldata recipients, uint256 amount,
         bytes32 campaignId
     ) internal {
-        for (uint256 i; i < recipients.length; ) {
+        uint256 len = recipients.length;
+        for (uint256 i; i < len; ) {
             IERC20(token).transferFrom(source, recipients[i], amount);
             _recordIfNeeded(source, campaignId, recipients[i]);
             unchecked { ++i; }
@@ -208,7 +218,7 @@ contract TitrateFull {
     function _refundDust() internal {
         if (address(this).balance > 0) {
             (bool ok, ) = msg.sender.call{value: address(this).balance}("");
-            require(ok);
+            if (!ok) revert RefundFailed();
         }
     }
 }
