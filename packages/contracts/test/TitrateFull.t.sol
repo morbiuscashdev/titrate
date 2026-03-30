@@ -483,4 +483,250 @@ contract TitrateFullTest is Test {
         vm.expectRevert();
         rejecter.callDisperse{value: 1 ether}(address(0), recipients, amounts);
     }
+
+    // ─── Fuzz Tests ───────────────────────────────────────────────────────────
+
+    /// @dev Fuzz 1: Allowance never goes negative — remaining allowance always
+    ///   equals initial minus total distributed, and never underflows.
+    function test_fuzz_allowance_decrements_correctly(
+        uint128 approveAmount,
+        uint8 recipientCount
+    ) public {
+        // Bound inputs to safe ranges
+        recipientCount = uint8(bound(recipientCount, 1, 50));
+        uint256 perRecipient = uint256(approveAmount) / recipientCount;
+        vm.assume(perRecipient > 0);
+
+        uint256 totalDistributed = perRecipient * recipientCount;
+        vm.assume(totalDistributed <= uint256(approveAmount));
+
+        // Give cold enough tokens
+        token.mint(cold, uint256(approveAmount));
+
+        // Approve hot for the exact approveAmount
+        vm.prank(cold);
+        distributor.approve(hot, TitrateFull.disperseSimple.selector, uint256(approveAmount));
+
+        uint256 before = distributor.allowance(cold, hot, TitrateFull.disperseSimple.selector);
+        assertEq(before, uint256(approveAmount));
+
+        // Build recipients array
+        address[] memory recipients = new address[](recipientCount);
+        for (uint256 i; i < recipientCount; i++) {
+            recipients[i] = address(uint160(0x1000 + i));
+        }
+
+        // Disperse
+        vm.prank(hot);
+        distributor.disperseSimple(address(token), cold, recipients, perRecipient, bytes32(0));
+
+        uint256 after_ = distributor.allowance(cold, hot, TitrateFull.disperseSimple.selector);
+
+        // Invariant: remaining == initial - distributed, no underflow
+        assertEq(after_, before - totalDistributed);
+        // Explicit underflow check: after_ must be <= before
+        assertLe(after_, before);
+    }
+
+    /// @dev Fuzz 2: Allowance is selector-scoped — approving one selector
+    ///   does not affect another selector's allowance.
+    function test_fuzz_allowance_selector_scoped(
+        uint128 amountA,
+        uint128 amountB
+    ) public {
+        bytes4 selA = TitrateFull.disperse.selector;
+        bytes4 selB = TitrateFull.disperseSimple.selector;
+
+        // Set allowances for two different selectors
+        vm.startPrank(cold);
+        distributor.approve(hot, selA, uint256(amountA));
+        distributor.approve(hot, selB, uint256(amountB));
+        vm.stopPrank();
+
+        // Verify they are fully independent
+        assertEq(distributor.allowance(cold, hot, selA), uint256(amountA));
+        assertEq(distributor.allowance(cold, hot, selB), uint256(amountB));
+
+        // Changing selA doesn't affect selB
+        vm.prank(cold);
+        distributor.approve(hot, selA, 0);
+
+        assertEq(distributor.allowance(cold, hot, selA), 0);
+        assertEq(distributor.allowance(cold, hot, selB), uint256(amountB));
+
+        // Changing selB doesn't affect selA
+        vm.prank(cold);
+        distributor.approve(hot, selB, type(uint256).max);
+
+        assertEq(distributor.allowance(cold, hot, selA), 0);
+        assertEq(distributor.allowance(cold, hot, selB), type(uint256).max);
+    }
+
+    /// @dev Fuzz 3: increaseAllowance is additive — approve(a) then
+    ///   increaseAllowance(b) always results in exactly a + b.
+    function test_fuzz_increaseAllowance_additive(uint128 a, uint128 b) public {
+        bytes4 sel = TitrateFull.disperseSimple.selector;
+
+        vm.prank(cold);
+        distributor.approve(hot, sel, uint256(a));
+
+        vm.prank(cold);
+        distributor.increaseAllowance(hot, sel, uint256(b));
+
+        uint256 expected = uint256(a) + uint256(b);
+        assertEq(distributor.allowance(cold, hot, sel), expected);
+    }
+
+    /// @dev Fuzz 4: Registry is append-only — once set to true, it never
+    ///   reverts to false even if disperse is called again.
+    function test_fuzz_registry_append_only(
+        address recipient,
+        bytes32 firstCampaign,
+        bytes32 secondCampaign
+    ) public {
+        // Require a real recipient (not zero address or the distributor itself)
+        vm.assume(recipient != address(0));
+        vm.assume(recipient != address(distributor));
+        vm.assume(recipient != address(token));
+        // Require a non-zero campaignId so registry is actually written
+        vm.assume(firstCampaign != bytes32(0));
+        // Guard against recipient being a precompile or system contract
+        vm.assume(uint160(recipient) > 9);
+
+        // Give cold enough tokens for two dispersals
+        token.mint(cold, 1_000e8);
+        vm.prank(cold);
+        distributor.approve(hot, TitrateFull.disperseSimple.selector, 1_000e8);
+
+        address[] memory recipients = new address[](1);
+        recipients[0] = recipient;
+
+        // First disperse — should set registry[cold][firstCampaign][recipient] = true
+        vm.prank(hot);
+        distributor.disperseSimple(address(token), cold, recipients, 1e8, firstCampaign);
+
+        assertTrue(distributor.registry(cold, firstCampaign, recipient));
+
+        // Second disperse with a different campaignId — first entry must remain true
+        if (secondCampaign != bytes32(0) && secondCampaign != firstCampaign) {
+            token.mint(cold, 1_000e8);
+            vm.prank(cold);
+            distributor.increaseAllowance(hot, TitrateFull.disperseSimple.selector, 1_000e8);
+
+            vm.prank(hot);
+            distributor.disperseSimple(address(token), cold, recipients, 1e8, secondCampaign);
+
+            // The first campaign's registry entry must still be true
+            assertTrue(distributor.registry(cold, firstCampaign, recipient));
+            // The second campaign's entry was also set
+            assertTrue(distributor.registry(cold, secondCampaign, recipient));
+        }
+
+        // Calling disperse again with same campaignId must not flip registry to false
+        token.mint(cold, 1_000e8);
+        vm.prank(cold);
+        distributor.increaseAllowance(hot, TitrateFull.disperseSimple.selector, 1_000e8);
+
+        vm.prank(hot);
+        distributor.disperseSimple(address(token), cold, recipients, 1e8, firstCampaign);
+
+        assertTrue(distributor.registry(cold, firstCampaign, recipient));
+    }
+
+    /// @dev Fuzz 5: Refund dust invariant — for native token disperse,
+    ///   msg.value - sum(amounts) is always refunded to the caller.
+    function test_fuzz_refund_dust_invariant(
+        uint64 msgValue,
+        uint8 recipientCount,
+        uint64 perAmount
+    ) public {
+        // Bound to ensure we have dust and recipients don't drain more than msgValue
+        recipientCount = uint8(bound(recipientCount, 1, 20));
+        // Ensure perAmount is positive and total doesn't exceed msgValue
+        vm.assume(perAmount > 0);
+        uint256 total = uint256(perAmount) * uint256(recipientCount);
+        vm.assume(total <= uint256(msgValue));
+        // Ensure there's actual dust to refund (total < msgValue)
+        vm.assume(total < uint256(msgValue));
+
+        address caller = makeAddr("dust-caller");
+        vm.deal(caller, uint256(msgValue));
+
+        address[] memory recipients = new address[](recipientCount);
+        for (uint256 i; i < recipientCount; i++) {
+            // Use addresses that can receive ETH (EOA-style)
+            recipients[i] = address(uint160(0x5000 + i));
+        }
+
+        uint256 callerBefore = caller.balance;
+
+        vm.prank(caller);
+        distributor.disperseSimple{value: uint256(msgValue)}(
+            address(0),
+            address(0),
+            recipients,
+            uint256(perAmount),
+            bytes32(0)
+        );
+
+        uint256 dust = uint256(msgValue) - total;
+        uint256 callerAfter = caller.balance;
+
+        // Caller should have received back exactly the dust
+        assertEq(callerAfter, callerBefore - total);
+        assertEq(callerAfter, callerBefore - uint256(msgValue) + dust);
+
+        // Each recipient received perAmount
+        for (uint256 i; i < recipientCount; i++) {
+            assertEq(recipients[i].balance, uint256(perAmount));
+        }
+    }
+
+    /// @dev Fuzz 6: No double-send via registry — registry accurately tracks
+    ///   all recipients across multiple disperse calls with the same campaignId.
+    function test_fuzz_registry_tracks_all_recipients(
+        uint8 firstCount,
+        uint8 secondCount
+    ) public {
+        firstCount = uint8(bound(firstCount, 1, 10));
+        secondCount = uint8(bound(secondCount, 1, 10));
+
+        bytes32 campaign = keccak256("fuzz-campaign");
+        uint256 totalNeeded = (uint256(firstCount) + uint256(secondCount)) * 1e8;
+
+        token.mint(cold, totalNeeded);
+        vm.prank(cold);
+        distributor.approve(hot, TitrateFull.disperseSimple.selector, totalNeeded);
+
+        // First batch: recipients at indices 0x8000..0x8000+firstCount
+        address[] memory firstBatch = new address[](firstCount);
+        for (uint256 i; i < firstCount; i++) {
+            firstBatch[i] = address(uint160(0x8000 + i));
+        }
+
+        vm.prank(hot);
+        distributor.disperseSimple(address(token), cold, firstBatch, 1e8, campaign);
+
+        // Verify first batch is all recorded
+        for (uint256 i; i < firstCount; i++) {
+            assertTrue(distributor.registry(cold, campaign, firstBatch[i]));
+        }
+
+        // Second batch: recipients at indices 0x9000..0x9000+secondCount (distinct)
+        address[] memory secondBatch = new address[](secondCount);
+        for (uint256 i; i < secondCount; i++) {
+            secondBatch[i] = address(uint160(0x9000 + i));
+        }
+
+        vm.prank(hot);
+        distributor.disperseSimple(address(token), cold, secondBatch, 1e8, campaign);
+
+        // All from both batches should now be recorded
+        for (uint256 i; i < firstCount; i++) {
+            assertTrue(distributor.registry(cold, campaign, firstBatch[i]));
+        }
+        for (uint256 i; i < secondCount; i++) {
+            assertTrue(distributor.registry(cold, campaign, secondBatch[i]));
+        }
+    }
 }
