@@ -12,6 +12,7 @@ import {
   getAllowance,
   checkRecipients,
   verifyContract,
+  pollVerificationStatus,
 } from '../distributor/index.js';
 
 // Anvil default accounts #1 and #2
@@ -832,5 +833,160 @@ describe('disperseTokens — executeBatch catch path (line 249)', () => {
       (e) => (e as { status: string }).status === 'failed',
     );
     expect(failedEvent).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// pollVerificationStatus
+// ---------------------------------------------------------------------------
+
+describe('pollVerificationStatus', () => {
+  it('returns verified=true when the explorer confirms on the first poll', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      json: async () => ({ status: '1', result: 'Pass - Verified', message: 'OK' }),
+    });
+    globalThis.fetch = mockFetch as never;
+
+    try {
+      const result = await pollVerificationStatus({
+        apiUrl: 'https://api.etherscan.io/api',
+        guid: 'abc123',
+        intervalMs: 0,
+      });
+      expect(result.verified).toBe(true);
+      expect(result.message).toBe('Pass - Verified');
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('returns verified=true after 2 pending polls then success', async () => {
+    let callCount = 0;
+    const mockFetch = vi.fn().mockImplementation(async () => {
+      callCount++;
+      if (callCount < 3) {
+        return { json: async () => ({ status: '0', result: 'Pending in queue', message: '' }) };
+      }
+      return { json: async () => ({ status: '1', result: 'Pass - Verified', message: 'OK' }) };
+    });
+    globalThis.fetch = mockFetch as never;
+
+    try {
+      const result = await pollVerificationStatus({
+        apiUrl: 'https://api.etherscan.io/api',
+        guid: 'abc123',
+        intervalMs: 0,
+      });
+      expect(result.verified).toBe(true);
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('returns verified=false when max attempts are exceeded', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      json: async () => ({ status: '0', result: 'Pending in queue', message: '' }),
+    });
+    globalThis.fetch = mockFetch as never;
+
+    try {
+      const result = await pollVerificationStatus({
+        apiUrl: 'https://api.etherscan.io/api',
+        guid: 'abc123',
+        maxAttempts: 3,
+        intervalMs: 0,
+      });
+      expect(result.verified).toBe(false);
+      expect(result.message).toContain('timed out');
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('returns verified=false immediately on a terminal failure message', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      json: async () => ({ status: '0', result: 'Fail - Unable to verify', message: '' }),
+    });
+    globalThis.fetch = mockFetch as never;
+
+    try {
+      const result = await pollVerificationStatus({
+        apiUrl: 'https://api.etherscan.io/api',
+        guid: 'abc123',
+        intervalMs: 0,
+      });
+      expect(result.verified).toBe(false);
+      expect(result.message).toContain('Fail');
+      // Should stop after the first poll since it's a terminal failure
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// verifyContract — polling integration (mocked)
+// ---------------------------------------------------------------------------
+
+describe('verifyContract — polls after successful submission', () => {
+  it('calls pollVerificationStatus with the GUID from the submit response', async () => {
+    let callCount = 0;
+    const mockFetch = vi.fn().mockImplementation(async () => {
+      callCount++;
+      // First call is the verifysourcecode submission
+      if (callCount === 1) {
+        return { json: async () => ({ status: '1', result: 'guid-xyz-789', message: 'OK' }) };
+      }
+      // Subsequent calls are checkverifystatus polls
+      return { json: async () => ({ status: '1', result: 'Pass - Verified', message: 'OK' }) };
+    });
+    globalThis.fetch = mockFetch as never;
+
+    try {
+      const result = await verifyContract({
+        address: '0x1234567890123456789012345678901234567890' as Address,
+        name: 'TestContract',
+        variant: 'simple',
+        chainId: 1,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toBe('Pass - Verified');
+      // Two fetch calls: submit + one poll
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      // The second call should include the checkverifystatus action and GUID
+      const secondCallUrl = (mockFetch.mock.calls[1] as unknown[])[0] as string;
+      expect(secondCallUrl).toContain('checkverifystatus');
+      expect(secondCallUrl).toContain('guid-xyz-789');
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('returns success=false when submission is rejected (status !== "1")', async () => {
+    const mockFetch = vi.fn().mockResolvedValue({
+      json: async () => ({ status: '0', result: '', message: 'Contract source code already verified' }),
+    });
+    globalThis.fetch = mockFetch as never;
+
+    try {
+      const result = await verifyContract({
+        address: '0x1234567890123456789012345678901234567890' as Address,
+        name: 'TestContract',
+        variant: 'simple',
+        chainId: 1,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe('Contract source code already verified');
+      // No polling should happen — submission was rejected
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 });

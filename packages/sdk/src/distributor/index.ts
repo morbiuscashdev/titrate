@@ -1,8 +1,8 @@
 export { deployDistributor, getContractSourceTemplate } from './deploy.js';
 export type { DeployParams, DeployResult } from './deploy.js';
 
-export { verifyContract } from './verify.js';
-export type { VerifyParams, VerifyResult } from './verify.js';
+export { verifyContract, pollVerificationStatus } from './verify.js';
+export type { VerifyParams, VerifyResult, PollVerificationStatusParams, PollVerificationStatusResult } from './verify.js';
 
 export { disperseTokens, disperseTokensSimple } from './disperse.js';
 export type { DisperseParams, DisperseSimpleParams, LiveFilter } from './disperse.js';
