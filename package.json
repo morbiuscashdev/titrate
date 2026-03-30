@@ -1,0 +1,11 @@
+{
+  "name": "titrate",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run test --workspaces",
+    "test:sdk": "npm run test -w packages/sdk",
+    "test:contracts": "npm run test -w packages/contracts"
+  }
+}
