@@ -3,6 +3,8 @@ import { Command } from 'commander';
 import { registerCollect } from './commands/collect.js';
 import { registerDeploy } from './commands/deploy.js';
 import { registerDeriveWallet } from './commands/derive-wallet.js';
+import { registerDistribute } from './commands/distribute.js';
+import { registerRun } from './commands/run.js';
 
 const program = new Command();
 
@@ -14,5 +16,7 @@ program
 registerCollect(program);
 registerDeploy(program);
 registerDeriveWallet(program);
+registerDistribute(program);
+registerRun(program);
 
 program.parse(process.argv);
