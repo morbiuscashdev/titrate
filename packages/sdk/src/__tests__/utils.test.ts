@@ -51,4 +51,21 @@ describe('withRetry', () => {
       ),
     ).rejects.toThrow('always fail');
   });
+
+  it('applies 5x delay multiplier for rate limit errors (line 34)', async () => {
+    // We cannot easily measure the delay, but we can confirm the function
+    // eventually succeeds after a rate-limit error without throwing early.
+    let calls = 0;
+    const result = await withRetry(
+      () => {
+        calls++;
+        if (calls === 1) throw new Error('429 Too Many Requests');
+        return Promise.resolve('recovered');
+      },
+      'rate-limit-test',
+      { maxRetries: 3, baseDelay: 1 },
+    );
+    expect(result).toBe('recovered');
+    expect(calls).toBe(2);
+  });
 });

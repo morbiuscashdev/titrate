@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { parseEther, type Address, type Hex } from 'viem';
 import { createAnvilContext, type AnvilContext } from './helpers/anvil.js';
 import { deployMockERC20, MOCK_ERC20_ABI_TYPED } from './helpers/mock-erc20.js';
@@ -21,6 +21,32 @@ const BOB = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC' as Address;
 // ---------------------------------------------------------------------------
 // deployDistributor
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// deployDistributor — error path when receipt has no contractAddress (line 54)
+// ---------------------------------------------------------------------------
+
+describe('deployDistributor — no contract address in receipt', () => {
+  it('throws when waitForTransactionReceipt returns no contractAddress (line 54)', async () => {
+    const fakeWalletClient = {
+      account: { address: '0x0000000000000000000000000000000000000001' },
+      deployContract: vi.fn().mockResolvedValue('0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef'),
+    } as never;
+
+    const fakePublicClient = {
+      waitForTransactionReceipt: vi.fn().mockResolvedValue({ contractAddress: null }),
+    } as never;
+
+    await expect(
+      deployDistributor({
+        variant: 'simple',
+        name: 'WillFail',
+        walletClient: fakeWalletClient,
+        publicClient: fakePublicClient,
+      }),
+    ).rejects.toThrow('Contract deployment failed for variant "simple": no address in receipt');
+  });
+});
 
 describe('deployDistributor (anvil)', () => {
   let ctx: AnvilContext;
@@ -83,6 +109,72 @@ describe('getContractSourceTemplate', () => {
 // ---------------------------------------------------------------------------
 // verifyContract — unit tests (no live explorer required)
 // ---------------------------------------------------------------------------
+
+describe('verifyContract — fetch success path (verify.ts line 78)', () => {
+  it('returns success=true when the explorer API returns status "1"', async () => {
+    // Mock globalThis.fetch to simulate a successful verification response
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      json: async () => ({ status: '1', result: 'Pass - Verified', message: 'OK' }),
+    }) as never;
+
+    try {
+      const result = await verifyContract({
+        address: '0x1234567890123456789012345678901234567890' as Address,
+        name: 'TestContract',
+        variant: 'simple',
+        chainId: 1, // mainnet — has a configured explorer API URL
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toBe('Pass - Verified');
+      expect(result.explorerUrl).toContain('0x1234567890123456789012345678901234567890');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('uses data.message when result is empty', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      json: async () => ({ status: '0', result: '', message: 'Contract source code already verified' }),
+    }) as never;
+
+    try {
+      const result = await verifyContract({
+        address: '0x1234567890123456789012345678901234567890' as Address,
+        name: 'TestContract',
+        variant: 'full',
+        chainId: 1,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe('Contract source code already verified');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('returns success=false when fetch throws a network error (verify.ts line 78 catch path)', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch')) as never;
+
+    try {
+      const result = await verifyContract({
+        address: '0x1234567890123456789012345678901234567890' as Address,
+        name: 'TestContract',
+        variant: 'simple',
+        chainId: 1,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.message).toContain('Verification request failed');
+      expect(result.explorerUrl).toBeNull();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+});
 
 describe('verifyContract', () => {
   it('returns success=false for an unsupported chain', async () => {
@@ -202,6 +294,29 @@ describe('disperse (anvil)', () => {
 
     const bobAfter = await ctx.publicClient.getBalance({ address: BOB });
     expect(bobAfter).toBeGreaterThan(bobBefore);
+  });
+
+  it('invokes onProgress callback with confirmed status for disperseTokensSimple (line 190 confirmed branch)', async () => {
+    const progressEvents: unknown[] = [];
+
+    await disperseTokensSimple({
+      contractAddress: simpleContract,
+      variant: 'simple',
+      token: '0x0000000000000000000000000000000000000000' as Address,
+      recipients: [ALICE],
+      amount: parseEther('0.01'),
+      walletClient: ctx.walletClient,
+      publicClient: ctx.publicClient,
+      batchSize: 200,
+      onProgress: (event) => progressEvents.push(event),
+    });
+
+    // Should have at least 'signing' + 'confirmed' events
+    expect(progressEvents.length).toBeGreaterThanOrEqual(2);
+    const confirmedEvent = progressEvents.find(
+      (e) => (e as { status: string }).status === 'confirmed',
+    );
+    expect(confirmedEvent).toBeDefined();
   });
 
   it('batches recipients when count exceeds batchSize', async () => {
@@ -503,5 +618,197 @@ describe('checkRecipients (anvil)', () => {
     expect(results).toHaveLength(2);
     // Fresh contract — no one has been sent to yet
     expect(results.every((r) => r === false)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// disperseTokens / disperseTokensSimple with full variant (covers lines 8, 84, 113, 161-190)
+// ---------------------------------------------------------------------------
+
+describe('disperse with full variant (anvil)', () => {
+  let ctx: AnvilContext;
+  let fullContract: Address;
+  let tokenAddress: Address;
+
+  // disperseSimple selector for TitrateFull
+  const selector = '0x2bae1e19' as Hex;
+
+  beforeAll(async () => {
+    ctx = createAnvilContext();
+
+    const fullResult = await deployDistributor({
+      variant: 'full',
+      name: 'FullDisperseTest',
+      walletClient: ctx.walletClient,
+      publicClient: ctx.publicClient,
+    });
+    fullContract = fullResult.address;
+
+    tokenAddress = await deployMockERC20(ctx, 'FullToken', 'FT', 18);
+
+    const mintHash = await ctx.walletClient.writeContract({
+      address: tokenAddress,
+      abi: MOCK_ERC20_ABI_TYPED,
+      functionName: 'mint',
+      args: [ctx.account.address, parseEther('10000')],
+      account: ctx.walletClient.account!,
+      chain: undefined,
+    });
+    await ctx.publicClient.waitForTransactionReceipt({ hash: mintHash });
+
+    // Approve the full contract to spend tokens on behalf of the deployer
+    const approveHash = await ctx.walletClient.writeContract({
+      address: tokenAddress,
+      abi: MOCK_ERC20_ABI_TYPED,
+      functionName: 'approve',
+      args: [fullContract, parseEther('10000')],
+      account: ctx.walletClient.account!,
+      chain: undefined,
+    });
+    await ctx.publicClient.waitForTransactionReceipt({ hash: approveHash });
+
+    // Grant disperseSimple allowance to the deployer so it can self-disperse
+    await approveOperator({
+      contractAddress: fullContract,
+      operator: ctx.account.address,
+      selector,
+      amount: parseEther('10000'),
+      walletClient: ctx.walletClient,
+      publicClient: ctx.publicClient,
+    });
+  });
+
+  it('disperses variable ERC-20 amounts via full variant (covers lines 8 and 84)', async () => {
+    const results = await disperseTokens({
+      contractAddress: fullContract,
+      variant: 'full',
+      token: tokenAddress,
+      recipients: [ALICE, BOB],
+      amounts: [parseEther('10'), parseEther('20')],
+      walletClient: ctx.walletClient,
+      publicClient: ctx.publicClient,
+      batchSize: 200,
+    });
+
+    expect(results.length).toBe(1);
+    expect(results[0].attempts[0].outcome).toBe('confirmed');
+  });
+
+  it('disperses uniform ERC-20 amount via full variant (covers lines 113 and 161-190)', async () => {
+    const results = await disperseTokensSimple({
+      contractAddress: fullContract,
+      variant: 'full',
+      token: tokenAddress,
+      recipients: [ALICE, BOB],
+      amount: parseEther('5'),
+      walletClient: ctx.walletClient,
+      publicClient: ctx.publicClient,
+      batchSize: 200,
+    });
+
+    expect(results.length).toBe(1);
+    expect(results[0].attempts[0].outcome).toBe('confirmed');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// disperseTokens — catch block when writeContract throws (line 249)
+// ---------------------------------------------------------------------------
+
+describe('disperseTokens — executeBatch catch path (line 249)', () => {
+  it('returns dropped outcome when writeContract throws a network error', async () => {
+    // Simulate a wallet client where writeContract throws (not gas-estimate failure,
+    // but an actual network-level error after gas estimation succeeds).
+    const fakePublicClient = {
+      estimateContractGas: vi.fn().mockResolvedValue(100_000n),
+      waitForTransactionReceipt: vi.fn(),
+    } as never;
+
+    const fakeWalletClient = {
+      account: { address: '0x0000000000000000000000000000000000000001' },
+      writeContract: vi.fn().mockRejectedValue(new Error('network error')),
+    } as never;
+
+    const results = await disperseTokens({
+      contractAddress: '0x0000000000000000000000000000000000000099' as Address,
+      variant: 'simple',
+      token: '0x0000000000000000000000000000000000000000' as Address,
+      recipients: [ALICE],
+      amounts: [parseEther('0.1')],
+      walletClient: fakeWalletClient,
+      publicClient: fakePublicClient,
+      batchSize: 200,
+    });
+
+    expect(results.length).toBe(1);
+    expect(results[0].attempts[0].outcome).toBe('dropped');
+    expect(results[0].confirmedTxHash).toBeNull();
+  });
+
+  it('disperseTokens returns dropped outcome with confirmedTxHash=null and status=failed in progress (line 113 false branch)', async () => {
+    // This covers line 113: `status: attempt.outcome === 'confirmed' ? 'confirmed' : 'failed'`
+    // The failed branch requires a failed disperseTokens call.
+    const fakePublicClient = {
+      estimateContractGas: vi.fn().mockResolvedValue(100_000n),
+      waitForTransactionReceipt: vi.fn(),
+    } as never;
+
+    const fakeWalletClient = {
+      account: { address: '0x0000000000000000000000000000000000000001' },
+      writeContract: vi.fn().mockRejectedValue(new Error('revert')),
+    } as never;
+
+    const progressEvents: unknown[] = [];
+    const results = await disperseTokens({
+      contractAddress: '0x0000000000000000000000000000000000000099' as Address,
+      variant: 'simple',
+      token: '0x0000000000000000000000000000000000000000' as Address,
+      recipients: [ALICE],
+      amounts: [parseEther('0.1')],
+      walletClient: fakeWalletClient,
+      publicClient: fakePublicClient,
+      batchSize: 200,
+      onProgress: (e) => progressEvents.push(e),
+    });
+
+    expect(results[0].confirmedTxHash).toBeNull();
+    const failedEvent = progressEvents.find(
+      (e) => (e as { status: string }).status === 'failed',
+    );
+    expect(failedEvent).toBeDefined();
+  });
+
+  it('disperseTokensSimple returns dropped outcome with null confirmedTxHash and failed progress (lines 180, 190 false branches)', async () => {
+    // Covers lines 180 and 190 in disperseTokensSimple: the null/failed branches
+    const fakePublicClient = {
+      estimateContractGas: vi.fn().mockResolvedValue(100_000n),
+      waitForTransactionReceipt: vi.fn(),
+    } as never;
+
+    const fakeWalletClient = {
+      account: { address: '0x0000000000000000000000000000000000000001' },
+      writeContract: vi.fn().mockRejectedValue(new Error('revert')),
+    } as never;
+
+    const progressEvents: unknown[] = [];
+    const results = await disperseTokensSimple({
+      contractAddress: '0x0000000000000000000000000000000000000099' as Address,
+      variant: 'simple',
+      token: '0x0000000000000000000000000000000000000000' as Address,
+      recipients: [ALICE],
+      amount: parseEther('0.1'),
+      walletClient: fakeWalletClient,
+      publicClient: fakePublicClient,
+      batchSize: 200,
+      onProgress: (e) => progressEvents.push(e),
+    });
+
+    // confirmedTxHash must be null (false branch of ternary at line 180)
+    expect(results[0].confirmedTxHash).toBeNull();
+    // onProgress should have been called with status='failed' (false branch at line 190)
+    const failedEvent = progressEvents.find(
+      (e) => (e as { status: string }).status === 'failed',
+    );
+    expect(failedEvent).toBeDefined();
   });
 });

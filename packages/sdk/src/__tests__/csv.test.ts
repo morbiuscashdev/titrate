@@ -31,6 +31,25 @@ describe('parseCSV', () => {
     const result = parseCSV(csv);
     expect(result.rows[0].address).toBe('0x1234567890abcdef1234567890abcdef12345678');
   });
+
+  it('returns empty rows for empty content (line 13 early return)', () => {
+    const result = parseCSV('');
+    expect(result.rows).toHaveLength(0);
+    expect(result.hasAmounts).toBe(false);
+  });
+
+  it('returns empty rows for whitespace-only content', () => {
+    const result = parseCSV('   \n  \n ');
+    expect(result.rows).toHaveLength(0);
+    expect(result.hasAmounts).toBe(false);
+  });
+
+  it('skips lines with invalid addresses (line 24 continue branch)', () => {
+    const csv = 'address\nnot-an-address\n0x1234567890abcdef1234567890abcdef12345678';
+    const result = parseCSV(csv);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].address).toBe('0x1234567890abcdef1234567890abcdef12345678');
+  });
 });
 
 describe('detectAmountFormat', () => {
@@ -98,6 +117,29 @@ describe('flagConflicts', () => {
       { address: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd' as `0x${string}`, amount: '200' },
     ];
     const result = flagConflicts(rows, 'integer');
+    expect(result.conflicts).toHaveLength(0);
+  });
+  it('skips rows where amount is null', () => {
+    const rows = [
+      { address: '0x1234567890abcdef1234567890abcdef12345678' as `0x${string}`, amount: null },
+    ];
+    const result = flagConflicts(rows, 'integer');
+    expect(result.conflicts).toHaveLength(0);
+  });
+  it('flags invalid decimal format when format is decimal (line 21)', () => {
+    const rows = [
+      { address: '0x1234567890abcdef1234567890abcdef12345678' as `0x${string}`, amount: 'not-a-number' },
+    ];
+    const result = flagConflicts(rows, 'decimal');
+    expect(result.conflicts).toHaveLength(1);
+    expect(result.conflicts[0].reason).toContain('Invalid decimal format');
+  });
+  it('accepts valid decimal amounts when format is decimal', () => {
+    const rows = [
+      { address: '0x1234567890abcdef1234567890abcdef12345678' as `0x${string}`, amount: '1.5' },
+      { address: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd' as `0x${string}`, amount: '100' },
+    ];
+    const result = flagConflicts(rows, 'decimal');
     expect(result.conflicts).toHaveLength(0);
   });
 });

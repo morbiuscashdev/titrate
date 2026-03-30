@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { parseEther, type Address } from 'viem';
 import {
@@ -471,5 +471,130 @@ describe('scanner (anvil)', () => {
       const blockNumber = await resolveBlockByTimestamp(ctx.publicClient, pastTimestamp);
       expect(blockNumber).toBeLessThanOrEqual(latest.number);
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// scanBlocks — unit tests for uncovered branches (lines 44 and 58)
+// ---------------------------------------------------------------------------
+
+describe('scanBlocks — uncovered branch coverage', () => {
+  it('skips string transaction entries (line 44 typeof tx === "string" branch)', async () => {
+    // Mock an RPC that returns a block where transactions are strings (tx hashes),
+    // not full transaction objects. This exercises the `continue` branch at line 44.
+    const mockRpc = {
+      getBlock: vi.fn().mockResolvedValue({
+        transactions: ['0xabc123', '0xdef456'], // strings, not objects
+      }),
+    } as never;
+
+    const addresses: Address[] = [];
+    for await (const batch of scanBlocks(mockRpc, {
+      startBlock: 0n,
+      endBlock: 0n,
+      extract: 'tx.from',
+      batchSize: 10,
+    })) {
+      addresses.push(...batch);
+    }
+
+    // All transactions were strings → skipped → no addresses yielded
+    expect(addresses.length).toBe(0);
+  });
+
+  it('does not yield when a block batch has no addresses (line 58 false branch)', async () => {
+    // Mock an RPC that returns blocks with no transactions at all.
+    const mockRpc = {
+      getBlock: vi.fn().mockResolvedValue({
+        transactions: [], // empty — addresses.length will be 0
+      }),
+    } as never;
+
+    const batches: Address[][] = [];
+    for await (const batch of scanBlocks(mockRpc, {
+      startBlock: 0n,
+      endBlock: 2n,
+      extract: 'tx.from',
+      batchSize: 10,
+    })) {
+      batches.push(batch);
+    }
+
+    // No batches should be yielded since there were no addresses
+    expect(batches.length).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// scanTransferEvents — query-size error shrink path (lines 66-70)
+// ---------------------------------------------------------------------------
+
+describe('scanTransferEvents — query size error shrink path (lines 66-70)', () => {
+  it('shrinks range and retries when getLogs throws a query-size error', async () => {
+    // The mock getLogs fails with a query-too-large error on the first call,
+    // then succeeds on retry (now with a smaller range). This covers the
+    // `isQuerySizeError` catch branch in logs.ts lines 66-70.
+    // Also covers the false branch at line 32 by using a large endBlock (> blockRange).
+    let callCount = 0;
+    const mockRpc = {
+      getLogs: vi.fn().mockImplementation(async () => {
+        callCount++;
+        if (callCount === 1) throw new Error('too many logs in response');
+        // Second call succeeds with empty logs
+        return [];
+      }),
+    } as never;
+
+    const addresses: Address[] = [];
+    // endBlock=2000n ensures the first iteration does NOT clamp (false branch at line 32)
+    for await (const batch of scanTransferEvents(
+      mockRpc,
+      '0x1234567890123456789012345678901234567890' as Address,
+      { startBlock: 0n, endBlock: 2000n },
+    )) {
+      addresses.push(...batch);
+    }
+
+    // getLogs was called at least twice (first failure + retry after shrink)
+    expect(callCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it('rethrows non-query-size errors', async () => {
+    const mockRpc = {
+      getLogs: vi.fn().mockRejectedValue(new Error('connection refused')),
+    } as never;
+
+    await expect(async () => {
+      for await (const _batch of scanTransferEvents(
+        mockRpc,
+        '0x1234567890123456789012345678901234567890' as Address,
+        { startBlock: 0n, endBlock: 0n },
+      )) {
+        // consume
+      }
+    }).rejects.toThrow('connection refused');
+  });
+
+  it('skips log entries where args.to is falsy (line 48 false branch)', async () => {
+    // Return a synthetic log where args.to is undefined — the inner `if (log.args.to)` skip
+    const mockRpc = {
+      getLogs: vi.fn().mockResolvedValue([
+        { args: { to: undefined, from: '0x1234567890123456789012345678901234567890' } },
+        { args: { to: '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd' } },
+      ]),
+    } as never;
+
+    const addresses: Address[] = [];
+    for await (const batch of scanTransferEvents(
+      mockRpc,
+      '0x1234567890123456789012345678901234567890' as Address,
+      { startBlock: 0n, endBlock: 0n },
+    )) {
+      addresses.push(...batch);
+    }
+
+    // Only the log with a valid `to` address should be captured
+    expect(addresses.length).toBe(1);
+    expect(addresses[0]).toBe('0xabcdefabcdefabcdefabcdefabcdefabcdefabcd');
   });
 });
