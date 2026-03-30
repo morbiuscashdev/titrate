@@ -22,7 +22,7 @@ export { SUPPORTED_CHAINS, getChainConfig, getExplorerApiUrl } from './chains/in
 
 // CSV
 export { parseCSV, detectAmountFormat, validateAddresses, deduplicateAddresses, flagConflicts } from './csv/index.js';
-export type { ParsedCSV, ValidationResult, ConflictResult } from './csv/index.js';
+export type { ParsedCSV, ParseCSVOptions, ValidationResult, ConflictResult } from './csv/index.js';
 
 // Sets
 export { union, intersect, difference, symmetricDifference } from './sets/index.js';
@@ -54,6 +54,10 @@ export type {
 export { chunk } from './utils/chunk.js';
 export { withRetry } from './utils/retry.js';
 export type { RetryOptions } from './utils/retry.js';
+
+// Memory
+export { getHeapUsageMB, getHeapLimitMB, createMemoryMonitor } from './utils/memory.js';
+export type { MemoryWarning, MemoryWarningCallback } from './utils/memory.js';
 
 // Scanner
 export {
