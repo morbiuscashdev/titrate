@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { createEIP712Message, deriveHotWallet } from '../wallet/index.js';
+import { describe, it, expect, vi } from 'vitest';
+import { createEIP712Message, deriveHotWallet, InvalidSignatureError } from '../wallet/index.js';
 import { privateKeyToAccount } from 'viem/accounts';
 
 // ---------------------------------------------------------------------------
@@ -107,5 +107,61 @@ describe('wallet property tests', () => {
         expect(account.address.toLowerCase()).toBe(wallet.address.toLowerCase());
       }
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Signature validation tests
+// ---------------------------------------------------------------------------
+
+describe('deriveHotWallet — signature validation', () => {
+  it('throws InvalidSignatureError for empty signature "0x"', () => {
+    expect(() => deriveHotWallet('0x')).toThrow(InvalidSignatureError);
+    expect(() => deriveHotWallet('0x')).toThrow('must not be empty');
+  });
+
+  it('throws InvalidSignatureError for too-short signature "0xabcd"', () => {
+    expect(() => deriveHotWallet('0xabcd')).toThrow(InvalidSignatureError);
+    expect(() => deriveHotWallet('0xabcd')).toThrow('too short');
+  });
+
+  it('throws InvalidSignatureError for a 64-byte signature (one byte short)', () => {
+    // 64 bytes = 128 hex chars — valid for a private key but not an Ethereum signature
+    const shortSig = ('0x' + 'ab'.repeat(64)) as `0x${string}`;
+    expect(() => deriveHotWallet(shortSig)).toThrow(InvalidSignatureError);
+  });
+
+  it('accepts a valid 65-byte signature', () => {
+    const validSig = ('0x' + 'ab'.repeat(65)) as `0x${string}`;
+    const wallet = deriveHotWallet(validSig);
+    expect(wallet.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    expect(wallet.privateKey).toMatch(/^0x[0-9a-fA-F]{64}$/);
+  });
+
+  it('accepts a signature longer than 65 bytes', () => {
+    const longSig = ('0x' + 'cd'.repeat(100)) as `0x${string}`;
+    const wallet = deriveHotWallet(longSig);
+    expect(wallet.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+  });
+
+  it('logs a warning for all-zero 65-byte signature (low entropy)', () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const zeroSig = ('0x' + '0'.repeat(130)) as `0x${string}`;
+
+    // Should NOT throw — zero sig is a warning, not an error
+    const wallet = deriveHotWallet(zeroSig);
+    expect(wallet.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('all-zero'));
+
+    warnSpy.mockRestore();
+  });
+
+  it('InvalidSignatureError has the correct name property', () => {
+    try {
+      deriveHotWallet('0x');
+    } catch (err) {
+      expect(err).toBeInstanceOf(InvalidSignatureError);
+      expect((err as InvalidSignatureError).name).toBe('InvalidSignatureError');
+    }
   });
 });
