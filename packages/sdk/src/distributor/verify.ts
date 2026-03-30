@@ -44,7 +44,7 @@ export async function verifyContract(params: VerifyParams): Promise<VerifyResult
 
   const sourceTemplate = getContractSourceTemplate(variant);
   const originalName = variant === 'simple' ? 'TitrateSimple' : 'TitrateFull';
-  const customSource = sourceTemplate.replace(new RegExp(originalName, 'g'), name);
+  const customSource = sourceTemplate.replaceAll(originalName, name);
 
   try {
     const response = await fetch(apiUrl, {

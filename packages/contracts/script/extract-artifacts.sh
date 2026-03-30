@@ -36,4 +36,9 @@ for contract in TitrateSimple TitrateFull; do
   echo "Extracted: $SDK_ARTIFACTS/${contract}.json"
 done
 
+for contract in TitrateSimple TitrateFull; do
+  cp "$CONTRACT_DIR/src/${contract}.sol" "$SDK_ARTIFACTS/${contract}.sol.txt"
+  echo "Copied source: $SDK_ARTIFACTS/${contract}.sol.txt"
+done
+
 echo "Done. Artifacts written to $SDK_ARTIFACTS"

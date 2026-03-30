@@ -104,6 +104,28 @@ describe('getContractSourceTemplate', () => {
     const source = getContractSourceTemplate('full');
     expect(source).toContain('contract TitrateFull');
   });
+
+  it('returns real Solidity source for simple variant', () => {
+    const source = getContractSourceTemplate('simple');
+    expect(source).toContain('pragma solidity');
+    expect(source).toContain('contract TitrateSimple');
+    expect(source).toContain('function disperse');
+  });
+
+  it('returns real Solidity source for full variant', () => {
+    const source = getContractSourceTemplate('full');
+    expect(source).toContain('pragma solidity');
+    expect(source).toContain('contract TitrateFull');
+    expect(source).toContain('function disperseSimple');
+    expect(source).toContain('function multicall');
+  });
+
+  it('source can be name-replaced for verification', () => {
+    const source = getContractSourceTemplate('simple');
+    const custom = source.replaceAll('TitrateSimple', 'BuyMoreHEX');
+    expect(custom).toContain('contract BuyMoreHEX');
+    expect(custom).not.toContain('TitrateSimple');
+  });
 });
 
 // ---------------------------------------------------------------------------

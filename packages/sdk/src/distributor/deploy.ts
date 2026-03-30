@@ -1,7 +1,12 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Address, Hex, PublicClient, WalletClient } from 'viem';
 import type { ContractArtifact } from '../types.js';
 import TitrateSimpleArtifact from './artifacts/TitrateSimple.json' with { type: 'json' };
 import TitrateFullArtifact from './artifacts/TitrateFull.json' with { type: 'json' };
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export type DeployParams = {
   readonly variant: 'simple' | 'full';
@@ -27,8 +32,8 @@ function getArtifact(variant: 'simple' | 'full'): ContractArtifact {
  * a custom name before submitting to a block explorer.
  */
 export function getContractSourceTemplate(variant: 'simple' | 'full'): string {
-  const contractName = variant === 'simple' ? 'TitrateSimple' : 'TitrateFull';
-  return `// Source template for ${contractName}\ncontract ${contractName} { /* ... */ }`;
+  const filename = variant === 'simple' ? 'TitrateSimple.sol.txt' : 'TitrateFull.sol.txt';
+  return readFileSync(join(__dirname, 'artifacts', filename), 'utf-8');
 }
 
 /**
