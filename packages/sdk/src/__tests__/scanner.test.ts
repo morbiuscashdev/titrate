@@ -243,20 +243,39 @@ describe('getAddressProperties (anvil)', () => {
 describe('scanTransferEvents (anvil)', () => {
   let ctx: AnvilContext;
   let tokenAddress: Address;
+  let setupStartBlock: bigint;
 
   const ALICE = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8' as Address;
   const BOB = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC' as Address;
 
   beforeAll(async () => {
+    // Use Anvil account #3 (separate from accounts used by other test files)
+    const ACCOUNT3_KEY = '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a' as const;
     ctx = createAnvilContext();
+    // Override wallet to use account #3
+    const { createWalletClient, http } = await import('viem');
+    const { privateKeyToAccount } = await import('viem/accounts');
+    const { foundry } = await import('viem/chains');
+    const account3 = privateKeyToAccount(ACCOUNT3_KEY);
+    (ctx as any).walletClient = createWalletClient({
+      chain: foundry,
+      transport: http('http://127.0.0.1:8545'),
+      account: account3,
+    });
+    (ctx as any).account = { address: account3.address, privateKey: ACCOUNT3_KEY };
+
+    setupStartBlock = await ctx.publicClient.getBlockNumber();
 
     // Use SimpleERC20 which properly emits Transfer events (MockERC20 does not)
+    // Use the full SimpleERC20 ABI from the artifact for all calls
+    // Just use the same typed ABI — the function signatures are identical
+    const simpleAbi = MOCK_ERC20_ABI_TYPED;
     tokenAddress = await deploySimpleERC20(ctx, 'ScanToken', 'SCAN', 18);
 
     // Mint tokens to deployer
     const mintHash = await ctx.walletClient.writeContract({
       address: tokenAddress,
-      abi: MOCK_ERC20_ABI_TYPED,
+      abi: simpleAbi as any,
       functionName: 'mint',
       args: [ctx.account.address, parseEther('1000')],
       account: ctx.walletClient.account!,
@@ -267,7 +286,7 @@ describe('scanTransferEvents (anvil)', () => {
     // Transfer to ALICE to emit a Transfer event
     const transferHash = await ctx.walletClient.writeContract({
       address: tokenAddress,
-      abi: MOCK_ERC20_ABI_TYPED,
+      abi: simpleAbi as any,
       functionName: 'transfer',
       args: [ALICE, parseEther('100')],
       account: ctx.walletClient.account!,
@@ -278,7 +297,7 @@ describe('scanTransferEvents (anvil)', () => {
     // Transfer to BOB to emit another Transfer event
     const transfer2Hash = await ctx.walletClient.writeContract({
       address: tokenAddress,
-      abi: MOCK_ERC20_ABI_TYPED,
+      abi: simpleAbi as any,
       functionName: 'transfer',
       args: [BOB, parseEther('50')],
       account: ctx.walletClient.account!,
@@ -289,8 +308,18 @@ describe('scanTransferEvents (anvil)', () => {
 
   it('scans Transfer events and returns recipient addresses', async () => {
     const currentBlock = await ctx.publicClient.getBlockNumber();
-    const addresses: Address[] = [];
 
+    // Verify events exist via direct getLogs first
+    const { parseAbiItem } = await import('viem');
+    const directLogs = await ctx.publicClient.getLogs({
+      address: tokenAddress,
+      event: parseAbiItem('event Transfer(address indexed from, address indexed to, uint256 value)'),
+      fromBlock: 0n,
+      toBlock: currentBlock,
+    });
+    expect(directLogs.length).toBeGreaterThan(0);
+
+    const addresses: Address[] = [];
     for await (const batch of scanTransferEvents(ctx.publicClient, tokenAddress, {
       startBlock: 0n,
       endBlock: currentBlock,
