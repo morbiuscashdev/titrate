@@ -12,13 +12,14 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@clack/prompts": "^0.10.0",
     "@titrate/sdk": "0.0.1",
     "commander": "^13.1.0",
-    "@clack/prompts": "^0.10.0",
     "ora": "^8.2.0",
     "viem": "^2.23.2"
   },
   "devDependencies": {
+    "@types/node": "^25.5.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.3",
     "vitest": "^4.1.1"
