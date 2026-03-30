@@ -24,8 +24,11 @@ export { SUPPORTED_CHAINS, getChainConfig, getExplorerApiUrl } from './chains/in
 export { parseCSV, detectAmountFormat, validateAddresses, deduplicateAddresses, flagConflicts } from './csv/index.js';
 export type { ParsedCSV, ValidationResult, ConflictResult } from './csv/index.js';
 
+// Sets
+export { union, intersect, difference, symmetricDifference } from './sets/index.js';
+
 // Wallet
-export { createEIP712Message, deriveHotWallet } from './wallet/index.js';
+export { createEIP712Message, deriveHotWallet, InvalidSignatureError } from './wallet/index.js';
 export type { EIP712MessageParams, EIP712TypedData, DerivedWallet } from './wallet/index.js';
 
 // Encode
@@ -81,6 +84,7 @@ export {
   deployDistributor,
   getContractSourceTemplate,
   verifyContract,
+  pollVerificationStatus,
   disperseTokens,
   disperseTokensSimple,
   approveOperator,
@@ -93,6 +97,8 @@ export type {
   DeployResult,
   VerifyParams,
   VerifyResult,
+  PollVerificationStatusParams,
+  PollVerificationStatusResult,
   DisperseParams,
   DisperseSimpleParams,
   LiveFilter,
