@@ -1,28 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { Command } from 'commander';
 import type { Address, Hex } from 'viem';
-import { disperseTokens, disperseTokensSimple, parseCSV } from '@titrate/sdk';
+import { disperseTokens, disperseTokensSimple, parseCSV, serializeBatchResults } from '@titrate/sdk';
 import type { BatchResult } from '@titrate/sdk';
 import { createRpcClient } from '../utils/rpc.js';
 import { createSignerClient, resolvePrivateKey } from '../utils/wallet.js';
 import { createProgressRenderer } from '../progress/renderer.js';
-
-/**
- * Serializes BatchResult[] to JSON, converting bigint fields to strings.
- */
-function serializeResults(results: BatchResult[]): unknown {
-  return results.map((r) => ({
-    ...r,
-    amounts: r.amounts.map((a) => a.toString()),
-    blockNumber: r.blockNumber !== null ? r.blockNumber.toString() : null,
-    attempts: r.attempts.map((a) => ({
-      ...a,
-      gasEstimate: a.gasEstimate.toString(),
-      maxFeePerGas: a.maxFeePerGas.toString(),
-      maxPriorityFeePerGas: a.maxPriorityFeePerGas.toString(),
-    })),
-  }));
-}
 
 /**
  * Registers the `distribute` subcommand on a Commander program.
@@ -112,6 +95,6 @@ export function registerDistribute(program: Command): void {
         });
       }
 
-      console.log(JSON.stringify(serializeResults(results), null, 2));
+      console.log(JSON.stringify(serializeBatchResults(results), null, 2));
     });
 }

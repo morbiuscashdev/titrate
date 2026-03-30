@@ -1,8 +1,8 @@
 import { text, select, isCancel } from '@clack/prompts';
 import type { PublicClient } from 'viem';
-import { SUPPORTED_CHAINS } from '@titrate/sdk';
+import type { Storage } from '@titrate/sdk';
+import { SUPPORTED_CHAINS, probeToken } from '@titrate/sdk';
 import { createRpcClient } from '../../utils/rpc.js';
-import { createFileStorage } from '../../storage/index.js';
 
 /** The result of Step 1: Campaign Setup. */
 export type CampaignStepResult = {
@@ -23,50 +23,14 @@ export type CampaignStepResult = {
 const NATIVE_SENTINEL = 'native';
 
 /**
- * Calls name() and decimals() on an ERC-20 token contract to validate it exists.
- * Returns null if the calls fail (not an ERC-20 or unreachable).
- */
-async function probeToken(
-  client: PublicClient,
-  address: `0x${string}`,
-): Promise<{ name: string; symbol: string; decimals: number } | null> {
-  try {
-    const [nameResult, symbolResult, decimalsResult] = await Promise.all([
-      client.readContract({
-        address,
-        abi: [{ name: 'name', type: 'function', inputs: [], outputs: [{ type: 'string' }], stateMutability: 'view' }],
-        functionName: 'name',
-      }),
-      client.readContract({
-        address,
-        abi: [{ name: 'symbol', type: 'function', inputs: [], outputs: [{ type: 'string' }], stateMutability: 'view' }],
-        functionName: 'symbol',
-      }),
-      client.readContract({
-        address,
-        abi: [{ name: 'decimals', type: 'function', inputs: [], outputs: [{ type: 'uint8' }], stateMutability: 'view' }],
-        functionName: 'decimals',
-      }),
-    ]);
-    return {
-      name: nameResult as string,
-      symbol: symbolResult as string,
-      decimals: Number(decimalsResult),
-    };
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Step 1: Campaign Setup.
  * Collects campaign name, chain, token, contract variant, and batch size.
  *
- * @param storageDir - Directory for the file storage adapter (default `.titrate`)
+ * @param storage - Shared filesystem storage instance
  * @returns Campaign config or a clack cancel symbol
  */
 export async function campaignStep(
-  storageDir = '.titrate',
+  storage: Storage,
 ): Promise<CampaignStepResult | symbol> {
   // --- Campaign name ---
   const name = await text({
@@ -79,7 +43,6 @@ export async function campaignStep(
   // Check for existing campaign with same name for auto-resume
   let resumeCampaignId: string | null = null;
   try {
-    const storage = createFileStorage(storageDir);
     const existing = await storage.campaigns.list();
     const match = existing.find((c) => c.name === (name as string).trim());
     if (match) {

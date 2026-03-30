@@ -1,5 +1,5 @@
 import { select, confirm, text, isCancel } from '@clack/prompts';
-import { detectAmountFormat, parseCSV } from '@titrate/sdk';
+import { detectAmountFormat, parseCSV, decimalToInteger, parseVariableAmounts } from '@titrate/sdk';
 import type { Address } from 'viem';
 import type { AddressesStepResult } from './addresses.js';
 import type { CampaignStepResult } from './campaign.js';
@@ -20,34 +20,6 @@ export type AmountsStepResult =
       readonly format: 'integer' | 'decimal';
       readonly totalAmount: bigint;
     };
-
-/**
- * Converts a decimal string amount to its bigint integer representation
- * given the token's decimals.
- *
- * @example decimalToInteger("1.5", 8) => 150000000n
- */
-function decimalToInteger(decimalStr: string, decimals: number): bigint {
-  const [wholePart, fracPart = ''] = decimalStr.split('.');
-  const paddedFrac = fracPart.slice(0, decimals).padEnd(decimals, '0');
-  return BigInt(wholePart) * 10n ** BigInt(decimals) + BigInt(paddedFrac || '0');
-}
-
-/**
- * Parses variable amounts from CSV rows, applying the chosen format.
- * Returns bigint amounts aligned with the address list order.
- */
-function parseVariableAmounts(
-  rawAmounts: readonly (string | null)[],
-  format: 'integer' | 'decimal',
-  decimals: number,
-): bigint[] {
-  return rawAmounts.map((raw) => {
-    if (!raw) return 0n;
-    if (format === 'decimal') return decimalToInteger(raw, decimals);
-    return BigInt(raw);
-  });
-}
 
 /**
  * Step 4: Configure Amounts.

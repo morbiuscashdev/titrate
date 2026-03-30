@@ -59,6 +59,33 @@ export type { RetryOptions } from './utils/retry.js';
 export { getHeapUsageMB, getHeapLimitMB, createMemoryMonitor } from './utils/memory.js';
 export type { MemoryWarning, MemoryWarningCallback } from './utils/memory.js';
 
+// Amounts
+export { decimalToInteger, parseVariableAmounts } from './utils/amounts.js';
+
+// Campaign
+export { slugifyCampaignName } from './utils/campaign.js';
+
+// Token
+export { probeToken } from './utils/token.js';
+export type { TokenMetadata } from './utils/token.js';
+
+// Blocks
+export { resolveBlockRef } from './utils/blocks.js';
+
+// Resume
+export { computeResumeOffset, alignAmountsForResume } from './utils/resume.js';
+
+// Serialize
+export { serializeBatchResults } from './utils/serialize.js';
+
+// Requirements
+export { computeRequirements } from './utils/requirements.js';
+export type { DistributionRequirements } from './utils/requirements.js';
+
+// Spend
+export { aggregateSpendReport } from './utils/spend.js';
+export type { SpendReport } from './utils/spend.js';
+
 // Scanner
 export {
   scanBlocks,

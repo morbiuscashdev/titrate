@@ -1,7 +1,6 @@
 import { stat } from 'node:fs/promises';
 import { text, select, confirm, isCancel } from '@clack/prompts';
-import { parseCSV, resolveBlockByTimestamp } from '@titrate/sdk';
-import type { PublicClient } from 'viem';
+import { parseCSV, resolveBlockRef } from '@titrate/sdk';
 import type { CampaignStepResult } from './campaign.js';
 import { formatCount } from '../format.js';
 
@@ -16,29 +15,6 @@ export type AddressesStepResult = {
   readonly source: AddressSource;
   readonly addressCount: number;
 };
-
-/**
- * Resolves a block reference — either a raw block number or an ISO date string.
- * Dates are resolved via `resolveBlockByTimestamp`.
- */
-async function resolveBlockRef(
-  input: string,
-  client: PublicClient,
-  label: string,
-): Promise<bigint> {
-  const trimmed = input.trim();
-
-  // ISO date pattern: YYYY-MM-DD
-  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
-    const date = new Date(`${trimmed}T00:00:00Z`);
-    const ts = Math.floor(date.getTime() / 1000);
-    return resolveBlockByTimestamp(client, ts);
-  }
-
-  // Raw block number
-  const n = BigInt(trimmed);
-  return n;
-}
 
 /**
  * Counts unique addresses from a CSV file path.
@@ -128,8 +104,8 @@ export async function addressesStep(
     });
     if (isCancel(extractChoice)) return extractChoice;
 
-    startBlock = await resolveBlockRef(startInput as string, campaign.publicClient, 'start');
-    endBlock = await resolveBlockRef(endInput as string, campaign.publicClient, 'end');
+    startBlock = await resolveBlockRef(startInput as string, campaign.publicClient);
+    endBlock = await resolveBlockRef(endInput as string, campaign.publicClient);
     extractField = extractChoice as 'tx.from' | 'tx.to';
 
     // Scan count is unknown until execution — report 0 for now, updated in filters step
