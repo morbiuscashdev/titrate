@@ -1,7 +1,7 @@
 import type { Address, PublicClient } from 'viem';
 import { parseEther } from 'viem';
 import type { FilterType, ProgressCallback } from '../types.js';
-import { getAddressProperties } from '../scanner/properties.js';
+import { getAddressProperties, type AddressProperties } from '../scanner/properties.js';
 import { scanTransferEvents } from '../scanner/logs.js';
 
 export type FilterParams = Record<string, unknown>;
@@ -11,6 +11,74 @@ export type FilterExecutor = (
   rpc?: PublicClient,
   onProgress?: ProgressCallback,
 ) => Promise<Set<Address>>;
+
+// ---------------------------------------------------------------------------
+// Pure filtering helpers — exported for direct testing without RPC
+// ---------------------------------------------------------------------------
+
+/**
+ * Filters a list of address properties, keeping only EOA addresses
+ * (those where `isContract` is false or undefined).
+ */
+export function filterByContractCheck(props: AddressProperties[]): Set<Address> {
+  const result = new Set<Address>();
+  for (const p of props) {
+    if (!p.isContract) result.add(p.address);
+  }
+  return result;
+}
+
+/**
+ * Filters a list of address properties, keeping only those with a balance
+ * at or above `minBalance`.
+ */
+export function filterByMinBalance(
+  props: AddressProperties[],
+  minBalance: bigint,
+): Set<Address> {
+  const result = new Set<Address>();
+  for (const p of props) {
+    if (p.balance !== undefined && p.balance >= minBalance) result.add(p.address);
+  }
+  return result;
+}
+
+/**
+ * Filters a list of address properties, keeping only those whose nonce
+ * falls within [minNonce, maxNonce] inclusive.
+ */
+export function filterByNonceRange(
+  props: AddressProperties[],
+  minNonce: number,
+  maxNonce: number,
+): Set<Address> {
+  const result = new Set<Address>();
+  for (const p of props) {
+    if (p.nonce !== undefined && p.nonce >= minNonce && p.nonce <= maxNonce) {
+      result.add(p.address);
+    }
+  }
+  return result;
+}
+
+/**
+ * Excludes addresses that appear in the given set of token recipients
+ * (case-insensitive comparison).
+ */
+export function filterByExcludeRecipients(
+  addresses: Set<Address>,
+  recipients: Set<string>,
+): Set<Address> {
+  const result = new Set<Address>();
+  for (const addr of addresses) {
+    if (!recipients.has(addr.toLowerCase())) result.add(addr);
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Factory
+// ---------------------------------------------------------------------------
 
 /** Factory that maps a filter type to its async executor. */
 export function createFilter(filterType: FilterType, params: FilterParams): FilterExecutor {
@@ -37,17 +105,17 @@ export function createFilter(filterType: FilterType, params: FilterParams): Filt
 function contractCheckFilter(): FilterExecutor {
   return async (addresses, rpc, onProgress) => {
     if (!rpc) throw new Error('contract-check filter requires an RPC client');
-    const result = new Set<Address>();
     const addressArray = [...addresses];
+    const allProps: AddressProperties[] = [];
 
     for await (const batch of getAddressProperties(rpc, addressArray, {
       properties: ['code'],
       concurrency: 100,
     })) {
-      for (const props of batch) {
-        if (!props.isContract) result.add(props.address);
-      }
+      allProps.push(...batch);
     }
+
+    const result = filterByContractCheck(allProps);
 
     onProgress?.({
       type: 'filter',
@@ -67,20 +135,18 @@ function minBalanceFilter(params: FilterParams): FilterExecutor {
 
   return async (addresses, rpc, onProgress) => {
     if (!rpc) throw new Error('min-balance filter requires an RPC client');
-    const result = new Set<Address>();
     const addressArray = [...addresses];
+    const allProps: AddressProperties[] = [];
 
     for await (const batch of getAddressProperties(rpc, addressArray, {
       properties: ['balance'],
       blockNumber,
       concurrency: 100,
     })) {
-      for (const props of batch) {
-        if (props.balance !== undefined && props.balance >= minBalance) {
-          result.add(props.address);
-        }
-      }
+      allProps.push(...batch);
     }
+
+    const result = filterByMinBalance(allProps, minBalance);
 
     onProgress?.({
       type: 'filter',
@@ -98,23 +164,17 @@ function nonceRangeFilter(params: FilterParams): FilterExecutor {
 
   return async (addresses, rpc, onProgress) => {
     if (!rpc) throw new Error('nonce-range filter requires an RPC client');
-    const result = new Set<Address>();
     const addressArray = [...addresses];
+    const allProps: AddressProperties[] = [];
 
     for await (const batch of getAddressProperties(rpc, addressArray, {
       properties: ['nonce'],
       concurrency: 100,
     })) {
-      for (const props of batch) {
-        if (
-          props.nonce !== undefined &&
-          props.nonce >= minNonce &&
-          props.nonce <= maxNonce
-        ) {
-          result.add(props.address);
-        }
-      }
+      allProps.push(...batch);
     }
+
+    const result = filterByNonceRange(allProps, minNonce, maxNonce);
 
     onProgress?.({
       type: 'filter',
@@ -143,10 +203,7 @@ function tokenRecipientsFilter(params: FilterParams): FilterExecutor {
       for (const addr of batch) recipients.add(addr.toLowerCase());
     }
 
-    const result = new Set<Address>();
-    for (const addr of addresses) {
-      if (!recipients.has(addr.toLowerCase())) result.add(addr);
-    }
+    const result = filterByExcludeRecipients(addresses, recipients);
 
     onProgress?.({
       type: 'filter',

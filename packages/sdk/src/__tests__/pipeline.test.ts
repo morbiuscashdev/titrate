@@ -13,6 +13,28 @@ import { createAnvilContext, fundAddress, type AnvilContext } from './helpers/an
 import { deployMockERC20, deploySimpleERC20, MOCK_ERC20_ABI_TYPED } from './helpers/mock-erc20.js';
 
 // ---------------------------------------------------------------------------
+// Property test helpers
+// ---------------------------------------------------------------------------
+
+/** Generates a deterministic fake Ethereum address from an integer index. */
+function fakeAddress(index: number): Address {
+  return `0x${index.toString(16).padStart(40, '0')}` as Address;
+}
+
+/**
+ * Collects all addresses produced by a pipeline into a single Set.
+ * Mirrors the deduplication logic in pipeline.ts (lowercase + Set).
+ */
+async function collectPipeline(addresses: string[]): Promise<Set<string>> {
+  const pipeline = createPipeline().addSource('csv', { addresses });
+  const result = new Set<string>();
+  for await (const batch of pipeline.execute()) {
+    for (const addr of batch) result.add(addr);
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
 // Pure pipeline construction tests (no Anvil)
 // ---------------------------------------------------------------------------
 
@@ -748,6 +770,121 @@ describe('pipeline (anvil)', () => {
 
       // Should not throw and should complete — verifies line 50 default branch was reached
       expect(addresses).toBeDefined();
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property tests — pipeline deduplication and set operations
+// ---------------------------------------------------------------------------
+
+describe('pipeline property tests', () => {
+  const ITERATIONS = 100;
+  const POOL_SIZE = 200; // address pool to draw from
+
+  describe('prop: dedup idempotency — dedup(dedup(rows)) === dedup(rows)', () => {
+    it(`holds for ${ITERATIONS} random address lists`, async () => {
+      for (let i = 0; i < ITERATIONS; i++) {
+        // Build a random list with repetitions (draw from a small pool)
+        const listSize = 5 + Math.floor(Math.random() * 20);
+        const addresses: string[] = Array.from({ length: listSize }, () =>
+          fakeAddress(Math.floor(Math.random() * POOL_SIZE))
+        );
+
+        // Collect once (already deduped by the pipeline's Set)
+        const once = await collectPipeline(addresses);
+        // Collecting the already-deduped result again must produce the same set
+        const twice = await collectPipeline([...once]);
+
+        expect(twice.size).toBe(once.size);
+        for (const addr of once) {
+          expect(twice.has(addr)).toBe(true);
+        }
+      }
+    });
+  });
+
+  describe('prop: CSV exclusion is a proper set difference (A \\ B)', () => {
+    it(`holds for ${ITERATIONS} random (A, B) pairs using filterByExcludeRecipients`, () => {
+      for (let i = 0; i < ITERATIONS; i++) {
+        const aSize = 5 + Math.floor(Math.random() * 15);
+        const bSize = 2 + Math.floor(Math.random() * 10);
+
+        // Draw A and B from the same address pool (may overlap)
+        const A = new Set<Address>(
+          Array.from({ length: aSize }, () => fakeAddress(Math.floor(Math.random() * POOL_SIZE)))
+        );
+        const BRaw = new Set<Address>(
+          Array.from({ length: bSize }, () => fakeAddress(Math.floor(Math.random() * POOL_SIZE)))
+        );
+        const BLower = new Set([...BRaw].map((a) => a.toLowerCase()));
+
+        const result = filterByExcludeRecipients(A, BLower);
+
+        // All addresses in result must NOT be in B
+        for (const addr of result) {
+          expect(BLower.has(addr.toLowerCase())).toBe(false);
+        }
+
+        // All addresses in A that are NOT in B must be in the result
+        for (const addr of A) {
+          if (!BLower.has(addr.toLowerCase())) {
+            expect(result.has(addr)).toBe(true);
+          }
+        }
+
+        // Result is a subset of A
+        for (const addr of result) {
+          expect(A.has(addr)).toBe(true);
+        }
+      }
+    });
+  });
+
+  describe('prop: filter composition — applying B after A produces a subset of A alone', () => {
+    it(`holds for ${ITERATIONS} random address sets with two exclusion filters`, () => {
+      for (let i = 0; i < ITERATIONS; i++) {
+        const poolSize = 30 + Math.floor(Math.random() * 20);
+        const inputSize = 10 + Math.floor(Math.random() * 20);
+
+        // Input set
+        const input = new Set<Address>(
+          Array.from({ length: inputSize }, () => fakeAddress(Math.floor(Math.random() * poolSize)))
+        );
+
+        // Filter A: exclude a random subset
+        const filterAExclusions = new Set(
+          Array.from({ length: 5 }, () =>
+            fakeAddress(Math.floor(Math.random() * poolSize)).toLowerCase()
+          )
+        );
+        // Filter B: exclude a different random subset
+        const filterBExclusions = new Set(
+          Array.from({ length: 5 }, () =>
+            fakeAddress(Math.floor(Math.random() * poolSize)).toLowerCase()
+          )
+        );
+
+        // Apply A alone
+        const afterA = filterByExcludeRecipients(input, filterAExclusions);
+
+        // Apply A then B
+        const afterAB = filterByExcludeRecipients(afterA, filterBExclusions);
+
+        // afterAB must be a subset of afterA (filters only remove, never add)
+        for (const addr of afterAB) {
+          expect(afterA.has(addr)).toBe(true);
+        }
+
+        // afterAB must be a subset of input
+        for (const addr of afterAB) {
+          expect(input.has(addr)).toBe(true);
+        }
+
+        // Size invariant: |afterAB| <= |afterA| <= |input|
+        expect(afterAB.size).toBeLessThanOrEqual(afterA.size);
+        expect(afterA.size).toBeLessThanOrEqual(input.size);
+      }
     });
   });
 });
