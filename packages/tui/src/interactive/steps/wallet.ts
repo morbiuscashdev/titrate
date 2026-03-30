@@ -168,13 +168,13 @@ export async function walletStep(
       });
       if (isCancel(allowanceAmount)) return allowanceAmount;
 
-      const methodSelector = await text({
-        message: 'Function selector to approve (4-byte hex, e.g. 0x12345678)',
-        placeholder: '0x12345678',
-        validate: (v) =>
-          /^0x[0-9a-f]{8}$/i.test(v.trim())
-            ? undefined
-            : 'Enter a valid 4-byte selector (0x + 8 hex chars).',
+      const methodSelector = await select({
+        message: 'Which method should the hot wallet be allowed to call?',
+        options: [
+          { value: '0x88934a85', label: 'disperse — variable amounts per recipient' },
+          { value: '0x670df37c', label: 'disperseSimple — same amount to all recipients' },
+          { value: '0xeeb097ad', label: 'disperseCall — arbitrary calldata execution' },
+        ],
       });
       if (isCancel(methodSelector)) return methodSelector;
 
