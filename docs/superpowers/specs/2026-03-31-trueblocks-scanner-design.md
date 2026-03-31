@@ -416,3 +416,49 @@ All tests use mocked HTTP responses via injectable `fetchFn`. No real TrueBlocks
 ### Status Tests
 - Parses healthy response
 - Handles unreachable instance
+
+## Integration Tests (Real Data)
+
+Located in `packages/sdk/src/__tests__/trueblocks/integration.test.ts`.
+
+**Gated by environment variable:** `TRUEBLOCKS_URL`. Tests skip entirely if not set. This allows CI and local development to pass without a TrueBlocks instance.
+
+```typescript
+const TRUEBLOCKS_URL = process.env.TRUEBLOCKS_URL;
+const describeIf = TRUEBLOCKS_URL ? describe : describe.skip;
+```
+
+**Test data:** Well-known Ethereum addresses with predictable on-chain history.
+
+- **USDC contract** (`0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48`) — high transfer volume, stable metadata
+- **Block range** `19000000–19000100` — small, deterministic window for reproducible results
+
+### Integration Test Cases
+
+**Status:**
+- Connects to real instance and verifies `isReady === true`
+- Reports Ethereum chain ID (1)
+
+**Appearances:**
+- Lists appearances for USDC contract in block range `19000000–19000100`
+- Verifies result count > 0
+- Verifies `blockNumber` falls within requested range
+- Verifies `address` field is lowercased
+
+**Transfers:**
+- Exports transfers for USDC in block range `19000000–19000100`
+- Verifies parsed fields: `from`, `to`, `value` (bigint), `hash` (hex), `blockNumber` (bigint)
+- Verifies `timestamp` is a reasonable Unix timestamp (> 1700000000)
+
+**Balance History:**
+- Queries balance changes for a known active address in a block range
+- Verifies returned block numbers fall within requested range
+
+**Traces:**
+- Exports traces for USDC contract in a small block range
+- Verifies `traceType` is one of known values ('call', 'create', 'delegatecall', 'suicide')
+
+**Response format validation:**
+- Confirms `data` wrapper exists in raw responses
+- Confirms field name casing matches expected types
+- Confirms numeric string fields are parseable to bigint
