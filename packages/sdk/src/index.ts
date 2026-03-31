@@ -138,3 +138,31 @@ export type {
   GetAllowanceParams,
   CheckRecipientsParams,
 } from './distributor/index.js';
+
+// Explorer
+export {
+  createExplorerBus,
+  getOrCreateBus,
+  destroyAllBuses,
+  ExplorerApiError,
+  scanTokenTransfers,
+  scanTransactions,
+  scanInternalTransactions,
+  getTokenBalances,
+  getNativeBalances,
+  parseExplorerResponse,
+  isRateLimitResult,
+} from './explorer/index.js';
+export type {
+  ExplorerBus,
+  ExplorerBusOptions,
+  TokenTransfer,
+  Transaction,
+  InternalTransaction,
+  TokenBalance,
+  ScanTokenTransfersOptions,
+  ScanTransactionsOptions,
+  GetTokenBalancesOptions,
+  GetNativeBalancesOptions,
+  ExplorerTitrateState,
+} from './explorer/index.js';

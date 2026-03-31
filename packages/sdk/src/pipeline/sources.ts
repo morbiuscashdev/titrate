@@ -1,6 +1,8 @@
 import type { Address, PublicClient } from 'viem';
 import type { SourceType, ProgressCallback } from '../types.js';
 import { scanBlocks, type ScanOptions } from '../scanner/blocks.js';
+import { getOrCreateBus } from '../explorer/bus.js';
+import { scanTokenTransfers } from '../explorer/transfers.js';
 
 export type SourceParams = Record<string, unknown>;
 
@@ -18,6 +20,8 @@ export function createSource(sourceType: SourceType, params: SourceParams): Sour
       return blockScanSource(params);
     case 'union':
       return unionSource(params);
+    case 'explorer-scan':
+      return explorerScanSource(params);
     default:
       throw new Error(`Unknown source type: ${sourceType}`);
   }
@@ -64,5 +68,37 @@ function unionSource(params: SourceParams): SourceExecutor {
       const executor = createSource(s.type, s.params);
       yield* executor(rpc, onProgress);
     }
+  };
+}
+
+function explorerScanSource(params: SourceParams): SourceExecutor {
+  return async function* (_rpc, onProgress) {
+    const explorerApiUrl = params.explorerApiUrl as string;
+    const apiKey = params.apiKey as string;
+    const tokenAddress = (params.tokenAddress as string).toLowerCase() as Address;
+    const extract = (params.extract as 'from' | 'to') ?? 'to';
+    const startBlock = params.startBlock ? BigInt(params.startBlock as string | number) : undefined;
+    const endBlock = params.endBlock ? BigInt(params.endBlock as string | number) : undefined;
+
+    const bus = getOrCreateBus(explorerApiUrl, apiKey);
+    const seen = new Set<string>();
+    const batch: Address[] = [];
+
+    for await (const transfers of scanTokenTransfers({
+      bus,
+      tokenAddress,
+      startBlock,
+      endBlock,
+      onProgress,
+    })) {
+      for (const t of transfers) {
+        const addr = (extract === 'from' ? t.from : t.to).toLowerCase();
+        if (seen.has(addr)) continue;
+        seen.add(addr);
+        batch.push(addr as Address);
+      }
+    }
+
+    if (batch.length > 0) yield batch;
   };
 }

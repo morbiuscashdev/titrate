@@ -3,6 +3,8 @@ import { parseEther } from 'viem';
 import type { FilterType, ProgressCallback } from '../types.js';
 import { getAddressProperties, type AddressProperties } from '../scanner/properties.js';
 import { scanTransferEvents } from '../scanner/logs.js';
+import { getOrCreateBus } from '../explorer/bus.js';
+import { getTokenBalances, getNativeBalances } from '../explorer/balances.js';
 
 export type FilterParams = Record<string, unknown>;
 
@@ -97,6 +99,8 @@ export function createFilter(filterType: FilterType, params: FilterParams): Filt
       return previouslySentFilter(params);
     case 'registry-check':
       return registryCheckFilter(params);
+    case 'explorer-balance':
+      return explorerBalanceFilter(params);
     default:
       throw new Error(`Unknown filter type: ${filterType}`);
   }
@@ -249,5 +253,41 @@ function registryCheckFilter(_params: FilterParams): FilterExecutor {
       outputCount: addresses.size,
     });
     return addresses;
+  };
+}
+
+function explorerBalanceFilter(params: FilterParams): FilterExecutor {
+  const explorerApiUrl = params.explorerApiUrl as string;
+  const apiKey = params.apiKey as string;
+  const tokenAddress = params.tokenAddress as string;
+  const minBalance = BigInt(params.minBalance as string);
+
+  return async (addresses, _rpc, onProgress) => {
+    const bus = getOrCreateBus(explorerApiUrl, apiKey);
+    const addressArray = [...addresses];
+    const isNative = tokenAddress === 'native';
+
+    const balances = isNative
+      ? await getNativeBalances({ bus, addresses: addressArray, onProgress })
+      : await getTokenBalances({
+          bus,
+          tokenAddress: tokenAddress.toLowerCase() as Address,
+          addresses: addressArray,
+          onProgress,
+        });
+
+    const result = new Set<Address>();
+    for (const b of balances) {
+      if (b.balance >= minBalance) result.add(b.address);
+    }
+
+    onProgress?.({
+      type: 'filter',
+      filterName: 'explorer-balance',
+      inputCount: addresses.size,
+      outputCount: result.size,
+    });
+
+    return result;
   };
 }
