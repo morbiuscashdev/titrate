@@ -9,8 +9,10 @@ export class ExplorerApiError extends Error {
     readonly explorerMessage: string,
     readonly explorerStatus: string,
     readonly isRateLimit: boolean,
+    readonly explorerResult?: string,
   ) {
-    super(`Explorer API error: ${explorerMessage}${isRateLimit ? ' (rate limited)' : ''}`);
+    const detail = explorerResult ? `: ${explorerResult}` : '';
+    super(`Explorer API error: ${explorerMessage}${detail}${isRateLimit ? ' (rate limited)' : ''}`);
     this.name = 'ExplorerApiError';
   }
 }
@@ -36,5 +38,6 @@ export function parseExplorerResponse<T>(data: ExplorerRawResponse): T {
     data.message,
     data.status,
     isRateLimitResult(resultStr),
+    resultStr || undefined,
   );
 }
