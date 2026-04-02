@@ -1,8 +1,8 @@
 import { readFile } from 'node:fs/promises';
 import { Command } from 'commander';
 import type { Address, Hex } from 'viem';
-import { disperseTokens, disperseTokensSimple, parseCSV, serializeBatchResults } from '@titrate/sdk';
-import type { BatchResult, GasConfig } from '@titrate/sdk';
+import { disperseTokens, disperseTokensSimple, parseCSV, serializeBatchResults, parseGwei } from '@titrate/sdk';
+import type { BatchResult, GasConfig, GasSpeed } from '@titrate/sdk';
 import { createRpcClient } from '../utils/rpc.js';
 import { createSignerClient, resolvePrivateKey } from '../utils/wallet.js';
 import { createProgressRenderer } from '../progress/renderer.js';
@@ -30,8 +30,10 @@ export function registerDistribute(program: Command): void {
     .option('--batch-size --batchSize <number>', 'Recipients per transaction batch', '200')
     .option('--campaign-id --campaignId <hex>', 'Campaign ID bytes32 (for full variant)')
     .option('--chain-id --chainId <id>', 'Chain ID for RPC client configuration', parseInt)
-    .option('--gas-padding --gasPadding <number>', 'Gas limit padding fraction (default: 0.2)', parseFloat)
-    .option('--max-gas-price --maxGasPrice <wei>', 'Max gas price in wei; skip batch if exceeded')
+    .option('--headroom <speed>', 'Gas limit multiplier preset: slow (1.125×), medium (1.5×), fast (2×). Default: medium')
+    .option('--priority <speed>', 'Priority fee percentile: slow (25th), medium (50th), fast (75th). Default: medium')
+    .option('--max-base-fee --maxBaseFee <gwei>', 'Abort batch if base fee exceeds this (in gwei, e.g. "50" or "2.5")')
+    .option('--max-priority-fee --maxPriorityFee <gwei>', 'Clamp priority fee to this max (in gwei, e.g. "2" or "1.5")')
     .option('--max-total-gas-cost --maxTotalGasCost <wei>', 'Stop distribution if cumulative gas cost exceeds this (in wei)')
     .action(async (opts: {
       contract: string;
@@ -46,8 +48,10 @@ export function registerDistribute(program: Command): void {
       batchSize: string;
       campaignId?: string;
       chainId?: number;
-      gasPadding?: number;
-      maxGasPrice?: string;
+      headroom?: string;
+      priority?: string;
+      maxBaseFee?: string;
+      maxPriorityFee?: string;
       maxTotalGasCost?: string;
     }) => {
       const privateKey = resolvePrivateKey(opts.privateKey);
@@ -66,8 +70,10 @@ export function registerDistribute(program: Command): void {
       const campaignId = opts.campaignId as Hex | undefined;
 
       const gasConfig: GasConfig = {
-        ...(opts.gasPadding !== undefined && { gasLimitPadding: opts.gasPadding }),
-        ...(opts.maxGasPrice !== undefined && { maxGasPrice: BigInt(opts.maxGasPrice) }),
+        ...(opts.headroom !== undefined && { headroom: opts.headroom as GasSpeed }),
+        ...(opts.priority !== undefined && { priority: opts.priority as GasSpeed }),
+        ...(opts.maxBaseFee !== undefined && { maxBaseFee: parseGwei(opts.maxBaseFee) }),
+        ...(opts.maxPriorityFee !== undefined && { maxPriorityFee: parseGwei(opts.maxPriorityFee) }),
         ...(opts.maxTotalGasCost !== undefined && { maxTotalGasCost: BigInt(opts.maxTotalGasCost) }),
       };
 

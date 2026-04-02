@@ -5,7 +5,7 @@ export { verifyContract, pollVerificationStatus } from './verify.js';
 export type { VerifyParams, VerifyResult, PollVerificationStatusParams, PollVerificationStatusResult } from './verify.js';
 
 export { disperseTokens, disperseTokensSimple } from './disperse.js';
-export type { DisperseParams, DisperseSimpleParams, LiveFilter, GasConfig } from './disperse.js';
+export type { DisperseParams, DisperseSimpleParams, LiveFilter, GasConfig, GasSpeed } from './disperse.js';
 
 export { approveOperator, increaseOperatorAllowance, getAllowance } from './allowance.js';
 export type { ApproveOperatorParams, IncreaseAllowanceParams, GetAllowanceParams } from './allowance.js';

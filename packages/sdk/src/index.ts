@@ -54,6 +54,7 @@ export type {
 export { chunk } from './utils/chunk.js';
 export { withRetry } from './utils/retry.js';
 export type { RetryOptions } from './utils/retry.js';
+export { parseGwei } from './utils/gas.js';
 
 // Memory
 export { getHeapUsageMB, getHeapLimitMB, createMemoryMonitor } from './utils/memory.js';
@@ -134,6 +135,7 @@ export type {
   DisperseSimpleParams,
   LiveFilter,
   GasConfig,
+  GasSpeed,
   ApproveOperatorParams,
   IncreaseAllowanceParams,
   GetAllowanceParams,

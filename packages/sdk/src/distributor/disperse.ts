@@ -3,6 +3,20 @@ import type { BatchResult, BatchAttempt, ProgressCallback } from '../types.js';
 import TitrateSimpleArtifact from './artifacts/TitrateSimple.json' with { type: 'json' };
 import TitrateFullArtifact from './artifacts/TitrateFull.json' with { type: 'json' };
 
+export type GasSpeed = 'slow' | 'medium' | 'fast';
+
+const HEADROOM_MULTIPLIERS: Record<GasSpeed, { numerator: bigint; denominator: bigint }> = {
+  slow: { numerator: 9n, denominator: 8n },    // 1.125×
+  medium: { numerator: 3n, denominator: 2n },   // 1.5×
+  fast: { numerator: 2n, denominator: 1n },      // 2×
+};
+
+const PRIORITY_PERCENTILES: Record<GasSpeed, number> = {
+  slow: 25,
+  medium: 50,
+  fast: 75,
+};
+
 function getAbi(variant: 'simple' | 'full'): never {
   return (variant === 'simple' ? TitrateSimpleArtifact.abi : TitrateFullArtifact.abi) as never;
 }
@@ -22,11 +36,15 @@ export type LiveFilter = (addresses: readonly Address[]) => Promise<readonly Add
  * Gas configuration for disperse operations.
  */
 export type GasConfig = {
-  /** Fraction added to the gas estimate as padding. Defaults to 0.2 (20%). */
-  readonly gasLimitPadding?: number;
-  /** Maximum maxFeePerGas accepted. Batch is dropped (not sent) if exceeded. Defaults to no cap. */
-  readonly maxGasPrice?: bigint;
-  /** Cumulative gas cost limit across all batches. Distribution stops when exceeded. Defaults to no limit. */
+  /** Gas limit multiplier preset: slow=1.125×, medium=1.5×, fast=2×. Default: 'medium'. */
+  readonly headroom?: GasSpeed;
+  /** Priority fee percentile: slow=25th, medium=50th, fast=75th. Default: 'medium'. */
+  readonly priority?: GasSpeed;
+  /** Abort batch if base fee (in wei) exceeds this. Default: no cap. */
+  readonly maxBaseFee?: bigint;
+  /** Clamp priority fee to this max (in wei). Default: no cap. */
+  readonly maxPriorityFee?: bigint;
+  /** Stop distribution if cumulative gas cost exceeds this (in wei). Default: no limit. */
   readonly maxTotalGasCost?: bigint;
 };
 
@@ -330,6 +348,24 @@ export async function disperseTokensSimple(
   return results;
 }
 
+async function getPriorityFeeFromHistory(
+  publicClient: PublicClient,
+  speed: GasSpeed,
+): Promise<bigint> {
+  const percentile = PRIORITY_PERCENTILES[speed];
+  const feeHistory = await publicClient.getFeeHistory({
+    blockCount: 10,
+    rewardPercentiles: [percentile],
+  });
+  const rewards = feeHistory.reward ?? [];
+  if (rewards.length === 0) return 0n;
+  let total = 0n;
+  for (const block of rewards) {
+    total += block[0] ?? 0n;
+  }
+  return total / BigInt(rewards.length);
+}
+
 type ExecuteBatchParams = {
   readonly contractAddress: Address;
   readonly abi: never;
@@ -345,10 +381,12 @@ async function executeBatch(params: ExecuteBatchParams): Promise<BatchAttempt> {
   const { contractAddress, abi, functionName, args, value, walletClient, publicClient, gasConfig } =
     params;
   const timestamp = Date.now();
-  const padding = gasConfig?.gasLimitPadding ?? 0.2;
+  const headroom = gasConfig?.headroom ?? 'medium';
+  const prioritySpeed = gasConfig?.priority ?? 'medium';
+  const { numerator, denominator } = HEADROOM_MULTIPLIERS[headroom];
 
   try {
-    // Estimate gas — failures propagate as a dropped batch (no silent fallback)
+    // Estimate gas — let it fail rather than silently falling back
     const gasEstimate = await publicClient.estimateContractGas({
       address: contractAddress,
       abi,
@@ -358,25 +396,35 @@ async function executeBatch(params: ExecuteBatchParams): Promise<BatchAttempt> {
       account: walletClient.account!,
     });
 
-    const paddedGas = gasEstimate + BigInt(Math.ceil(Number(gasEstimate) * padding));
+    const gasLimit = (gasEstimate * numerator) / denominator;
 
-    // Fetch current EIP-1559 fee data from chain
-    const feeData = await publicClient.estimateFeesPerGas();
-    const maxFeePerGas = feeData.maxFeePerGas ?? 0n;
-    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? 0n;
+    // Get base fee from latest block
+    const block = await publicClient.getBlock({ blockTag: 'latest' });
+    const baseFee = block.baseFeePerGas ?? 0n;
 
-    // Drop batch without sending if gas price exceeds the configured cap
-    if (gasConfig?.maxGasPrice && maxFeePerGas > gasConfig.maxGasPrice) {
+    // Drop batch without sending if base fee exceeds the configured cap
+    if (gasConfig?.maxBaseFee !== undefined && baseFee > gasConfig.maxBaseFee) {
       return {
         txHash: '0x' as Hex,
         nonce: 0,
-        gasEstimate: paddedGas,
-        maxFeePerGas,
-        maxPriorityFeePerGas,
+        gasEstimate: gasLimit,
+        maxFeePerGas: 0n,
+        maxPriorityFeePerGas: 0n,
         timestamp,
         outcome: 'dropped',
       };
     }
+
+    // Get priority fee from fee history at the configured percentile
+    let priorityFee = await getPriorityFeeFromHistory(publicClient, prioritySpeed);
+
+    // Clamp priority fee to cap if set (clamp, not abort)
+    if (gasConfig?.maxPriorityFee !== undefined && priorityFee > gasConfig.maxPriorityFee) {
+      priorityFee = gasConfig.maxPriorityFee;
+    }
+
+    const maxPriorityFeePerGas = priorityFee;
+    const maxFeePerGas = (baseFee * numerator) / denominator + priorityFee;
 
     const hash = await walletClient.writeContract({
       address: contractAddress,
@@ -384,7 +432,9 @@ async function executeBatch(params: ExecuteBatchParams): Promise<BatchAttempt> {
       functionName,
       args: args as never,
       value,
-      gas: paddedGas,
+      gas: gasLimit,
+      maxFeePerGas,
+      maxPriorityFeePerGas,
       account: walletClient.account!,
       chain: undefined,
     });
@@ -394,7 +444,7 @@ async function executeBatch(params: ExecuteBatchParams): Promise<BatchAttempt> {
     return {
       txHash: hash,
       nonce: 0,
-      gasEstimate: paddedGas,
+      gasEstimate: gasLimit,
       maxFeePerGas,
       maxPriorityFeePerGas,
       timestamp,
