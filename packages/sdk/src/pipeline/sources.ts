@@ -3,6 +3,9 @@ import type { SourceType, ProgressCallback } from '../types.js';
 import { scanBlocks, type ScanOptions } from '../scanner/blocks.js';
 import { getOrCreateBus } from '../explorer/bus.js';
 import { scanTokenTransfers } from '../explorer/transfers.js';
+import { createTrueBlocksClient } from '../trueblocks/client.js';
+import { getAppearances } from '../trueblocks/appearances.js';
+import { getTransfers } from '../trueblocks/transfers.js';
 
 export type SourceParams = Record<string, unknown>;
 
@@ -22,6 +25,8 @@ export function createSource(sourceType: SourceType, params: SourceParams): Sour
       return unionSource(params);
     case 'explorer-scan':
       return explorerScanSource(params);
+    case 'trueblocks-scan':
+      return trueblocksScanSource(params);
     default:
       throw new Error(`Unknown source type: ${sourceType}`);
   }
@@ -99,6 +104,59 @@ function explorerScanSource(params: SourceParams): SourceExecutor {
       }
     }
 
+    if (batch.length > 0) yield batch;
+  };
+}
+
+function trueblocksScanSource(params: SourceParams): SourceExecutor {
+  return async function* (_rpc, onProgress) {
+    const trueBlocksUrl = params.trueBlocksUrl as string;
+    const busKey = params.busKey as string;
+    const addresses = params.addresses as string[];
+    const mode = (params.mode as 'appearances' | 'transfers') ?? 'appearances';
+    const extract = (params.extract as 'from' | 'to') ?? 'to';
+    const asset = params.asset as string | undefined;
+    const firstBlock = params.firstBlock ? BigInt(params.firstBlock as string | number) : undefined;
+    const lastBlock = params.lastBlock ? BigInt(params.lastBlock as string | number) : undefined;
+
+    const client = createTrueBlocksClient({ baseUrl: trueBlocksUrl, busKey });
+    const seen = new Set<string>();
+    const batch: Address[] = [];
+
+    if (mode === 'appearances') {
+      for await (const page of getAppearances({
+        client,
+        addresses: addresses as Address[],
+        firstBlock,
+        lastBlock,
+        onProgress,
+      })) {
+        for (const a of page) {
+          const addr = a.address.toLowerCase();
+          if (seen.has(addr)) continue;
+          seen.add(addr);
+          batch.push(addr as Address);
+        }
+      }
+    } else {
+      for await (const page of getTransfers({
+        client,
+        addresses: addresses as Address[],
+        asset: asset as Address | undefined,
+        firstBlock,
+        lastBlock,
+        onProgress,
+      })) {
+        for (const t of page) {
+          const addr = (extract === 'from' ? t.from : t.to).toLowerCase();
+          if (seen.has(addr)) continue;
+          seen.add(addr);
+          batch.push(addr as Address);
+        }
+      }
+    }
+
+    client.destroy();
     if (batch.length > 0) yield batch;
   };
 }

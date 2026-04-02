@@ -5,6 +5,8 @@ import { getAddressProperties, type AddressProperties } from '../scanner/propert
 import { scanTransferEvents } from '../scanner/logs.js';
 import { getOrCreateBus } from '../explorer/bus.js';
 import { getTokenBalances, getNativeBalances } from '../explorer/balances.js';
+import { createTrueBlocksClient } from '../trueblocks/client.js';
+import { getBalanceHistory } from '../trueblocks/balances.js';
 
 export type FilterParams = Record<string, unknown>;
 
@@ -101,6 +103,8 @@ export function createFilter(filterType: FilterType, params: FilterParams): Filt
       return registryCheckFilter(params);
     case 'explorer-balance':
       return explorerBalanceFilter(params);
+    case 'trueblocks-balance-hint':
+      return trueBlocksBalanceHintFilter(params);
     default:
       throw new Error(`Unknown filter type: ${filterType}`);
   }
@@ -284,6 +288,50 @@ function explorerBalanceFilter(params: FilterParams): FilterExecutor {
     onProgress?.({
       type: 'filter',
       filterName: 'explorer-balance',
+      inputCount: addresses.size,
+      outputCount: result.size,
+    });
+
+    return result;
+  };
+}
+
+function trueBlocksBalanceHintFilter(params: FilterParams): FilterExecutor {
+  const trueBlocksUrl = params.trueBlocksUrl as string;
+  const busKey = params.busKey as string;
+  const asset = params.asset as string | undefined;
+  const minChanges = (params.minChanges as number) ?? 1;
+
+  return async (addresses, _rpc, onProgress) => {
+    const client = createTrueBlocksClient({ baseUrl: trueBlocksUrl, busKey });
+    const changeCounts = new Map<string, number>();
+
+    for (const addr of addresses) {
+      changeCounts.set(addr.toLowerCase(), 0);
+    }
+
+    for await (const page of getBalanceHistory({
+      client,
+      addresses: [...addresses],
+      asset: asset as Address | undefined,
+    })) {
+      for (const change of page) {
+        const key = change.address.toLowerCase();
+        changeCounts.set(key, (changeCounts.get(key) ?? 0) + 1);
+      }
+    }
+
+    const result = new Set<Address>();
+    for (const addr of addresses) {
+      const count = changeCounts.get(addr.toLowerCase()) ?? 0;
+      if (count >= minChanges) result.add(addr);
+    }
+
+    client.destroy();
+
+    onProgress?.({
+      type: 'filter',
+      filterName: 'trueblocks-balance-hint',
       inputCount: addresses.size,
       outputCount: result.size,
     });

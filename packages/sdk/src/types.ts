@@ -40,7 +40,7 @@ export type BatchResult = {
 
 export type BatchStatus = 'pending' | 'signing' | 'broadcast' | 'confirmed' | 'failed';
 
-export type SourceType = 'block-scan' | 'csv' | 'union' | 'explorer-scan';
+export type SourceType = 'block-scan' | 'csv' | 'union' | 'explorer-scan' | 'trueblocks-scan';
 
 export type FilterType =
   | 'contract-check'
@@ -50,7 +50,8 @@ export type FilterType =
   | 'csv-exclusion'
   | 'previously-sent'
   | 'registry-check'
-  | 'explorer-balance';
+  | 'explorer-balance'
+  | 'trueblocks-balance-hint';
 
 export type PipelineStep =
   | { readonly type: 'source'; readonly sourceType: SourceType; readonly params: Record<string, unknown> }

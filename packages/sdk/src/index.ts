@@ -166,3 +166,27 @@ export type {
   GetNativeBalancesOptions,
   ExplorerTitrateState,
 } from './explorer/index.js';
+
+// TrueBlocks
+export {
+  createTrueBlocksClient,
+  TrueBlocksApiError,
+  getTrueBlocksStatus,
+  getAppearances,
+  getTransfers,
+  getBalanceHistory,
+  getTraces,
+} from './trueblocks/index.js';
+export type {
+  TrueBlocksClient,
+  TrueBlocksClientOptions,
+  TrueBlocksStatus,
+  Appearance,
+  TrueBlocksTransfer,
+  BalanceChange,
+  TrueBlocksTrace,
+  GetAppearancesOptions,
+  GetTransfersOptions,
+  GetBalanceHistoryOptions,
+  GetTracesOptions,
+} from './trueblocks/index.js';
