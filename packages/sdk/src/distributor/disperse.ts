@@ -18,6 +18,18 @@ const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address;
  */
 export type LiveFilter = (addresses: readonly Address[]) => Promise<readonly Address[]>;
 
+/**
+ * Gas configuration for disperse operations.
+ */
+export type GasConfig = {
+  /** Fraction added to the gas estimate as padding. Defaults to 0.2 (20%). */
+  readonly gasLimitPadding?: number;
+  /** Maximum maxFeePerGas accepted. Batch is dropped (not sent) if exceeded. Defaults to no cap. */
+  readonly maxGasPrice?: bigint;
+  /** Cumulative gas cost limit across all batches. Distribution stops when exceeded. Defaults to no limit. */
+  readonly maxTotalGasCost?: bigint;
+};
+
 export type DisperseParams = {
   readonly contractAddress: Address;
   readonly variant: 'simple' | 'full';
@@ -31,6 +43,7 @@ export type DisperseParams = {
   readonly batchSize?: number;
   readonly liveFilter?: LiveFilter;
   readonly onProgress?: ProgressCallback;
+  readonly gasConfig?: GasConfig;
 };
 
 export type DisperseSimpleParams = {
@@ -46,6 +59,7 @@ export type DisperseSimpleParams = {
   readonly batchSize?: number;
   readonly liveFilter?: LiveFilter;
   readonly onProgress?: ProgressCallback;
+  readonly gasConfig?: GasConfig;
 };
 
 /**
@@ -148,6 +162,7 @@ export async function disperseTokens(params: DisperseParams): Promise<BatchResul
     batchSize = 200,
     liveFilter,
     onProgress,
+    gasConfig,
   } = params;
 
   const abi = getAbi(variant);
@@ -155,6 +170,7 @@ export async function disperseTokens(params: DisperseParams): Promise<BatchResul
   const results: BatchResult[] = [];
   let cursor = 0;
   let batchIndex = 0;
+  let cumulativeGasCost = 0n;
 
   while (cursor < recipients.length) {
     const { addresses: batchRecipients, amounts: batchAmounts, newCursor } =
@@ -185,7 +201,12 @@ export async function disperseTokens(params: DisperseParams): Promise<BatchResul
       value: totalValue,
       walletClient,
       publicClient,
+      gasConfig,
     });
+
+    if (attempt.outcome === 'confirmed') {
+      cumulativeGasCost += attempt.gasEstimate * attempt.maxFeePerGas;
+    }
 
     results.push({
       batchIndex,
@@ -204,6 +225,10 @@ export async function disperseTokens(params: DisperseParams): Promise<BatchResul
     });
 
     batchIndex++;
+
+    if (gasConfig?.maxTotalGasCost && cumulativeGasCost > gasConfig.maxTotalGasCost) {
+      break;
+    }
   }
 
   return results;
@@ -233,6 +258,7 @@ export async function disperseTokensSimple(
     batchSize = 200,
     liveFilter,
     onProgress,
+    gasConfig,
   } = params;
 
   const abi = getAbi(variant);
@@ -240,6 +266,7 @@ export async function disperseTokensSimple(
   const results: BatchResult[] = [];
   let cursor = 0;
   let batchIndex = 0;
+  let cumulativeGasCost = 0n;
 
   while (cursor < recipients.length) {
     const { addresses: batchRecipients, newCursor } =
@@ -270,7 +297,12 @@ export async function disperseTokensSimple(
       value: totalValue,
       walletClient,
       publicClient,
+      gasConfig,
     });
+
+    if (attempt.outcome === 'confirmed') {
+      cumulativeGasCost += attempt.gasEstimate * attempt.maxFeePerGas;
+    }
 
     results.push({
       batchIndex,
@@ -289,6 +321,10 @@ export async function disperseTokensSimple(
     });
 
     batchIndex++;
+
+    if (gasConfig?.maxTotalGasCost && cumulativeGasCost > gasConfig.maxTotalGasCost) {
+      break;
+    }
   }
 
   return results;
@@ -302,26 +338,45 @@ type ExecuteBatchParams = {
   readonly value: bigint;
   readonly walletClient: WalletClient;
   readonly publicClient: PublicClient;
+  readonly gasConfig?: GasConfig;
 };
 
 async function executeBatch(params: ExecuteBatchParams): Promise<BatchAttempt> {
-  const { contractAddress, abi, functionName, args, value, walletClient, publicClient } =
+  const { contractAddress, abi, functionName, args, value, walletClient, publicClient, gasConfig } =
     params;
   const timestamp = Date.now();
+  const padding = gasConfig?.gasLimitPadding ?? 0.2;
 
   try {
-    const gasEstimate = await publicClient
-      .estimateContractGas({
-        address: contractAddress,
-        abi,
-        functionName,
-        args: args as never,
-        value,
-        account: walletClient.account!,
-      })
-      .catch(() => 500_000n);
+    // Estimate gas — failures propagate as a dropped batch (no silent fallback)
+    const gasEstimate = await publicClient.estimateContractGas({
+      address: contractAddress,
+      abi,
+      functionName,
+      args: args as never,
+      value,
+      account: walletClient.account!,
+    });
 
-    const paddedGas = gasEstimate + gasEstimate / 5n;
+    const paddedGas = gasEstimate + BigInt(Math.ceil(Number(gasEstimate) * padding));
+
+    // Fetch current EIP-1559 fee data from chain
+    const feeData = await publicClient.estimateFeesPerGas();
+    const maxFeePerGas = feeData.maxFeePerGas ?? 0n;
+    const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas ?? 0n;
+
+    // Drop batch without sending if gas price exceeds the configured cap
+    if (gasConfig?.maxGasPrice && maxFeePerGas > gasConfig.maxGasPrice) {
+      return {
+        txHash: '0x' as Hex,
+        nonce: 0,
+        gasEstimate: paddedGas,
+        maxFeePerGas,
+        maxPriorityFeePerGas,
+        timestamp,
+        outcome: 'dropped',
+      };
+    }
 
     const hash = await walletClient.writeContract({
       address: contractAddress,
@@ -340,8 +395,8 @@ async function executeBatch(params: ExecuteBatchParams): Promise<BatchAttempt> {
       txHash: hash,
       nonce: 0,
       gasEstimate: paddedGas,
-      maxFeePerGas: 0n,
-      maxPriorityFeePerGas: 0n,
+      maxFeePerGas,
+      maxPriorityFeePerGas,
       timestamp,
       outcome: receipt.status === 'success' ? 'confirmed' : 'reverted',
     };
