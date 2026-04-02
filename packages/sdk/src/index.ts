@@ -133,6 +133,7 @@ export type {
   DisperseParams,
   DisperseSimpleParams,
   LiveFilter,
+  GasConfig,
   ApproveOperatorParams,
   IncreaseAllowanceParams,
   GetAllowanceParams,

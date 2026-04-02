@@ -19,7 +19,7 @@ export function registerRun(program: Command): void {
     .requiredOption('--config <path>', 'Path to pipeline config JSON file')
     .requiredOption('--rpc <url>', 'RPC endpoint URL')
     .option('--output <path>', 'Output CSV file path (default: stdout)')
-    .option('--chain-id <id>', 'Chain ID for RPC client configuration', parseInt)
+    .option('--chain-id --chainId <id>', 'Chain ID for RPC client configuration', parseInt)
     .action(async (opts: {
       config: string;
       rpc: string;

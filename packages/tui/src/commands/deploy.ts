@@ -16,8 +16,8 @@ export function registerDeploy(program: Command): void {
     .requiredOption('--name <name>', 'Logical name for the deployed contract')
     .requiredOption('--rpc <url>', 'RPC endpoint URL')
     .option('--variant <simple|full>', 'Contract variant to deploy', 'simple')
-    .option('--private-key <key>', 'Deployer private key (or set TITRATE_PRIVATE_KEY)')
-    .option('--chain-id <id>', 'Chain ID for RPC client configuration', parseInt)
+    .option('--private-key --privateKey <key>', 'Deployer private key (or set TITRATE_PRIVATE_KEY)')
+    .option('--chain-id --chainId <id>', 'Chain ID for RPC client configuration', parseInt)
     .option('--verify', 'Attempt source verification after deployment', false)
     .action(async (opts: {
       name: string;

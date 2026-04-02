@@ -17,7 +17,7 @@ export function registerDeriveWallet(program: Command): void {
     .requiredOption('--funder <address>', 'Funder address (cold wallet address)')
     .requiredOption('--name <name>', 'Campaign name')
     .option('--version <number>', 'Campaign version', '1')
-    .option('--cold-key <key>', 'Cold wallet private key (or set TITRATE_PRIVATE_KEY)')
+    .option('--cold-key --coldKey <key>', 'Cold wallet private key (or set TITRATE_PRIVATE_KEY)')
     .action(async (opts: {
       funder: string;
       name: string;

@@ -32,11 +32,11 @@ export function registerCollect(program: Command): void {
     .option('--blocks <start:end>', 'Block range to scan (e.g. 19000000:19100000)')
     .option('--extract <field>', 'Field to extract: tx.from or tx.to', 'tx.from')
     .option('--csv <path>', 'Input CSV file of addresses to include as a source')
-    .option('--filter-contracts', 'Remove contract addresses', false)
-    .option('--filter-min-balance <ether>', 'Keep addresses with at least this ETH balance')
-    .option('--exclude-token-recipients <token>', 'Exclude addresses that received this token')
-    .option('--exclude-csv <path>', 'Exclude addresses listed in this CSV file')
-    .option('--chain-id <id>', 'Chain ID for RPC client configuration', parseInt)
+    .option('--filter-contracts --filterContracts', 'Remove contract addresses', false)
+    .option('--filter-min-balance --filterMinBalance <ether>', 'Keep addresses with at least this ETH balance')
+    .option('--exclude-token-recipients --excludeTokenRecipients <token>', 'Exclude addresses that received this token')
+    .option('--exclude-csv --excludeCsv <path>', 'Exclude addresses listed in this CSV file')
+    .option('--chain-id --chainId <id>', 'Chain ID for RPC client configuration', parseInt)
     .action(async (opts: {
       rpc: string;
       output: string;
