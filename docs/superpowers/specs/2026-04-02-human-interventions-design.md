@@ -189,6 +189,106 @@ type InterventionConfig = {
 
 When `autoApproveClean` is true (default), the hook only fires if there are issues. Clean data flows through without interruption.
 
+## Spot Checks
+
+### Concept
+
+Instead of reviewing every row (impractical at scale), the system randomly samples a few entries and presents them with block explorer links. If the samples look wrong, the user escalates to full review. This is a statistical quality control pattern.
+
+Spot checks fire at the same intervention points as regular reviews but present a random subset instead of the full dataset.
+
+### SDK: Spot Check Function
+
+```typescript
+type SpotCheckSample = {
+  readonly index: number;
+  readonly address: Address;
+  readonly amount?: bigint;
+  readonly explorerUrl: string;    // full URL to block explorer address page
+};
+
+type SpotCheckResult = {
+  readonly samples: readonly SpotCheckSample[];
+  readonly totalCount: number;
+  readonly sampleSize: number;
+};
+
+/** Selects random samples from an address set with explorer links. */
+function createSpotCheck(
+  addresses: readonly Address[],
+  explorerUrl: string,
+  options?: {
+    sampleSize?: number;           // default 5
+    amounts?: readonly bigint[];
+    seed?: number;                 // for reproducible sampling in tests
+  },
+): SpotCheckResult;
+```
+
+Uses Fisher-Yates partial shuffle for unbiased random selection without replacing the full array.
+
+### InterventionConfig Addition
+
+```typescript
+type InterventionConfig = {
+  // ... existing fields
+  readonly spotCheckSampleSize?: number;   // default 5, set to 0 to disable spot checks
+};
+```
+
+### InterventionAction Addition
+
+```typescript
+type InterventionAction =
+  // ... existing actions
+  | { readonly type: 'reroll' }            // request new random samples
+  | { readonly type: 'fullReview' };       // escalate to full file-based review
+```
+
+### TUI Spot Check Display
+
+```
+┌─ Spot Check (5 of 48,291 addresses) ───────────────────────────┐
+│                                                                  │
+│  1. 0x1234...abcd  1,000.00 USDC                                │
+│     → etherscan.io/address/0x1234...abcd                         │
+│                                                                  │
+│  2. 0x5678...ef01  1,000.00 USDC                                │
+│     → etherscan.io/address/0x5678...ef01                         │
+│                                                                  │
+│  3. 0x9abc...2345  1,000.00 USDC                                │
+│     → etherscan.io/address/0x9abc...2345                         │
+│                                                                  │
+│  [a]pprove  [r]eroll  [f]ull review  [o]pen in browser           │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+- **Approve** — samples look fine, continue
+- **Reroll** — pick new random samples, redisplay
+- **Full review** — write full dataset to CSV, fall through to file-based review
+- **Open in browser** — open all explorer URLs in default browser
+
+### Web App Spot Check (Phase B)
+
+In the web app, spot check is visual:
+- Random row highlighted in the `AddressTable` with scroll-to
+- Explorer link icons appear to the right of each sampled row
+- Click to open in new tab
+- "Reroll" button picks new samples
+- "Approve" / "Full Review" buttons
+
+### When Spot Checks Fire
+
+Spot checks are the **default review mode** when data is clean (no errors/warnings). The flow:
+
+1. Data arrives at intervention point
+2. Validate → no issues
+3. If `autoApproveClean` is false: show spot check (not full review)
+4. If `autoApproveClean` is true: skip entirely (current behavior)
+5. User can escalate from spot check to full review if something looks off
+
+This means `autoApproveClean: false` + `spotCheckSampleSize: 5` gives the user a quick glance at random samples at each stage without forcing full review.
+
 ## SDK: Intervention Journal
 
 ### InterventionEntry
