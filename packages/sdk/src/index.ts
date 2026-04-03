@@ -193,3 +193,12 @@ export type {
   GetBalanceHistoryOptions,
   GetTracesOptions,
 } from './trueblocks/index.js';
+
+// Validation
+export { validateAddresses as validateAddressSet, validateAmounts as validateAmountSet, validateBatch, hasErrors, hasWarnings, filterBySeverity } from './validation/index.js';
+export { INVALID_HEX, INVALID_LENGTH, INVALID_PREFIX, NEGATIVE_AMOUNT, INVALID_AMOUNT, CHECKSUM_MISMATCH, DUPLICATE_ADDRESS, DUPLICATE_DIFF_AMOUNT, ZERO_AMOUNT, LARGE_AMOUNT, DEDUP_COUNT, FILTER_COUNT, LENGTH_MISMATCH } from './validation/index.js';
+export type { ValidationIssue, ValidationSeverity } from './validation/index.js';
+
+// Intervention
+export { createSpotCheck } from './intervention/index.js';
+export type { InterventionPoint, InterventionContext, InterventionAction, InterventionHook, InterventionConfig, InterventionEntry, InterventionJournal, SpotCheckSample, SpotCheckResult } from './intervention/index.js';

@@ -1,5 +1,6 @@
 import type { Address, Hex, PublicClient, WalletClient } from 'viem';
 import type { BatchResult, BatchAttempt, ProgressCallback } from '../types.js';
+import type { InterventionConfig } from '../intervention/types.js';
 import TitrateSimpleArtifact from './artifacts/TitrateSimple.json' with { type: 'json' };
 import TitrateFullArtifact from './artifacts/TitrateFull.json' with { type: 'json' };
 
@@ -62,6 +63,7 @@ export type DisperseParams = {
   readonly liveFilter?: LiveFilter;
   readonly onProgress?: ProgressCallback;
   readonly gasConfig?: GasConfig;
+  readonly interventionConfig?: InterventionConfig;
 };
 
 export type DisperseSimpleParams = {
@@ -78,6 +80,7 @@ export type DisperseSimpleParams = {
   readonly liveFilter?: LiveFilter;
   readonly onProgress?: ProgressCallback;
   readonly gasConfig?: GasConfig;
+  readonly interventionConfig?: InterventionConfig;
 };
 
 /**

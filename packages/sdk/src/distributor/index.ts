@@ -6,6 +6,7 @@ export type { VerifyParams, VerifyResult, PollVerificationStatusParams, PollVeri
 
 export { disperseTokens, disperseTokensSimple } from './disperse.js';
 export type { DisperseParams, DisperseSimpleParams, LiveFilter, GasConfig, GasSpeed } from './disperse.js';
+export type { InterventionConfig } from '../intervention/types.js';
 
 export { approveOperator, increaseOperatorAllowance, getAllowance } from './allowance.js';
 export type { ApproveOperatorParams, IncreaseAllowanceParams, GetAllowanceParams } from './allowance.js';
