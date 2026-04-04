@@ -1,10 +1,26 @@
-import type { Storage } from '@titrate/sdk';
+import type { Storage, ChainConfigStore, AppSettingsStore } from '@titrate/sdk';
 import { createCampaignStore } from './campaigns.js';
 import { createAddressSetStore, createAddressStore } from './address-sets.js';
 import { createBatchStore } from './batches.js';
 import { createWalletStore, createPipelineConfigStore } from './wallets.js';
 
 export { createFileCacheStore } from './cache-store.js';
+
+const NOT_IMPLEMENTED = 'Not implemented in filesystem storage';
+
+const chainConfigsStub: ChainConfigStore = {
+  get: () => Promise.reject(new Error(NOT_IMPLEMENTED)),
+  getByChainId: () => Promise.reject(new Error(NOT_IMPLEMENTED)),
+  put: () => Promise.reject(new Error(NOT_IMPLEMENTED)),
+  list: () => Promise.reject(new Error(NOT_IMPLEMENTED)),
+  delete: () => Promise.reject(new Error(NOT_IMPLEMENTED)),
+};
+
+const appSettingsStub: AppSettingsStore = {
+  get: () => Promise.reject(new Error(NOT_IMPLEMENTED)),
+  put: () => Promise.reject(new Error(NOT_IMPLEMENTED)),
+  delete: () => Promise.reject(new Error(NOT_IMPLEMENTED)),
+};
 
 /**
  * Creates a filesystem-backed Storage instance. All data is persisted under
@@ -21,5 +37,7 @@ export function createFileStorage(baseDir: string): Storage {
     batches: createBatchStore(baseDir),
     wallets: createWalletStore(baseDir),
     pipelineConfigs: createPipelineConfigStore(baseDir),
+    chainConfigs: chainConfigsStub,
+    appSettings: appSettingsStub,
   };
 }
