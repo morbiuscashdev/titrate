@@ -1,67 +1,102 @@
 # Titrate — Progress Checkpoint
 
-## Date: 2026-03-29 (updated)
+## Date: 2026-04-04
 
 ## What Was Accomplished
 
 ### Phase 1: Contracts + SDK Foundation (complete)
 - Monorepo scaffold (npm workspaces, Foundry, Vitest)
-- TitrateSimple.sol — minimal distributor (disperse, disperseSimple, disperseCall)
-- TitrateFull.sol — full distributor (selector-scoped allowance, on-chain registry, multicall, delegatecall)
-- Artifact extraction script (bytecode stability with metadata.bytecodeHash=none)
-- SDK modules: types, storage interface, chains, CSV, wallet (EIP-712 derivation), encode (transfer, native, swap, raw)
+- TitrateSimple.sol + TitrateFull.sol with selector-scoped allowance, on-chain registry, multicall
+- SDK modules: types, storage interface, chains, CSV, wallet (EIP-712), encode, sets
 
 ### Phase 1B: Scanner, Pipeline, Distributor (complete)
-- Scanner: block scanning, Transfer event log scanning with dynamic range titration, address property lookups (balance, code, nonce)
-- Pipeline: composable set operations (sources + filters), serializable configs
+- Scanner: block scanning, Transfer event log scanning with dynamic range titration
+- Pipeline: composable set operations, serializable configs
 - Distributor: deploy, verify, disperse (streaming per-batch LiveFilter), allowance, registry
-- All filters refactored to extract pure testable logic from RPC-dependent executors
 
 ### Phase 2: TUI (complete)
-- Filesystem storage adapter implementing SDK Storage interface
-- CLI commands: collect, deploy, distribute, derive-wallet, run
-- Interactive wizard with 6 steps (campaign, addresses, filters, amounts, wallet/contract, distribute)
-- End-to-end tests against Anvil
+- Filesystem storage adapter, CLI commands, interactive wizard, e2e tests
 
-### Coverage Improvements
-- TitrateFull: 100% lines/statements/branches/functions
-- TitrateSimple: 100% lines/statements/branches/functions
-- SDK: 99.78% statements, 99.47% branches, 100% functions
+### Phase 3A: SDK Extraction + Web Component Library (complete)
+- 8 functions extracted from TUI to SDK
+- 2 new SDK functions (computeRequirements, aggregateSpendReport)
+- Web scaffold: Vite + React 19 + Tailwind v4 + Vitest
+- 15 pure React components (layout, data display, forms, feedback)
 
-### Storage Adapter Extraction (complete)
-- Extracted `packages/tui/src/storage/` into standalone `@titrate/storage-fs` package
-- Created `@titrate/storage-idb` package using `idb` v8 + `fake-indexeddb` for tests
-- Both packages implement `Storage` from `@titrate/sdk`; BigInt fields serialized to strings in IDB
-- TUI updated to import `createFileStorage` from `@titrate/storage-fs`; old storage dir deleted
-- storage-fs: 8/8 tests pass; storage-idb: 8/8 tests pass; TUI storage tests: 8/8 pass
+### Explorer API Scanner (complete)
+- ExplorerBus: adaptive per-domain rate limiting (80% on first 429, -5% per subsequent)
+- Block range bisection for 10k result cap
+- 4 scanner functions: token transfers, transactions, internal txs, balances
+- Pipeline integration: 'explorer-scan' source, 'explorer-balance' filter
 
-### Key Refactors
-- Streaming batch fill with LiveFilter (replaces pre-chunk approach)
-- Pipeline filters extracted to pure helpers for testability
-- Hot wallet key never persisted — memory only
-- Method selectors shown as human-readable dropdown in wizard
+### TrueBlocks Scanner (complete)
+- TrueBlocksClient: auto-pagination via firstRecord/maxRecords
+- 5 scanner functions: appearances, transfers, balance history, traces, status
+- Integration tests gated by TRUEBLOCKS_URL env var
+- Pipeline integration: 'trueblocks-scan' source, 'trueblocks-balance-hint' filter
 
-### Hardening (complete)
-- Fuzz tests: 6 Foundry fuzz suites (256 runs each) for allowance math, registry append-only, refund dust
-- Property tests: 6 SDK property tests (100 iterations each) for wallet determinism, dedup idempotency, filter composition
-- Gas optimization: custom errors, cached array lengths, single-SLOAD allowance deduction
-- Auto-resume: filesystem batch persistence, resume from last completed batch on re-run
-- Contract verification: real Solidity source templates embedded, name substitution for block explorer API
+### Gas Improvements (complete)
+- Removed silent 500k gas fallback
+- Speed presets (slow/medium/fast) for headroom and priority
+- Fee history percentile-based priority fee
+- Split base fee cap + priority fee cap, cumulative cost limit
+- parseGwei utility, updated TUI flags
+
+### CLI Param Casing (complete)
+- All multi-word CLI flags accept both kebab-case and camelCase
+
+### Human Interventions Layer (complete)
+- SDK validation: address (hex, length, prefix, checksum, duplicates), amount (negative, zero, large), batch, helpers
+- SDK intervention: 8 points, 13 actions, hook/config/journal interfaces, spot check sampling
+- TUI: review file CSV write/read, JSONL journal, spot check display, intervention handler orchestrator
+- Stuck transaction handling: bump/wait/abort
+
+### Phase B: Distribution MVP (complete)
+- SDK: ChainConfigStore, AppSettingsStore added to Storage interface
+- storage-idb: chain config and app settings object stores (DB v2 migration)
+- Web crypto: AES-GCM encrypt/decrypt with keccak256 key derivation
+- Encrypted storage wrapper: field-level encryption (rpcUrl, explorerApiKey, wallet addresses)
+- 5 providers: ThemeProvider, WalletProvider (Reown AppKit), StorageProvider, ChainProvider, CampaignProvider
+- Step locking: 7-step progressive flow (campaign → addresses → filters → amounts → wallet → requirements → distribute)
+- Perry mode: cold wallet derives hot wallet via EIP-712 signature
+- 4 query hooks: useTokenMetadata, useNativeBalance, useTokenBalance, useGasEstimate (TanStack Query)
+- 3 pages: HomePage (campaign grid), CampaignPage (step flow orchestrator), SettingsPage (chain config CRUD)
+- 7 step forms: CampaignStep, AddressesStep, FiltersStep, AmountsStep, WalletStep, RequirementsStep, DistributeStep
+- Header with ThemeToggle (light/dark/system), EncryptedField with lock icon
+- React Router v7, provider tree, App.tsx wiring
+- 3 TS fixes: Uint8Array buffer cast, FilterType narrowing, vitest import
+
+### Phase B: Gap Fixes (complete)
+- ChainProvider now wired to active campaign via ChainBridge component
+- CampaignProvider moved above ChainProvider in provider tree
+- Wallet badge (Reown appkit-button) rendered in Header
+- completeStep() API added to CampaignProvider for explicit step completion
+- Filters step requires explicit save/skip (no longer auto-completes)
+- Vite build: Node builtin shims for SDK barrel export (node:fs, node:path, node:url, node:crypto)
+- Dark body background via Tailwind CSS, class-based dark mode configured
 
 ## Test Counts
-- Contracts: 49 tests (15 Simple + 34 Full, including 6 fuzz suites)
-- SDK: 172 tests across 8 files
-- TUI: 8 storage tests + 5 e2e tests
-- storage-fs: 8 tests
-- storage-idb: 8 tests
-- Total: 250 tests
+- Contracts: 49 tests
+- SDK: 394 tests passing (2 Anvil-dependent failures expected)
+- TUI: 33 tests passing (2 Anvil e2e failures expected)
+- storage-fs: 13 tests
+- storage-idb: 36 tests
+- Web: 174 tests
+- Total: ~699 tests
 
-## Commit Count
-43 commits, clean linear history
+## Build Progression
+C (component library) ✅ → B (distribution MVP) ✅ → A (full app) → Z (analytics)
 
-## Current State
-All tests green (requires Anvil on port 8545 for SDK integration + TUI e2e tests)
+### Phase B: Gap Fixes Round 2 (complete)
+- StorageProvider auto-prompts EIP-712 storage-encryption signature on wallet connect
+- Settings page Add Chain form with ChainSelector presets, RPC URL, explorer API key
+- HomePage shows real chain names from SDK (getChainConfig)
+- RequirementsStep loads recipient count from address sets in storage
+
+## Remaining Gaps (known, acceptable for MVP)
+- DistributeStep uses placeholder setTimeout logic (no real SDK distributor wired)
 
 ## Next Steps
-- Phase 3: Web app (Vite + React + IndexedDB + Reown)
-- `@titrate/storage-idb` is ready for use as the web app's storage layer via `createIDBStorage()`
+1. Wire DistributeStep to real SDK distributor (deploy + disperse)
+2. Phase A: full app (multi-campaign dashboard, campaign CRUD, clone/archive)
+3. Request caching layer (hash-based pipeline result caching in IDB)
