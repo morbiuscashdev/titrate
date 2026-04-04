@@ -28,4 +28,14 @@ describe('AmountConfig', () => {
     fireEvent.change(screen.getByPlaceholderText(/amount/i), { target: { value: '500' } });
     expect(onAmountChange).toHaveBeenCalledWith('500');
   });
+  it('calls onFormatChange when format toggle is clicked', () => {
+    const onFormatChange = vi.fn();
+    render(<AmountConfig mode="uniform" format="integer" uniformAmount="" onFormatChange={onFormatChange} />);
+    fireEvent.click(screen.getByText('Decimal'));
+    expect(onFormatChange).toHaveBeenCalledWith('decimal');
+  });
+  it('shows variable mode message instead of input', () => {
+    render(<AmountConfig mode="variable" format="integer" uniformAmount="" />);
+    expect(screen.getByText(/amounts will be read from the csv file/i)).toBeInTheDocument();
+  });
 });

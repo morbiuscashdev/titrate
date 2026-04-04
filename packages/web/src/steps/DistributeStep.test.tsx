@@ -46,6 +46,8 @@ vi.mock('../providers/CampaignProvider.js', () => ({
   useCampaign: () => ({ ...defaultCampaign, ...campaignOverrides }),
 }));
 
+let chainOverrides: Record<string, unknown> = {};
+
 vi.mock('../providers/ChainProvider.js', () => ({
   useChain: () => ({
     publicClient: {
@@ -55,6 +57,7 @@ vi.mock('../providers/ChainProvider.js', () => ({
     explorerBus: null,
     rpcBus: null,
     chainConfig: null,
+    ...chainOverrides,
   }),
 }));
 
@@ -75,12 +78,14 @@ vi.mock('../providers/StorageProvider.js', () => ({
   }),
 }));
 
+let walletClientData: Record<string, unknown> | null = {
+  account: { address: '0x1234' },
+  writeContract: vi.fn().mockResolvedValue('0xapprovehash'),
+};
+
 vi.mock('wagmi', () => ({
   useWalletClient: () => ({
-    data: {
-      account: { address: '0x1234' },
-      writeContract: vi.fn().mockResolvedValue('0xapprovehash'),
-    },
+    data: walletClientData,
   }),
 }));
 
@@ -97,6 +102,11 @@ vi.mock('@titrate/sdk', () => ({
 beforeEach(() => {
   vi.clearAllMocks();
   campaignOverrides = {};
+  chainOverrides = {};
+  walletClientData = {
+    account: { address: '0x1234' },
+    writeContract: vi.fn().mockResolvedValue('0xapprovehash'),
+  };
   mockStorage.addressSets.getByCampaign.mockResolvedValue([]);
   mockStorage.addresses.getBySet.mockResolvedValue([]);
   mockDeployDistributor.mockResolvedValue({
@@ -323,5 +333,117 @@ describe('DistributeStep', () => {
     };
     render(<DistributeStep />);
     expect(screen.getByText('Deployed')).toBeInTheDocument();
+  });
+
+  it('shows approving token spend message during approval phase', async () => {
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 1, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+
+    // Make writeContract hang so we can observe the approving state
+    walletClientData = {
+      account: { address: '0x1234' },
+      writeContract: vi.fn().mockReturnValue(new Promise(() => {})),
+    };
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/approving token spend/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows error when wallet is not connected and Start Distribution clicked', async () => {
+    walletClientData = null;
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/wallet not connected/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows error when chain is not configured', async () => {
+    chainOverrides = { publicClient: null };
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/chain not configured/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows error when contract is not deployed', async () => {
+    render(<DistributeStep />);
+
+    // Default campaign has contractAddress: null
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/contract not deployed/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows recipient count in distribution plan', async () => {
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+      { setId: 'set-1', address: '0xRecipient2000000000000000000000000000002', amount: null },
+      { setId: 'set-1', address: '0xRecipient3000000000000000000000000000003', amount: null },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 3, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(screen.getByText('3')).toBeInTheDocument();
+    });
   });
 });

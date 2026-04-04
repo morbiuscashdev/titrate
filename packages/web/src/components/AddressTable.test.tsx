@@ -38,4 +38,22 @@ describe('AddressTable', () => {
     fireEvent.click(screen.getByText('Next'));
     expect(onPageChange).toHaveBeenCalledWith(1);
   });
+  it('calls onPageChange when prev is clicked', () => {
+    const onPageChange = vi.fn();
+    render(<AddressTable rows={rows} page={1} pageSize={2} totalRows={5} onPageChange={onPageChange} />);
+    fireEvent.click(screen.getByText('Prev'));
+    expect(onPageChange).toHaveBeenCalledWith(0);
+  });
+  it('disables prev on first page', () => {
+    render(<AddressTable rows={rows} page={0} pageSize={2} totalRows={5} />);
+    expect(screen.getByText('Prev')).toBeDisabled();
+  });
+  it('disables next on last page', () => {
+    render(<AddressTable rows={rows} page={2} pageSize={2} totalRows={5} />);
+    expect(screen.getByText('Next')).toBeDisabled();
+  });
+  it('renders dash for missing amount when showAmounts is true', () => {
+    render(<AddressTable rows={rows} page={0} pageSize={10} totalRows={3} showAmounts />);
+    expect(screen.getByText('—')).toBeInTheDocument();
+  });
 });

@@ -117,4 +117,51 @@ describe('FiltersStep', () => {
     });
     expect(mockSetActiveStep).toHaveBeenCalledWith('amounts');
   });
+
+  it('changes filter type when a different type button is clicked', () => {
+    render(<FiltersStep />);
+    fireEvent.click(screen.getByText('+ Add Filter'));
+    // Default is contract-check; switch to nonce-range
+    fireEvent.click(screen.getByText('Nonce Range'));
+    // Nonce Range filter shows Min nonce / Max nonce fields
+    expect(screen.getByText('Min nonce')).toBeInTheDocument();
+    expect(screen.getByText('Max nonce')).toBeInTheDocument();
+  });
+
+  it('updates filter params when input changes', () => {
+    render(<FiltersStep />);
+    fireEvent.click(screen.getByText('+ Add Filter'));
+    // Switch to min-balance to get a text input
+    fireEvent.click(screen.getByText('Min Balance'));
+    expect(screen.getByText('Minimum balance (ETH)')).toBeInTheDocument();
+    // The input starts empty; change it
+    const inputs = screen.getAllByRole('textbox');
+    const balanceInput = inputs[inputs.length - 1];
+    fireEvent.change(balanceInput, { target: { value: '1.5' } });
+    expect(balanceInput).toHaveValue('1.5');
+  });
+
+  it('saves with correct filter type and params after changes', async () => {
+    render(<FiltersStep />);
+    fireEvent.click(screen.getByText('+ Add Filter'));
+    // Switch to nonce-range
+    fireEvent.click(screen.getByText('Nonce Range'));
+    // Fill in params — there are two text inputs for min/max nonce
+    const inputs = screen.getAllByRole('textbox');
+    const minInput = inputs[inputs.length - 2];
+    const maxInput = inputs[inputs.length - 1];
+    fireEvent.change(minInput, { target: { value: '10' } });
+    fireEvent.change(maxInput, { target: { value: '50' } });
+    fireEvent.click(screen.getByText('Save & Continue'));
+
+    await vi.waitFor(() => {
+      expect(mockPutPipelineConfig).toHaveBeenCalledTimes(1);
+    });
+
+    expect(mockPutPipelineConfig.mock.calls[0][1].steps[0]).toMatchObject({
+      type: 'filter',
+      filterType: 'nonce-range',
+      params: { minNonce: '10', maxNonce: '50' },
+    });
+  });
 });

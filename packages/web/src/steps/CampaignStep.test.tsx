@@ -6,9 +6,11 @@ const mockSaveCampaign = vi.fn().mockResolvedValue(undefined);
 const mockCreateCampaign = vi.fn().mockResolvedValue('new-id');
 const mockSetActiveStep = vi.fn();
 
+let activeCampaignOverride: Record<string, unknown> | null = null;
+
 vi.mock('../providers/CampaignProvider.js', () => ({
   useCampaign: () => ({
-    activeCampaign: null,
+    activeCampaign: activeCampaignOverride,
     campaigns: [],
     activeStepId: 'campaign',
     stepStates: [],
@@ -20,8 +22,14 @@ vi.mock('../providers/CampaignProvider.js', () => ({
   }),
 }));
 
+let tokenMetadataMock: { data: unknown; isLoading: boolean; error: unknown } = {
+  data: undefined,
+  isLoading: false,
+  error: null,
+};
+
 vi.mock('../hooks/useTokenMetadata.js', () => ({
-  useTokenMetadata: () => ({ data: undefined, isLoading: false, error: null }),
+  useTokenMetadata: () => tokenMetadataMock,
 }));
 
 vi.mock('@titrate/sdk', () => ({
@@ -41,6 +49,8 @@ vi.mock('@titrate/sdk', () => ({
 describe('CampaignStep', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    activeCampaignOverride = null;
+    tokenMetadataMock = { data: undefined, isLoading: false, error: null };
   });
 
   it('renders step panel with title', () => {
@@ -116,5 +126,84 @@ describe('CampaignStep', () => {
     render(<CampaignStep />);
     const batchInput = screen.getByDisplayValue('100') as HTMLInputElement;
     expect(batchInput).toBeInTheDocument();
+  });
+
+  it('shows "Probing token..." when token address is valid and loading', () => {
+    tokenMetadataMock = { data: undefined, isLoading: true, error: null };
+    render(<CampaignStep />);
+    fireEvent.change(screen.getByPlaceholderText('0x...'), {
+      target: { value: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' },
+    });
+    expect(screen.getByText('Probing token...')).toBeInTheDocument();
+  });
+
+  it('shows token metadata when probe succeeds', () => {
+    tokenMetadataMock = {
+      data: { name: 'USD Coin', symbol: 'USDC', decimals: 6 },
+      isLoading: false,
+      error: null,
+    };
+    render(<CampaignStep />);
+    fireEvent.change(screen.getByPlaceholderText('0x...'), {
+      target: { value: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' },
+    });
+    expect(screen.getByText('USD Coin')).toBeInTheDocument();
+    expect(screen.getByText('(USDC)')).toBeInTheDocument();
+    expect(screen.getByText('6 decimals')).toBeInTheDocument();
+  });
+
+  it('shows "Not a valid ERC-20" when probe returns null', () => {
+    tokenMetadataMock = { data: null, isLoading: false, error: null };
+    render(<CampaignStep />);
+    fireEvent.change(screen.getByPlaceholderText('0x...'), {
+      target: { value: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' },
+    });
+    expect(screen.getByText(/not a valid ERC-20/i)).toBeInTheDocument();
+  });
+
+  it('shows "Failed to probe" when probe errors', () => {
+    tokenMetadataMock = { data: undefined, isLoading: false, error: new Error('RPC error') };
+    render(<CampaignStep />);
+    fireEvent.change(screen.getByPlaceholderText('0x...'), {
+      target: { value: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' },
+    });
+    expect(screen.getByText(/failed to probe token/i)).toBeInTheDocument();
+  });
+
+  it('switches contract variant between Simple and Full', () => {
+    render(<CampaignStep />);
+    const simpleButton = screen.getByText('Simple');
+    const fullButton = screen.getByText('Full');
+
+    // Default is Simple (active)
+    expect(simpleButton.className).toContain('ring-blue');
+
+    // Click Full
+    fireEvent.click(fullButton);
+    expect(fullButton.className).toContain('ring-blue');
+
+    // Click Simple back
+    fireEvent.click(simpleButton);
+    expect(simpleButton.className).toContain('ring-blue');
+  });
+
+  it('creates new campaign with correct data when no active campaign', async () => {
+    render(<CampaignStep />);
+    fireEvent.click(screen.getByText('PulseChain'));
+    fireEvent.change(screen.getByPlaceholderText('My Airdrop Campaign'), {
+      target: { value: 'New Drop' },
+    });
+    fireEvent.click(screen.getByText('Full'));
+    fireEvent.click(screen.getByText('Save & Continue'));
+
+    await vi.waitFor(() => {
+      expect(mockCreateCampaign).toHaveBeenCalledTimes(1);
+    });
+
+    const config = mockCreateCampaign.mock.calls[0][0];
+    expect(config.chainId).toBe(369);
+    expect(config.rpcUrl).toBe('https://rpc.pulsechain.com');
+    expect(config.name).toBe('New Drop');
+    expect(config.contractVariant).toBe('full');
   });
 });

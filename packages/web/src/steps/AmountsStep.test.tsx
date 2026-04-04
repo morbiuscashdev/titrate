@@ -27,9 +27,11 @@ const baseCampaign = {
   updatedAt: Date.now(),
 };
 
+let activeCampaignOverride: typeof baseCampaign | null = baseCampaign;
+
 vi.mock('../providers/CampaignProvider.js', () => ({
   useCampaign: () => ({
-    activeCampaign: baseCampaign,
+    activeCampaign: activeCampaignOverride,
     campaigns: [],
     activeStepId: 'amounts',
     stepStates: [],
@@ -44,6 +46,7 @@ vi.mock('../providers/CampaignProvider.js', () => ({
 describe('AmountsStep', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    activeCampaignOverride = baseCampaign;
   });
 
   it('renders step panel with title', () => {
@@ -135,5 +138,41 @@ describe('AmountsStep', () => {
     });
     expect(screen.getByText('1000')).toBeInTheDocument();
     expect(screen.getByText(/Each recipient will receive/)).toBeInTheDocument();
+  });
+
+  it('renders without crashing when no active campaign', () => {
+    activeCampaignOverride = null;
+    render(<AmountsStep />);
+    expect(screen.getByText('Amounts')).toBeInTheDocument();
+  });
+
+  it('save is disabled in uniform mode when amount is empty', () => {
+    render(<AmountsStep />);
+    // baseCampaign has uniformAmount: null so the input is empty
+    const button = screen.getByText('Save & Continue');
+    expect(button).toBeDisabled();
+  });
+
+  it('initializes mode from active campaign', () => {
+    activeCampaignOverride = {
+      ...baseCampaign,
+      amountMode: 'variable' as const,
+      amountFormat: 'decimal' as const,
+      uniformAmount: null,
+    };
+    render(<AmountsStep />);
+    // In variable mode, amount input should be hidden and Save should be enabled
+    expect(screen.queryByPlaceholderText(/amount/i)).toBeNull();
+    expect(screen.getByText('Save & Continue')).not.toBeDisabled();
+  });
+
+  it('does not save when uniform mode and amount is whitespace', async () => {
+    render(<AmountsStep />);
+    fireEvent.change(screen.getByPlaceholderText(/amount/i), {
+      target: { value: '   ' },
+    });
+    fireEvent.click(screen.getByText('Save & Continue'));
+    // saveCampaign should NOT be called since trimmed amount is empty
+    expect(mockSaveCampaign).not.toHaveBeenCalled();
   });
 });

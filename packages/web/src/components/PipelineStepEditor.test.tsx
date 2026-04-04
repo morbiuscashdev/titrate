@@ -33,4 +33,57 @@ describe('PipelineStepEditor', () => {
     fireEvent.change(screen.getByDisplayValue('0.1'), { target: { value: '0.5' } });
     expect(onParamsChange).toHaveBeenCalledWith({ minBalance: '0.5' });
   });
+
+  it('renders start/end block fields for block-scan source', () => {
+    render(<PipelineStepEditor stepType="source" sourceType="block-scan" params={{}} />);
+    expect(screen.getByText('Start block')).toBeInTheDocument();
+    expect(screen.getByText('End block')).toBeInTheDocument();
+  });
+
+  it('renders min/max nonce fields for nonce-range filter', () => {
+    const onParamsChange = vi.fn();
+    render(<PipelineStepEditor stepType="filter" filterType="nonce-range" params={{ minNonce: '5', maxNonce: '100' }} onParamsChange={onParamsChange} />);
+    expect(screen.getByText('Min nonce')).toBeInTheDocument();
+    expect(screen.getByText('Max nonce')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('5')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('100')).toBeInTheDocument();
+  });
+
+  it('renders token address field for token-recipients filter', () => {
+    render(<PipelineStepEditor stepType="filter" filterType="token-recipients" params={{ tokenAddress: '0xabc' }} />);
+    expect(screen.getByText('Token address')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('0xabc')).toBeInTheDocument();
+  });
+
+  it('renders exclusion CSV field for csv-exclusion filter', () => {
+    render(<PipelineStepEditor stepType="filter" filterType="csv-exclusion" params={{ fileName: 'exclude.csv' }} />);
+    expect(screen.getByText('Exclusion CSV')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('exclude.csv')).toBeInTheDocument();
+  });
+
+  it('renders file name field for csv source', () => {
+    render(<PipelineStepEditor stepType="source" sourceType="csv" params={{ fileName: 'data.csv' }} />);
+    expect(screen.getByText('File name')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('data.csv')).toBeInTheDocument();
+  });
+
+  it('renders start/end block fields for explorer-scan source', () => {
+    render(<PipelineStepEditor stepType="source" sourceType="explorer-scan" params={{ startBlock: '100', endBlock: '200' }} />);
+    expect(screen.getByText('Start block')).toBeInTheDocument();
+    expect(screen.getByText('End block')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('100')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('200')).toBeInTheDocument();
+  });
+
+  it('calls onParamsChange for nonce-range min nonce field', () => {
+    const onParamsChange = vi.fn();
+    render(<PipelineStepEditor stepType="filter" filterType="nonce-range" params={{ minNonce: '0', maxNonce: '10' }} onParamsChange={onParamsChange} />);
+    fireEvent.change(screen.getByDisplayValue('0'), { target: { value: '3' } });
+    expect(onParamsChange).toHaveBeenCalledWith({ minNonce: '3', maxNonce: '10' });
+  });
+
+  it('shows no additional config message for contract-check filter', () => {
+    render(<PipelineStepEditor stepType="filter" filterType="contract-check" params={{}} />);
+    expect(screen.getByText('No additional configuration needed.')).toBeInTheDocument();
+  });
 });
