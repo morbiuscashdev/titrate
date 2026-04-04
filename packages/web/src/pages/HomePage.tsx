@@ -103,6 +103,15 @@ export function HomePage() {
     [cloneCampaign, navigate],
   );
 
+  // Show loading state while storage initializes
+  if (!storage) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <p className="text-gray-500">Loading...</p>
+      </div>
+    );
+  }
+
   if (campaigns.length === 0) {
     return (
       <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
