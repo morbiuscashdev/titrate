@@ -3,6 +3,7 @@ import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { ThemeProvider } from './providers/ThemeProvider.js';
 import { WalletProvider } from './providers/WalletProvider.js';
 import { StorageProvider } from './providers/StorageProvider.js';
+import { CacheProvider } from './providers/CacheProvider.js';
 import { ChainProvider } from './providers/ChainProvider.js';
 import { CampaignProvider, useCampaign } from './providers/CampaignProvider.js';
 import { useWallet } from './providers/WalletProvider.js';
@@ -58,21 +59,23 @@ export function App() {
     <ThemeProvider>
       <WalletProvider>
         <StorageProvider>
-          <CampaignProvider>
-            <ChainBridge>
-              <BrowserRouter>
-                <Header>
-                  <HeaderWalletBadge />
-                </Header>
-                <Routes>
-                  <Route path="/" element={<HomePage />} />
-                  <Route path="/campaign/:id" element={<CampaignPage />} />
-                  <Route path="/settings" element={<SettingsPage />} />
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-              </BrowserRouter>
-            </ChainBridge>
-          </CampaignProvider>
+          <CacheProvider>
+            <CampaignProvider>
+              <ChainBridge>
+                <BrowserRouter>
+                  <Header>
+                    <HeaderWalletBadge />
+                  </Header>
+                  <Routes>
+                    <Route path="/" element={<HomePage />} />
+                    <Route path="/campaign/:id" element={<CampaignPage />} />
+                    <Route path="/settings" element={<SettingsPage />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Routes>
+                </BrowserRouter>
+              </ChainBridge>
+            </CampaignProvider>
+          </CacheProvider>
         </StorageProvider>
       </WalletProvider>
     </ThemeProvider>

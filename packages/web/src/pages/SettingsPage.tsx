@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useStorage } from '../providers/StorageProvider.js';
 import { EncryptedField } from '../components/EncryptedField.js';
 import { ChainSelector } from '../components/ChainSelector.js';
+import { Skeleton } from '../components/Skeleton.js';
 import { SUPPORTED_CHAINS } from '@titrate/sdk';
 import type { StoredChainConfig } from '@titrate/sdk';
 
@@ -243,7 +244,20 @@ export function SettingsPage() {
       )}
 
       {!storage && (
-        <p className="text-gray-500">Initializing storage...</p>
+        <div className="space-y-4">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="py-4">
+              <div className="flex items-start justify-between">
+                <div className="space-y-2">
+                  <Skeleton className="h-4 w-28" />
+                  <Skeleton className="h-3 w-20" />
+                  <Skeleton className="h-3 w-48" />
+                </div>
+                <Skeleton className="h-4 w-12" />
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       {storage && !showForm && configs.length === 0 && (

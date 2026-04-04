@@ -14,8 +14,9 @@ interface ImportMeta {
  * declare the subset of exports the web app consumes.
  */
 declare module '@titrate/storage-idb' {
-  import type { Storage } from '@titrate/sdk';
+  import type { Storage, CacheStore } from '@titrate/sdk';
   export function createIDBStorage(dbName?: string): Promise<Storage>;
+  export function createIDBCacheStore(dbName?: string): Promise<CacheStore>;
 }
 
 declare namespace JSX {

@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
 import type { Address } from 'viem';
 import { CampaignCard } from '../components/CampaignCard.js';
+import { CampaignCardSkeleton } from '../components/CampaignCardSkeleton.js';
+import { Skeleton } from '../components/Skeleton.js';
+import { InlineEdit } from '../components/InlineEdit.js';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
 import { getChainConfig } from '@titrate/sdk';
@@ -45,9 +48,14 @@ const CAMPAIGN_DEFAULTS = {
  */
 export function HomePage() {
   useEffect(() => { document.title = 'Titrate'; }, []);
-  const { campaigns, createCampaign, deleteCampaign, cloneCampaign } = useCampaign();
+  const { campaigns, createCampaign, deleteCampaign, cloneCampaign, saveCampaign } = useCampaign();
   const { storage } = useStorage();
   const navigate = useNavigate();
+  const [showArchived, setShowArchived] = useState(false);
+
+  const visibleCampaigns = showArchived
+    ? campaigns
+    : campaigns.filter((c) => !c.archived);
 
   // Load address counts and batch progress per campaign
   const [campaignStats, setCampaignStats] = useState<Record<string, { addresses: number; completedBatches: number; totalBatches: number }>>({});
@@ -94,6 +102,28 @@ export function HomePage() {
     [deleteCampaign, campaigns],
   );
 
+  const handleRename = useCallback(
+    async (event: React.MouseEvent, id: string) => {
+      event.stopPropagation();
+      const campaign = campaigns.find((c) => c.id === id);
+      if (!campaign) return;
+      const newName = window.prompt('Rename campaign:', campaign.name);
+      if (!newName || newName.trim() === campaign.name) return;
+      await saveCampaign({ ...campaign, name: newName.trim() });
+    },
+    [campaigns, saveCampaign],
+  );
+
+  const handleArchive = useCallback(
+    async (event: React.MouseEvent, id: string) => {
+      event.stopPropagation();
+      const campaign = campaigns.find((c) => c.id === id);
+      if (!campaign) return;
+      await saveCampaign({ ...campaign, archived: !campaign.archived });
+    },
+    [campaigns, saveCampaign],
+  );
+
   const handleClone = useCallback(
     async (event: React.MouseEvent, id: string) => {
       event.stopPropagation();
@@ -103,11 +133,19 @@ export function HomePage() {
     [cloneCampaign, navigate],
   );
 
-  // Show loading state while storage initializes
+  // Show skeleton grid while storage initializes
   if (!storage) {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <p className="text-gray-500">Loading...</p>
+      <div className="mx-auto max-w-5xl px-4 py-8">
+        <div className="flex items-center justify-between mb-6">
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-9 w-32 rounded-lg" />
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <CampaignCardSkeleton />
+          <CampaignCardSkeleton />
+          <CampaignCardSkeleton />
+        </div>
       </div>
     );
   }
@@ -127,10 +165,23 @@ export function HomePage() {
     );
   }
 
+  const archivedCount = campaigns.filter((c) => c.archived).length;
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-lg font-semibold text-white">Campaigns</h1>
+        <div className="flex items-center gap-4">
+          <h1 className="text-lg font-semibold text-white">Campaigns</h1>
+          {archivedCount > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowArchived((v) => !v)}
+              className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+            >
+              {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
+            </button>
+          )}
+        </div>
         <button
           type="button"
           onClick={handleCreate}
@@ -140,8 +191,8 @@ export function HomePage() {
         </button>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {campaigns.map((campaign) => (
-          <div key={campaign.id} className="relative group">
+        {visibleCampaigns.map((campaign) => (
+          <div key={campaign.id} className={`relative group ${campaign.archived ? 'opacity-50' : ''}`}>
             <CampaignCard
               name={campaign.name}
               chainName={campaign.chainId > 0 ? (getChainConfig(campaign.chainId)?.name ?? `Chain ${campaign.chainId}`) : 'Not configured'}
@@ -155,6 +206,29 @@ export function HomePage() {
               onClick={() => handleCardClick(campaign.id)}
             />
             <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                type="button"
+                onClick={(e) => handleRename(e, campaign.id)}
+                className="rounded-full p-1 text-gray-500 hover:text-green-400 hover:bg-gray-800"
+                aria-label={`Rename ${campaign.name}`}
+                title="Rename"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                  <path d="M2.695 14.763l-1.262 3.154a.5.5 0 00.65.65l3.155-1.262a4 4 0 001.343-.885L17.5 5.5a2.121 2.121 0 00-3-3L3.58 13.42a4 4 0 00-.885 1.343z" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => handleArchive(e, campaign.id)}
+                className="rounded-full p-1 text-gray-500 hover:text-yellow-400 hover:bg-gray-800"
+                aria-label={campaign.archived ? `Unarchive ${campaign.name}` : `Archive ${campaign.name}`}
+                title={campaign.archived ? 'Unarchive' : 'Archive'}
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                  <path d="M2 3a1 1 0 00-1 1v1a1 1 0 001 1h16a1 1 0 001-1V4a1 1 0 00-1-1H2z" />
+                  <path fillRule="evenodd" d="M2 7.5h16l-.811 7.71a2 2 0 01-1.99 1.79H4.802a2 2 0 01-1.99-1.79L2 7.5zM7 11a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1z" clipRule="evenodd" />
+                </svg>
+              </button>
               <button
                 type="button"
                 onClick={(e) => handleClone(e, campaign.id)}
