@@ -3,7 +3,7 @@ import { keccak256 } from 'viem';
 export async function deriveEncryptionKey(signature: string): Promise<CryptoKey> {
   const hash = keccak256(signature as `0x${string}`);
   const keyBytes = hexToBytes(hash.slice(2));
-  return crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  return crypto.subtle.importKey('raw', keyBytes.buffer as ArrayBuffer, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 }
 
 export async function encrypt(plaintext: string, key: CryptoKey): Promise<string> {

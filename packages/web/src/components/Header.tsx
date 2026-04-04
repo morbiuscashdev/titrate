@@ -1,0 +1,50 @@
+import type { ReactNode } from 'react';
+import { ThemeToggle } from './ThemeToggle.js';
+
+/**
+ * Props for the global Header component.
+ * @property children - Wallet badge slot; WalletProvider injects the badge here.
+ */
+export type HeaderProps = {
+  readonly children?: ReactNode;
+};
+
+/**
+ * Global header bar present on all routes.
+ *
+ * Left side: "Titrate" wordmark linking to `/`.
+ * Right side: theme toggle, settings gear link, and a wallet badge slot via `children`.
+ */
+export function Header({ children }: HeaderProps) {
+  return (
+    <header className="flex items-center justify-between border-b border-gray-800 bg-gray-950 px-4 py-3">
+      <a href="/" className="text-lg font-semibold text-white hover:text-gray-300">
+        Titrate
+      </a>
+      <div className="flex items-center gap-3">
+        <ThemeToggle />
+        <a
+          href="/settings"
+          aria-label="Settings"
+          className="text-gray-400 hover:text-white transition-colors"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="h-5 w-5"
+            aria-hidden="true"
+          >
+            <circle cx={12} cy={12} r={3} />
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1.08 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1.08z" />
+          </svg>
+        </a>
+        {children}
+      </div>
+    </header>
+  );
+}
