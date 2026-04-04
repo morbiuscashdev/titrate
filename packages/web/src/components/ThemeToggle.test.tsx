@@ -2,12 +2,14 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ThemeToggle } from './ThemeToggle.js';
 
-// Mock useTheme to isolate ThemeToggle tests from the provider
 const mockSetTheme = vi.fn();
+let mockTheme = 'system' as 'light' | 'dark' | 'system';
+let mockResolved = 'dark' as 'light' | 'dark';
+
 vi.mock('../providers/ThemeProvider.js', () => ({
   useTheme: () => ({
-    theme: 'system' as const,
-    resolvedTheme: 'dark' as const,
+    theme: mockTheme,
+    resolvedTheme: mockResolved,
     setTheme: mockSetTheme,
   }),
 }));
@@ -15,44 +17,62 @@ vi.mock('../providers/ThemeProvider.js', () => ({
 describe('ThemeToggle', () => {
   beforeEach(() => {
     mockSetTheme.mockClear();
+    mockTheme = 'system';
+    mockResolved = 'dark';
   });
 
-  it('renders three buttons: Light, Dark, System', () => {
+  it('renders two buttons', () => {
     render(<ThemeToggle />);
-    expect(screen.getByText('Light')).toBeInTheDocument();
-    expect(screen.getByText('Dark')).toBeInTheDocument();
-    expect(screen.getByText('System')).toBeInTheDocument();
+    const buttons = screen.getAllByRole('button');
+    expect(buttons).toHaveLength(2);
   });
 
-  it('calls setTheme with "light" when Light is clicked', () => {
+  it('shows moon icon when resolved theme is dark', () => {
     render(<ThemeToggle />);
-    fireEvent.click(screen.getByText('Light'));
+    const lightDarkButton = screen.getByLabelText('Switch to light mode');
+    expect(lightDarkButton).toBeInTheDocument();
+  });
+
+  it('shows sun icon when resolved theme is light', () => {
+    mockResolved = 'light';
+    render(<ThemeToggle />);
+    const lightDarkButton = screen.getByLabelText('Switch to dark mode');
+    expect(lightDarkButton).toBeInTheDocument();
+  });
+
+  it('toggles to light when in system dark mode and left button clicked', () => {
+    render(<ThemeToggle />);
+    fireEvent.click(screen.getByLabelText('Switch to light mode'));
     expect(mockSetTheme).toHaveBeenCalledWith('light');
   });
 
-  it('calls setTheme with "dark" when Dark is clicked', () => {
+  it('toggles to dark when currently light', () => {
+    mockTheme = 'light';
+    mockResolved = 'light';
     render(<ThemeToggle />);
-    fireEvent.click(screen.getByText('Dark'));
+    fireEvent.click(screen.getByLabelText('Switch to dark mode'));
     expect(mockSetTheme).toHaveBeenCalledWith('dark');
   });
 
-  it('calls setTheme with "system" when System is clicked', () => {
+  it('sets system mode when system button clicked', () => {
+    mockTheme = 'dark';
     render(<ThemeToggle />);
-    fireEvent.click(screen.getByText('System'));
+    fireEvent.click(screen.getByLabelText('Use system theme'));
     expect(mockSetTheme).toHaveBeenCalledWith('system');
   });
 
-  it('marks the active button with aria-pressed and highlighted styling', () => {
+  it('marks system button active when theme is system', () => {
     render(<ThemeToggle />);
-    const systemButton = screen.getByText('System');
+    const systemButton = screen.getByLabelText('Use system theme');
     expect(systemButton.getAttribute('aria-pressed')).toBe('true');
     expect(systemButton.className).toContain('bg-gray-700');
   });
 
-  it('marks inactive buttons with non-highlighted styling', () => {
+  it('marks light/dark button active when theme is manual', () => {
+    mockTheme = 'dark';
     render(<ThemeToggle />);
-    const lightButton = screen.getByText('Light');
-    expect(lightButton.getAttribute('aria-pressed')).toBe('false');
-    expect(lightButton.className).toContain('bg-gray-900');
+    const ldButton = screen.getByLabelText('Switch to light mode');
+    expect(ldButton.getAttribute('aria-pressed')).toBe('true');
+    expect(ldButton.className).toContain('bg-gray-700');
   });
 });
