@@ -39,4 +39,66 @@ describe('CampaignCard', () => {
     render(<CampaignCard {...props} />);
     expect(screen.getByText('distributing')).toBeInTheDocument();
   });
+
+  it('progress bar width reflects completion percentage', () => {
+    const { container } = render(<CampaignCard {...props} />);
+    // Outer bar has bg-gray-800, inner bar has bg-blue-500
+    const innerBar = container.querySelector('.bg-blue-500') as HTMLElement;
+    expect(innerBar).not.toBeNull();
+    // 3/10 = 30%
+    expect(innerBar.style.width).toBe('30%');
+  });
+
+  it('progress bar is 0% when total is 0', () => {
+    const { container } = render(
+      <CampaignCard {...props} batchProgress={{ completed: 0, total: 0 }} />,
+    );
+    const innerBar = container.querySelector('.bg-blue-500') as HTMLElement;
+    expect(innerBar.style.width).toBe('0%');
+  });
+
+  it('progress bar is 100% when all batches complete', () => {
+    const { container } = render(
+      <CampaignCard {...props} batchProgress={{ completed: 10, total: 10 }} />,
+    );
+    const innerBar = container.querySelector('.bg-blue-500') as HTMLElement;
+    expect(innerBar.style.width).toBe('100%');
+  });
+
+  it('handles keyboard Enter to trigger onClick', () => {
+    const onClick = vi.fn();
+    render(<CampaignCard {...props} onClick={onClick} />);
+    const card = screen.getByRole('button');
+    fireEvent.keyDown(card, { key: 'Enter' });
+    expect(onClick).toHaveBeenCalledOnce();
+  });
+
+  it('does not fire onClick on non-Enter keydown', () => {
+    const onClick = vi.fn();
+    render(<CampaignCard {...props} onClick={onClick} />);
+    const card = screen.getByRole('button');
+    fireEvent.keyDown(card, { key: 'Space' });
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('does not throw when Enter pressed without onClick', () => {
+    render(<CampaignCard {...props} />);
+    const card = screen.getByRole('button');
+    expect(() => fireEvent.keyDown(card, { key: 'Enter' })).not.toThrow();
+  });
+
+  it('shows draft status badge', () => {
+    render(<CampaignCard {...props} status="draft" />);
+    expect(screen.getByText('draft')).toBeInTheDocument();
+  });
+
+  it('shows ready status badge', () => {
+    render(<CampaignCard {...props} status="ready" />);
+    expect(screen.getByText('ready')).toBeInTheDocument();
+  });
+
+  it('shows complete status badge', () => {
+    render(<CampaignCard {...props} status="complete" />);
+    expect(screen.getByText('complete')).toBeInTheDocument();
+  });
 });

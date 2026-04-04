@@ -159,4 +159,177 @@ describe('AddressesStep', () => {
     expect(screen.getByText('7 addresses loaded')).toBeInTheDocument();
     expect(screen.getByText(/and 2 more/)).toBeInTheDocument();
   });
+
+  it('shows preview addresses after manual parse', () => {
+    render(<AddressesStep />);
+    const addr1 = '0x1234567890abcdef1234567890abcdef12345678';
+    const addr2 = '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd';
+    const textarea = screen.getByPlaceholderText(/Paste addresses/);
+    fireEvent.change(textarea, { target: { value: `${addr1}\n${addr2}` } });
+    fireEvent.click(screen.getByText('Parse Addresses'));
+    // Preview renders addresses lowercased
+    expect(screen.getByText(addr1.toLowerCase())).toBeInTheDocument();
+    expect(screen.getByText(addr2.toLowerCase())).toBeInTheDocument();
+  });
+
+  it('disables Parse Addresses button when textarea is empty', () => {
+    render(<AddressesStep />);
+    const button = screen.getByText('Parse Addresses');
+    expect(button).toBeDisabled();
+  });
+
+  it('enables Parse Addresses button when textarea has content', () => {
+    render(<AddressesStep />);
+    const textarea = screen.getByPlaceholderText(/Paste addresses/);
+    fireEvent.change(textarea, { target: { value: 'some text' } });
+    const button = screen.getByText('Parse Addresses');
+    expect(button).not.toBeDisabled();
+  });
+
+  it('clears error when valid addresses are parsed after failure', () => {
+    render(<AddressesStep />);
+    const textarea = screen.getByPlaceholderText(/Paste addresses/);
+
+    // First: invalid parse
+    fireEvent.change(textarea, { target: { value: 'invalid' } });
+    fireEvent.click(screen.getByText('Parse Addresses'));
+    expect(screen.getByText('No valid addresses found in text.')).toBeInTheDocument();
+
+    // Second: valid parse
+    fireEvent.change(textarea, {
+      target: { value: '0x1234567890abcdef1234567890abcdef12345678' },
+    });
+    fireEvent.click(screen.getByText('Parse Addresses'));
+    expect(screen.queryByText('No valid addresses found in text.')).not.toBeInTheDocument();
+    expect(screen.getByText('1 addresses loaded')).toBeInTheDocument();
+  });
+
+  it('handles CSV file upload via file input', async () => {
+    render(<AddressesStep />);
+    const csvContent = '0x1234567890abcdef1234567890abcdef12345678\n0xabcdefabcdefabcdefabcdefabcdefabcdefabcd';
+    const file = new File([csvContent], 'addresses.csv', { type: 'text/csv' });
+    const fileInput = screen.getByTestId('file-input');
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('2 addresses loaded')).toBeInTheDocument();
+    });
+    expect(screen.getByText('addresses.csv')).toBeInTheDocument();
+  });
+
+  it('shows error when CSV has no valid addresses', async () => {
+    render(<AddressesStep />);
+    const csvContent = 'not-an-address\nbad-data';
+    const file = new File([csvContent], 'bad.csv', { type: 'text/csv' });
+    const fileInput = screen.getByTestId('file-input');
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('No valid addresses found in file.')).toBeInTheDocument();
+    });
+  });
+
+  it('handles drag over styling', () => {
+    render(<AddressesStep />);
+    const dropZone = screen.getByRole('button', { name: /Drop a CSV/i });
+
+    fireEvent.dragOver(dropZone, { dataTransfer: { files: [] } });
+    expect(dropZone.className).toContain('border-blue-500');
+
+    fireEvent.dragLeave(dropZone);
+    expect(dropZone.className).not.toContain('border-blue-500');
+  });
+
+  it('handles file drop', async () => {
+    render(<AddressesStep />);
+    const csvContent = '0x1234567890abcdef1234567890abcdef12345678';
+    const file = new File([csvContent], 'dropped.csv', { type: 'text/csv' });
+    const dropZone = screen.getByRole('button', { name: /Drop a CSV/i });
+
+    fireEvent.drop(dropZone, { dataTransfer: { files: [file] } });
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('1 addresses loaded')).toBeInTheDocument();
+    });
+    expect(screen.getByText('dropped.csv')).toBeInTheDocument();
+  });
+
+  it('clears manual text when file is uploaded', async () => {
+    render(<AddressesStep />);
+    const textarea = screen.getByPlaceholderText(/Paste addresses/);
+    fireEvent.change(textarea, { target: { value: 'some manual text' } });
+
+    const csvContent = '0x1234567890abcdef1234567890abcdef12345678';
+    const file = new File([csvContent], 'test.csv', { type: 'text/csv' });
+    const fileInput = screen.getByTestId('file-input');
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('1 addresses loaded')).toBeInTheDocument();
+    });
+    // After file upload, the textarea value is cleared
+    expect(textarea).toHaveValue('');
+  });
+
+  it('shows "Includes amounts" when CSV has amounts', async () => {
+    render(<AddressesStep />);
+    const csvContent = '0x1234567890abcdef1234567890abcdef12345678,100';
+    const file = new File([csvContent], 'with-amounts.csv', { type: 'text/csv' });
+    const fileInput = screen.getByTestId('file-input');
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Includes amounts')).toBeInTheDocument();
+    });
+  });
+
+  it('saves with file name when addresses came from CSV', async () => {
+    render(<AddressesStep />);
+    const csvContent = '0x1234567890abcdef1234567890abcdef12345678';
+    const file = new File([csvContent], 'my-addresses.csv', { type: 'text/csv' });
+    const fileInput = screen.getByTestId('file-input');
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('1 addresses loaded')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Save & Continue'));
+
+    await vi.waitFor(() => {
+      expect(mockPutAddressSet).toHaveBeenCalledTimes(1);
+    });
+    expect(mockPutAddressSet.mock.calls[0][0]).toMatchObject({
+      name: 'my-addresses.csv',
+    });
+  });
+
+  it('does not advance when no file is selected on input change', () => {
+    render(<AddressesStep />);
+    const fileInput = screen.getByTestId('file-input');
+    // Trigger change with no files
+    fireEvent.change(fileInput, { target: { files: [] } });
+    expect(screen.queryByText(/addresses loaded/)).not.toBeInTheDocument();
+  });
+
+  it('sets fileName to null for manual entry addresses', async () => {
+    render(<AddressesStep />);
+    const textarea = screen.getByPlaceholderText(/Paste addresses/);
+    fireEvent.change(textarea, {
+      target: { value: '0x1234567890abcdef1234567890abcdef12345678' },
+    });
+    fireEvent.click(screen.getByText('Parse Addresses'));
+    fireEvent.click(screen.getByText('Save & Continue'));
+
+    await vi.waitFor(() => {
+      expect(mockPutAddressSet).toHaveBeenCalledTimes(1);
+    });
+    expect(mockPutAddressSet.mock.calls[0][0]).toMatchObject({
+      name: 'Manual Entry',
+    });
+  });
 });
