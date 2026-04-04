@@ -119,8 +119,24 @@ C (component library) ✅ → B (distribution MVP) ✅ → A (full app) → Z (a
 - ERC-20 approval flow checks allowance before distribution, prompts approve if needed
 - refreshActiveCampaign() updates step states after address saving
 
+### Phase A: Dashboard Polish (complete)
+- Campaign cards show real batch progress and dynamic status (draft/ready/distributing/complete)
+- Delete confirmation dialog (window.confirm)
+- 404 catch-all redirects to home
+- Dynamic page titles per route
+- useEffect-based address count loading from storage
+
+## Test Counts
+- Contracts: 49 tests
+- SDK: 394 tests passing (2 Anvil-dependent failures expected)
+- TUI: 33 tests passing (2 Anvil e2e failures expected)
+- storage-fs: 13 tests
+- storage-idb: 36 tests
+- Web: 177 tests
+- Total: ~702 tests
+
 ## Next Steps
-1. Phase A continued: campaign archive status, batch progress in cards
-2. Request caching layer (hash-based pipeline result caching in IDB)
-3. Campaign rename inline editing
-4. Loading states / skeleton screens
+1. Request caching layer (hash-based pipeline result caching in IDB)
+2. Loading states / skeleton screens
+3. Campaign archive status management
+4. Campaign rename inline editing
