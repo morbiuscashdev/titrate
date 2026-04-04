@@ -42,6 +42,7 @@ const defaultCampaign = {
   setActiveCampaign: vi.fn(),
   createCampaign: vi.fn(),
   saveCampaign: vi.fn(),
+  completeStep: vi.fn(),
   refreshCampaigns: vi.fn(),
 };
 
@@ -76,6 +77,18 @@ vi.mock('../hooks/useNativeBalance.js', () => ({
 
 vi.mock('../hooks/useTokenBalance.js', () => ({
   useTokenBalance: () => ({ data: tokenBalanceData, isLoading: false }),
+}));
+
+vi.mock('../providers/StorageProvider.js', () => ({
+  useStorage: () => ({
+    storage: {
+      addressSets: {
+        getByCampaign: vi.fn().mockResolvedValue([]),
+      },
+    },
+    isUnlocked: false,
+    unlock: vi.fn(),
+  }),
 }));
 
 beforeEach(() => {

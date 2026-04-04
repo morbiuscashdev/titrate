@@ -8,8 +8,10 @@ import {
 } from 'react';
 import type { Storage } from '@titrate/sdk';
 import { createIDBStorage } from '@titrate/storage-idb';
+import { useSignTypedData } from 'wagmi';
 import { deriveEncryptionKey } from '../crypto/encrypt.js';
 import { createEncryptedStorage } from '../crypto/storage-wrapper.js';
+import { useWallet } from './WalletProvider.js';
 
 /** Values exposed by the storage context. */
 export type StorageContextValue = {
@@ -40,6 +42,10 @@ export type StorageProviderProps = {
 export function StorageProvider({ children }: StorageProviderProps) {
   const [rawStorage, setRawStorage] = useState<Storage | null>(null);
   const [encryptedStorage, setEncryptedStorage] = useState<Storage | null>(null);
+  const [isUnlocking, setIsUnlocking] = useState(false);
+
+  const { isConnected } = useWallet();
+  const { signTypedDataAsync } = useSignTypedData();
 
   useEffect(() => {
     createIDBStorage().then(setRawStorage).catch((error: unknown) => {
@@ -65,6 +71,27 @@ export function StorageProvider({ children }: StorageProviderProps) {
 
   const storage = encryptedStorage ?? rawStorage;
   const isUnlocked = encryptedStorage !== null;
+
+  // Auto-prompt for the storage-encryption signature when a wallet connects
+  useEffect(() => {
+    if (!isConnected || isUnlocked || isUnlocking || !rawStorage) return;
+
+    setIsUnlocking(true);
+    signTypedDataAsync({
+      domain: { name: 'Titrate', version: '1', chainId: 1 },
+      types: {
+        StorageEncryption: [{ name: 'purpose', type: 'string' }],
+      },
+      primaryType: 'StorageEncryption',
+      message: { purpose: 'storage-encryption' },
+    })
+      .then((signature) => unlock(signature))
+      .catch(() => {
+        // User rejected the signature — stay with unencrypted storage
+        console.warn('[StorageProvider] Encryption signature rejected');
+      })
+      .finally(() => setIsUnlocking(false));
+  }, [isConnected, isUnlocked, isUnlocking, rawStorage, signTypedDataAsync, unlock]);
 
   return (
     <StorageContext.Provider value={{ storage, isUnlocked, unlock }}>

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import type { Address } from 'viem';
 import { CampaignCard } from '../components/CampaignCard.js';
 import { useCampaign } from '../providers/CampaignProvider.js';
+import { getChainConfig } from '@titrate/sdk';
 
 /** Derive a display status from campaign data for the CampaignCard badge. */
 function deriveCampaignStatus(campaign: {
@@ -89,8 +90,8 @@ export function HomePage() {
           <CampaignCard
             key={campaign.id}
             name={campaign.name}
-            chainName={campaign.chainId > 0 ? `Chain ${campaign.chainId}` : 'Not configured'}
-            tokenSymbol={campaign.tokenAddress === '0x0000000000000000000000000000000000000000' ? 'N/A' : 'Token'}
+            chainName={campaign.chainId > 0 ? (getChainConfig(campaign.chainId)?.name ?? `Chain ${campaign.chainId}`) : 'Not configured'}
+            tokenSymbol={campaign.tokenAddress === '0x0000000000000000000000000000000000000000' ? 'N/A' : `${campaign.tokenAddress.slice(0, 6)}...`}
             addressCount={0}
             batchProgress={{ completed: 0, total: 0 }}
             status={deriveCampaignStatus(campaign)}

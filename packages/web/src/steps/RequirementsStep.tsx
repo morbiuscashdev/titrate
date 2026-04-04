@@ -1,10 +1,11 @@
-import { useMemo, useCallback } from 'react';
+import { useMemo, useCallback, useState, useEffect } from 'react';
 import { formatUnits } from 'viem';
 import { StepPanel } from '../components/StepPanel.js';
 import { RequirementsPanel } from '../components/RequirementsPanel.js';
 import { useWallet } from '../providers/WalletProvider.js';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useChain } from '../providers/ChainProvider.js';
+import { useStorage } from '../providers/StorageProvider.js';
 import { useNativeBalance } from '../hooks/useNativeBalance.js';
 import { useTokenBalance } from '../hooks/useTokenBalance.js';
 import { computeRequirements } from '@titrate/sdk';
@@ -26,6 +27,21 @@ export function RequirementsStep() {
   const { address, perryMode } = useWallet();
   const { activeCampaign, setActiveStep } = useCampaign();
   const { chainConfig } = useChain();
+  const { storage } = useStorage();
+
+  // Load recipient count from storage
+  const [recipientCount, setRecipientCount] = useState(0);
+  useEffect(() => {
+    if (!storage || !activeCampaign) return;
+    void (async () => {
+      const sets = await storage.addressSets.getByCampaign(activeCampaign.id);
+      let total = 0;
+      for (const set of sets) {
+        if (set.type === 'source') total += set.addressCount;
+      }
+      setRecipientCount(total);
+    })();
+  }, [storage, activeCampaign]);
 
   /** The address that will fund distribution (hot wallet if perry mode, otherwise connected). */
   const fundingAddress: Address | null = perryMode
@@ -44,7 +60,6 @@ export function RequirementsStep() {
       return null;
     }
 
-    const recipientCount = 0; // Will be populated from address sets later
     const batchSize = activeCampaign.batchSize || DEFAULT_BATCH_SIZE;
     const amountPerRecipient = activeCampaign.uniformAmount
       ? BigInt(activeCampaign.uniformAmount)
