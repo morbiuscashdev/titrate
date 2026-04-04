@@ -44,6 +44,7 @@ const CAMPAIGN_DEFAULTS = {
  * that creates a campaign with defaults and navigates to the campaign editor.
  */
 export function HomePage() {
+  useEffect(() => { document.title = 'Titrate'; }, []);
   const { campaigns, createCampaign, deleteCampaign, cloneCampaign } = useCampaign();
   const { storage } = useStorage();
   const navigate = useNavigate();

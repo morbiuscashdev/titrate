@@ -41,6 +41,7 @@ function deriveBusKey(url: string): string {
  * displayed via EncryptedField. Supports adding and deleting configs.
  */
 export function SettingsPage() {
+  useEffect(() => { document.title = 'Settings — Titrate'; }, []);
   const { storage, isUnlocked } = useStorage();
   const [configs, setConfigs] = useState<readonly StoredChainConfig[]>([]);
   const [showForm, setShowForm] = useState(false);

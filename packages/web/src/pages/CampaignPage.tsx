@@ -38,6 +38,10 @@ export function CampaignPage() {
     return () => setActiveCampaign(null);
   }, [id, setActiveCampaign]);
 
+  useEffect(() => {
+    document.title = activeCampaign ? `${activeCampaign.name} — Titrate` : 'Campaign — Titrate';
+  }, [activeCampaign]);
+
   const timelineSteps: readonly TimelineStep[] = stepStates.map((state) => ({
     id: state.id,
     label: state.label,
