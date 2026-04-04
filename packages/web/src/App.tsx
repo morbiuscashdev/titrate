@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from 'react-router';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { ThemeProvider } from './providers/ThemeProvider.js';
 import { WalletProvider } from './providers/WalletProvider.js';
@@ -68,6 +68,7 @@ export function App() {
                   <Route path="/" element={<HomePage />} />
                   <Route path="/campaign/:id" element={<CampaignPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </BrowserRouter>
             </ChainBridge>

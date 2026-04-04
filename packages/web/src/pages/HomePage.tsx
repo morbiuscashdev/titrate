@@ -86,9 +86,12 @@ export function HomePage() {
   const handleDelete = useCallback(
     async (event: React.MouseEvent, id: string) => {
       event.stopPropagation();
+      const campaign = campaigns.find((c) => c.id === id);
+      const name = campaign?.name ?? 'this campaign';
+      if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
       await deleteCampaign(id);
     },
-    [deleteCampaign],
+    [deleteCampaign, campaigns],
   );
 
   const handleClone = useCallback(
