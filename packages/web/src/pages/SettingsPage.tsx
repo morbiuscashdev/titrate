@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useStorage } from '../providers/StorageProvider.js';
+import { useCampaign } from '../providers/CampaignProvider.js';
 import { EncryptedField } from '../components/EncryptedField.js';
 import { ChainSelector } from '../components/ChainSelector.js';
 import { Skeleton } from '../components/Skeleton.js';
 import { SUPPORTED_CHAINS } from '@titrate/sdk';
-import type { StoredChainConfig } from '@titrate/sdk';
+import type { StoredChainConfig, StoredCampaign } from '@titrate/sdk';
 
 /** Empty form state for the chain config form. */
 const EMPTY_FORM: ChainFormState = {
@@ -44,6 +45,7 @@ function deriveBusKey(url: string): string {
 export function SettingsPage() {
   useEffect(() => { document.title = 'Settings — Titrate'; }, []);
   const { storage, isUnlocked } = useStorage();
+  const { campaigns, refreshCampaigns } = useCampaign();
   const [configs, setConfigs] = useState<readonly StoredChainConfig[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<ChainFormState>(EMPTY_FORM);
@@ -303,6 +305,64 @@ export function SettingsPage() {
           ))}
         </ul>
       )}
+
+      {/* Data Export / Import */}
+      <div className="mt-12 border-t border-gray-800 pt-8">
+        <h2 className="text-lg font-semibold text-white mb-4">Data</h2>
+        <div className="flex flex-wrap gap-3">
+          <button
+            type="button"
+            disabled={!storage || campaigns.length === 0}
+            onClick={() => {
+              const data = JSON.stringify(campaigns, (_key, value) =>
+                typeof value === 'bigint' ? value.toString() : value, 2);
+              const blob = new Blob([data], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `titrate-campaigns-${new Date().toISOString().slice(0, 10)}.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-300 rounded-lg px-4 py-2 text-sm transition-colors"
+          >
+            Export Campaigns
+          </button>
+          <label className="bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg px-4 py-2 text-sm transition-colors cursor-pointer">
+            Import Campaigns
+            <input
+              type="file"
+              accept=".json"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file || !storage) return;
+                try {
+                  const text = await file.text();
+                  const imported = JSON.parse(text) as StoredCampaign[];
+                  if (!Array.isArray(imported)) throw new Error('Invalid format');
+                  for (const campaign of imported) {
+                    if (!campaign.id || !campaign.name) throw new Error('Invalid campaign data');
+                    await storage.campaigns.put({
+                      ...campaign,
+                      pinnedBlock: campaign.pinnedBlock ? BigInt(campaign.pinnedBlock) : null,
+                    });
+                  }
+                  await refreshCampaigns();
+                  window.alert(`Imported ${imported.length} campaign(s).`);
+                } catch (err: unknown) {
+                  const msg = err instanceof Error ? err.message : 'Import failed';
+                  window.alert(`Import error: ${msg}`);
+                }
+                e.target.value = '';
+              }}
+            />
+          </label>
+        </div>
+        <p className="mt-2 text-xs text-gray-500">
+          Export saves campaign configurations as JSON. Import merges campaigns into storage (existing campaigns with the same ID are overwritten).
+        </p>
+      </div>
     </div>
   );
 }
