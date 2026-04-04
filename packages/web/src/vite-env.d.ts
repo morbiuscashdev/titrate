@@ -17,3 +17,9 @@ declare module '@titrate/storage-idb' {
   import type { Storage } from '@titrate/sdk';
   export function createIDBStorage(dbName?: string): Promise<Storage>;
 }
+
+declare namespace JSX {
+  interface IntrinsicElements {
+    'appkit-button': React.DetailedHTMLProps<React.HTMLAttributes<HTMLElement> & { size?: string }, HTMLElement>;
+  }
+}

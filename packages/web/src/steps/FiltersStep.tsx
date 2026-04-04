@@ -21,7 +21,7 @@ const DEFAULT_FILTER_TYPE: FilterType = 'contract-check';
  * selection and parameter editing.
  */
 export function FiltersStep() {
-  const { activeCampaign, setActiveStep } = useCampaign();
+  const { activeCampaign, setActiveStep, completeStep } = useCampaign();
   const { storage } = useStorage();
 
   const [filters, setFilters] = useState<readonly FilterEntry[]>([]);
@@ -69,6 +69,7 @@ export function FiltersStep() {
         }));
         await storage.pipelineConfigs.put(activeCampaign.id, { steps });
       }
+      completeStep('filters');
       setActiveStep('amounts');
     } finally {
       setIsSaving(false);
@@ -76,8 +77,9 @@ export function FiltersStep() {
   }, [storage, activeCampaign, filters, setActiveStep]);
 
   const handleSkip = useCallback(() => {
+    completeStep('filters');
     setActiveStep('amounts');
-  }, [setActiveStep]);
+  }, [completeStep, setActiveStep]);
 
   return (
     <StepPanel title="Filters" description="Optionally filter addresses before distribution.">

@@ -75,9 +75,8 @@ export function computeStepStates(
       case 'addresses':
         return addressSetCount > 0;
       case 'filters':
-        // For now, filters are considered complete when addresses exist.
-        // Will be refined once pipeline config UI is built.
-        return addressSetCount > 0;
+        // Filters complete only when user explicitly saves or skips them
+        return false;
       case 'amounts':
         return (
           campaign !== null &&
@@ -143,6 +142,7 @@ export type CampaignContextValue = {
     config: Omit<StoredCampaign, 'id' | 'createdAt' | 'updatedAt'>,
   ) => Promise<string>;
   readonly saveCampaign: (campaign: StoredCampaign) => Promise<void>;
+  readonly completeStep: (stepId: StepId) => void;
   readonly refreshCampaigns: () => Promise<void>;
 };
 
@@ -212,6 +212,11 @@ export function CampaignProvider({ children }: CampaignProviderProps) {
   // Navigate to a specific step (only if it's not locked)
   const setActiveStep = useCallback((stepId: StepId) => {
     setActiveStepOverride(stepId);
+  }, []);
+
+  // Mark a step as explicitly completed (for steps without intrinsic data checks)
+  const completeStep = useCallback((stepId: StepId) => {
+    setCompletedSteps((prev) => new Set([...prev, stepId]));
   }, []);
 
   // Create a new campaign, save it, refresh the list, and return its id
@@ -293,6 +298,7 @@ export function CampaignProvider({ children }: CampaignProviderProps) {
       setActiveStep,
       createCampaign,
       saveCampaign,
+      completeStep,
       refreshCampaigns,
     }),
     [
@@ -304,6 +310,7 @@ export function CampaignProvider({ children }: CampaignProviderProps) {
       setActiveStep,
       createCampaign,
       saveCampaign,
+      completeStep,
       refreshCampaigns,
     ],
   );

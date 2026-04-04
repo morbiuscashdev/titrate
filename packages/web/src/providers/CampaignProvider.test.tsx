@@ -96,7 +96,7 @@ describe('computeStepStates', () => {
     expect(statusOf(states, 'amounts')).toBe('locked');
   });
 
-  it('marks addresses and filters complete when address sets exist', () => {
+  it('marks addresses complete but filters active when address sets exist', () => {
     const campaign = makeCampaign({
       chainId: 1,
       tokenAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
@@ -104,18 +104,31 @@ describe('computeStepStates', () => {
     const states = computeStepStates(campaign, 3, emptyCompleted);
     expect(statusOf(states, 'campaign')).toBe('complete');
     expect(statusOf(states, 'addresses')).toBe('complete');
-    expect(statusOf(states, 'filters')).toBe('complete');
-    expect(statusOf(states, 'amounts')).toBe('active');
+    expect(statusOf(states, 'filters')).toBe('active');
+    expect(statusOf(states, 'amounts')).toBe('locked');
     expect(statusOf(states, 'wallet')).toBe('locked');
   });
 
-  it('marks amounts complete when uniformAmount is set', () => {
+  it('marks filters complete when explicitly completed', () => {
+    const campaign = makeCampaign({
+      chainId: 1,
+      tokenAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+    });
+    const completed = new Set<StepId>(['filters']);
+    const states = computeStepStates(campaign, 3, completed);
+    expect(statusOf(states, 'addresses')).toBe('complete');
+    expect(statusOf(states, 'filters')).toBe('complete');
+    expect(statusOf(states, 'amounts')).toBe('active');
+  });
+
+  it('marks amounts complete when uniformAmount is set and filters completed', () => {
     const campaign = makeCampaign({
       chainId: 1,
       tokenAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
       uniformAmount: '1000',
     });
-    const states = computeStepStates(campaign, 2, emptyCompleted);
+    const completed = new Set<StepId>(['filters']);
+    const states = computeStepStates(campaign, 2, completed);
     expect(statusOf(states, 'campaign')).toBe('complete');
     expect(statusOf(states, 'addresses')).toBe('complete');
     expect(statusOf(states, 'filters')).toBe('complete');
@@ -124,13 +137,14 @@ describe('computeStepStates', () => {
     expect(statusOf(states, 'requirements')).toBe('locked');
   });
 
-  it('marks amounts complete when amountMode is variable', () => {
+  it('marks amounts complete when amountMode is variable and filters completed', () => {
     const campaign = makeCampaign({
       chainId: 1,
       tokenAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
       amountMode: 'variable',
     });
-    const states = computeStepStates(campaign, 1, emptyCompleted);
+    const completed = new Set<StepId>(['filters']);
+    const states = computeStepStates(campaign, 1, completed);
     expect(statusOf(states, 'amounts')).toBe('complete');
     expect(statusOf(states, 'wallet')).toBe('active');
   });
@@ -141,7 +155,7 @@ describe('computeStepStates', () => {
       tokenAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
       uniformAmount: '500',
     });
-    const completed = new Set<StepId>(['wallet', 'requirements']);
+    const completed = new Set<StepId>(['filters', 'wallet', 'requirements']);
     const states = computeStepStates(campaign, 5, completed);
 
     expect(statusOf(states, 'campaign')).toBe('complete');
@@ -178,7 +192,8 @@ describe('computeStepStates', () => {
       chainId: 1,
       tokenAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
     });
-    const states = computeStepStates(campaign, 2, emptyCompleted);
+    const completed = new Set<StepId>(['filters']);
+    const states = computeStepStates(campaign, 2, completed);
     const activeSteps = states.filter((s) => s.status === 'active');
     expect(activeSteps).toHaveLength(1);
   });

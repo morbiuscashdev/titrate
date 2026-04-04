@@ -33,6 +33,7 @@ vi.mock('../providers/CampaignProvider.js', () => ({
     stepStates: [],
     setActiveCampaign: vi.fn(),
     setActiveStep: mockSetActiveStep,
+    completeStep: vi.fn(),
     createCampaign: vi.fn(),
     saveCampaign: vi.fn(),
     refreshCampaigns: vi.fn(),

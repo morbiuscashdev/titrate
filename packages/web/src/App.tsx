@@ -3,29 +3,73 @@ import { ThemeProvider } from './providers/ThemeProvider.js';
 import { WalletProvider } from './providers/WalletProvider.js';
 import { StorageProvider } from './providers/StorageProvider.js';
 import { ChainProvider } from './providers/ChainProvider.js';
-import { CampaignProvider } from './providers/CampaignProvider.js';
+import { CampaignProvider, useCampaign } from './providers/CampaignProvider.js';
+import { useWallet } from './providers/WalletProvider.js';
 import { Header } from './components/Header.js';
+import { WalletBadge } from './components/WalletBadge.js';
 import { HomePage } from './pages/HomePage.js';
 import { CampaignPage } from './pages/CampaignPage.js';
 import { SettingsPage } from './pages/SettingsPage.js';
+import type { ReactNode } from 'react';
+import type { StoredChainConfig } from '@titrate/sdk';
+
+/** Bridges CampaignProvider → ChainProvider by deriving chain config from the active campaign. */
+function ChainBridge({ children }: { readonly children: ReactNode }) {
+  const { activeCampaign } = useCampaign();
+
+  const chainConfig: StoredChainConfig | null = activeCampaign && activeCampaign.chainId > 0
+    ? {
+        id: `campaign-${activeCampaign.id}`,
+        chainId: activeCampaign.chainId,
+        name: `Chain ${activeCampaign.chainId}`,
+        rpcUrl: activeCampaign.rpcUrl,
+        rpcBusKey: new URL(activeCampaign.rpcUrl || 'http://localhost').hostname,
+        explorerApiUrl: '',
+        explorerApiKey: '',
+        explorerBusKey: '',
+        trueBlocksUrl: '',
+        trueBlocksBusKey: '',
+      }
+    : null;
+
+  return <ChainProvider chainConfig={chainConfig}>{children}</ChainProvider>;
+}
+
+/** Renders wallet connection UI in the header. */
+function HeaderWalletBadge() {
+  const { isConnected, address, chainId } = useWallet();
+
+  if (!isConnected || !address) {
+    return <appkit-button size="sm" />;
+  }
+
+  return (
+    <WalletBadge
+      address={`${address.slice(0, 6)}...${address.slice(-4)}`}
+      chainName={chainId ? `Chain ${chainId}` : 'Unknown'}
+    />
+  );
+}
 
 export function App() {
   return (
     <ThemeProvider>
       <WalletProvider>
         <StorageProvider>
-          <ChainProvider chainConfig={null}>
-            <CampaignProvider>
+          <CampaignProvider>
+            <ChainBridge>
               <BrowserRouter>
-                <Header />
+                <Header>
+                  <HeaderWalletBadge />
+                </Header>
                 <Routes>
                   <Route path="/" element={<HomePage />} />
                   <Route path="/campaign/:id" element={<CampaignPage />} />
                   <Route path="/settings" element={<SettingsPage />} />
                 </Routes>
               </BrowserRouter>
-            </CampaignProvider>
-          </ChainProvider>
+            </ChainBridge>
+          </CampaignProvider>
         </StorageProvider>
       </WalletProvider>
     </ThemeProvider>
