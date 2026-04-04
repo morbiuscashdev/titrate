@@ -1,1 +1,9 @@
 @import "tailwindcss";
+
+/* Class-based dark mode for ThemeProvider (adds .dark to <html>) */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Default dark background */
+body {
+  @apply bg-gray-950 text-white;
+}
