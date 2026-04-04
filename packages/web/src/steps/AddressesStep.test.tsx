@@ -52,8 +52,13 @@ vi.mock('../providers/StorageProvider.js', () => ({
   }),
 }));
 
+let parseCSVShouldThrow = false;
+
 vi.mock('@titrate/sdk', () => ({
   parseCSV: (content: string) => {
+    if (parseCSVShouldThrow) {
+      throw new Error('CSV parse explosion');
+    }
     const lines = content.split('\n').filter((l: string) => l.trim());
     const rows = lines
       .filter((l: string) => /^0x[0-9a-fA-F]{40}/.test(l.trim()))
@@ -76,6 +81,7 @@ describe('AddressesStep', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     uuidCounter = 0;
+    parseCSVShouldThrow = false;
   });
 
   it('renders step panel with title', () => {
@@ -331,5 +337,140 @@ describe('AddressesStep', () => {
     expect(mockPutAddressSet.mock.calls[0][0]).toMatchObject({
       name: 'Manual Entry',
     });
+  });
+
+  it('shows error when FileReader triggers onerror for file input', async () => {
+    const OriginalFileReader = globalThis.FileReader;
+    let capturedReader: { onload: (() => void) | null; onerror: (() => void) | null; readAsText: ReturnType<typeof vi.fn>; result: string | null };
+    class MockFileReader {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      result: string | null = null;
+      readAsText = vi.fn(() => {
+        // Trigger onerror instead of onload
+        setTimeout(() => this.onerror?.(), 0);
+      });
+      constructor() {
+        capturedReader = this;
+      }
+    }
+    vi.stubGlobal('FileReader', MockFileReader);
+
+    render(<AddressesStep />);
+    const file = new File(['content'], 'test.csv', { type: 'text/csv' });
+    const fileInput = screen.getByTestId('file-input');
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Failed to read file.')).toBeInTheDocument();
+    });
+
+    vi.stubGlobal('FileReader', OriginalFileReader);
+  });
+
+  it('shows error when FileReader triggers onerror for dropped file', async () => {
+    const OriginalFileReader = globalThis.FileReader;
+    class MockFileReader {
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      result: string | null = null;
+      readAsText = vi.fn(() => {
+        setTimeout(() => this.onerror?.(), 0);
+      });
+    }
+    vi.stubGlobal('FileReader', MockFileReader);
+
+    render(<AddressesStep />);
+    const file = new File(['content'], 'dropped.csv', { type: 'text/csv' });
+    const dropZone = screen.getByRole('button', { name: /Drop a CSV/i });
+
+    fireEvent.drop(dropZone, { dataTransfer: { files: [file] } });
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('Failed to read file.')).toBeInTheDocument();
+    });
+
+    vi.stubGlobal('FileReader', OriginalFileReader);
+  });
+
+  it('does not save when no addresses are loaded', () => {
+    render(<AddressesStep />);
+    const button = screen.getByText('Save & Continue');
+    fireEvent.click(button);
+    // handleContinue early-returns because addresses.length === 0
+    expect(mockPutAddressSet).not.toHaveBeenCalled();
+    expect(mockSetActiveStep).not.toHaveBeenCalled();
+  });
+
+  it('opens file input when Enter key is pressed on drop zone', () => {
+    render(<AddressesStep />);
+    const dropZone = screen.getByRole('button', { name: /Drop a CSV/i });
+    const fileInput = screen.getByTestId('file-input') as HTMLInputElement;
+    const clickSpy = vi.spyOn(fileInput, 'click');
+
+    fireEvent.keyDown(dropZone, { key: 'Enter' });
+
+    expect(clickSpy).toHaveBeenCalled();
+    clickSpy.mockRestore();
+  });
+
+  it('opens file input when Space key is pressed on drop zone', () => {
+    render(<AddressesStep />);
+    const dropZone = screen.getByRole('button', { name: /Drop a CSV/i });
+    const fileInput = screen.getByTestId('file-input') as HTMLInputElement;
+    const clickSpy = vi.spyOn(fileInput, 'click');
+
+    fireEvent.keyDown(dropZone, { key: ' ' });
+
+    expect(clickSpy).toHaveBeenCalled();
+    clickSpy.mockRestore();
+  });
+
+  it('does not open file input when other keys are pressed on drop zone', () => {
+    render(<AddressesStep />);
+    const dropZone = screen.getByRole('button', { name: /Drop a CSV/i });
+    const fileInput = screen.getByTestId('file-input') as HTMLInputElement;
+    const clickSpy = vi.spyOn(fileInput, 'click');
+
+    fireEvent.keyDown(dropZone, { key: 'Tab' });
+
+    expect(clickSpy).not.toHaveBeenCalled();
+    clickSpy.mockRestore();
+  });
+
+  it('applies drag over styling class when dragging and removes on leave', () => {
+    render(<AddressesStep />);
+    const dropZone = screen.getByRole('button', { name: /Drop a CSV/i });
+
+    // Drag over adds the class
+    fireEvent.dragOver(dropZone, { dataTransfer: { files: [] } });
+    expect(dropZone.className).toContain('bg-blue-500/5');
+
+    // Drag leave removes the class
+    fireEvent.dragLeave(dropZone);
+    expect(dropZone.className).not.toContain('bg-blue-500/5');
+  });
+
+  it('shows error when parseCSV throws an Error', async () => {
+    parseCSVShouldThrow = true;
+
+    render(<AddressesStep />);
+    const csvContent = '0x1234567890abcdef1234567890abcdef12345678';
+    const file = new File([csvContent], 'boom.csv', { type: 'text/csv' });
+    const fileInput = screen.getByTestId('file-input');
+
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await vi.waitFor(() => {
+      expect(screen.getByText('CSV parse explosion')).toBeInTheDocument();
+    });
+  });
+
+  it('does nothing when drop has no file', () => {
+    render(<AddressesStep />);
+    const dropZone = screen.getByRole('button', { name: /Drop a CSV/i });
+    fireEvent.drop(dropZone, { dataTransfer: { files: [] } });
+    expect(screen.queryByText(/addresses loaded/)).not.toBeInTheDocument();
   });
 });

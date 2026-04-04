@@ -11,6 +11,19 @@ import { useTokenBalance } from '../hooks/useTokenBalance.js';
 import { computeRequirements } from '@titrate/sdk';
 import type { Address } from 'viem';
 
+/**
+ * Count the total addresses across all 'source'-type address sets.
+ */
+export function countSourceAddresses(
+  sets: readonly { type: string; addressCount: number }[],
+): number {
+  let total = 0;
+  for (const set of sets) {
+    if (set.type === 'source') total += set.addressCount;
+  }
+  return total;
+}
+
 /** Default gas estimate per batch when no live estimate is available. */
 const DEFAULT_GAS_PER_BATCH = 300_000n;
 
@@ -35,11 +48,7 @@ export function RequirementsStep() {
     if (!storage || !activeCampaign) return;
     void (async () => {
       const sets = await storage.addressSets.getByCampaign(activeCampaign.id);
-      let total = 0;
-      for (const set of sets) {
-        if (set.type === 'source') total += set.addressCount;
-      }
-      setRecipientCount(total);
+      setRecipientCount(countSourceAddresses(sets));
     })();
   }, [storage, activeCampaign]);
 

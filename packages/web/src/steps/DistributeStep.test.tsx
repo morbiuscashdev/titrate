@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DistributeStep } from './DistributeStep.js';
+import { DistributeStep, toBatchCardStatus } from './DistributeStep.js';
 
 // ---- Mock state ----
 
@@ -428,6 +428,291 @@ describe('DistributeStep', () => {
     });
   });
 
+  it('shows error and completes when distribution throws', async () => {
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 1, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+    mockDisperseTokensSimple.mockRejectedValue(new Error('RPC timeout'));
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('RPC timeout')).toBeInTheDocument();
+    });
+
+    // Phase should be complete — SpendSummary should be visible
+    expect(screen.getByText('Distribution Summary')).toBeInTheDocument();
+  });
+
+  it('counts failed batches in spend summary', async () => {
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+      { setId: 'set-1', address: '0xRecipient2000000000000000000000000000002', amount: null },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 2, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+
+    // One batch succeeds, one fails (null confirmedTxHash)
+    mockDisperseTokensSimple.mockResolvedValue([
+      {
+        batchIndex: 0,
+        recipients: ['0xRecipient1000000000000000000000000000001'],
+        amounts: [1000n],
+        attempts: [],
+        confirmedTxHash: null,
+        blockNumber: null,
+      },
+      {
+        batchIndex: 1,
+        recipients: ['0xRecipient2000000000000000000000000000002'],
+        amounts: [1000n],
+        attempts: [],
+        confirmedTxHash: '0xabc123',
+        blockNumber: null,
+      },
+    ]);
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+        batchSize: 1,
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Distribution Summary')).toBeInTheDocument();
+    });
+
+    // SpendSummary should show "1 batch failed"
+    expect(screen.getByText('1 batch failed')).toBeInTheDocument();
+  });
+
+  it('calls disperseTokens for per-recipient amount mode', async () => {
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: '500' },
+      { setId: 'set-1', address: '0xRecipient2000000000000000000000000000002', amount: '750' },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 2, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+    mockDisperseTokens.mockResolvedValue([
+      {
+        batchIndex: 0,
+        recipients: mockAddresses.map((a) => a.address),
+        amounts: [500n, 750n],
+        attempts: [],
+        confirmedTxHash: '0xdef456',
+        blockNumber: null,
+      },
+    ]);
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+        amountMode: 'per-recipient',
+        uniformAmount: null,
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(mockDisperseTokens).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contractAddress: '0x1234567890123456789012345678901234567890',
+          amounts: [500n, 750n],
+        }),
+      );
+    });
+
+    expect(screen.getByText('Distribution Summary')).toBeInTheDocument();
+  });
+
+  it('shows error when wallet is not connected and deploy is clicked', async () => {
+    walletClientData = null;
+
+    render(<DistributeStep />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /deploy contract/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/wallet not connected/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows error when chain is not configured and deploy is clicked', async () => {
+    chainOverrides = { publicClient: null };
+
+    render(<DistributeStep />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /deploy contract/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/chain not configured/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows error when token approval fails', async () => {
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 1, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+
+    // Make writeContract (approve) throw
+    walletClientData = {
+      account: { address: '0x1234' },
+      writeContract: vi.fn().mockRejectedValue(new Error('Approval rejected by user')),
+    };
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Approval rejected by user')).toBeInTheDocument();
+    });
+  });
+
+  it('invokes onProgress callback during distribution', async () => {
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 1, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+
+    // Capture and invoke onProgress inside the mock
+    mockDisperseTokensSimple.mockImplementation(async (opts: Record<string, unknown>) => {
+      const onProgress = opts.onProgress as (event: Record<string, unknown>) => void;
+      onProgress({ type: 'batch', batchIndex: 0, status: 'confirmed' });
+      return [
+        {
+          batchIndex: 0,
+          recipients: ['0xRecipient1000000000000000000000000000001'],
+          amounts: [1000n],
+          attempts: [],
+          confirmedTxHash: '0xabc123',
+          blockNumber: null,
+        },
+      ];
+    });
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Distribution Summary')).toBeInTheDocument();
+    });
+  });
+
+  it('shows error when storage.addresses.getBySet rejects', async () => {
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 1, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockRejectedValue(new Error('IDB read failed'));
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(screen.getByText('IDB read failed')).toBeInTheDocument();
+    });
+  });
+
+  it('shows generic error when storage.addresses.getBySet rejects with non-Error', async () => {
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 1, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockRejectedValue('some string error');
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Failed to load recipients')).toBeInTheDocument();
+    });
+  });
+
   it('shows recipient count in distribution plan', async () => {
     const mockAddresses = [
       { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
@@ -445,5 +730,27 @@ describe('DistributeStep', () => {
     await waitFor(() => {
       expect(screen.getByText('3')).toBeInTheDocument();
     });
+  });
+});
+
+describe('toBatchCardStatus', () => {
+  it('maps confirmed to confirmed', () => {
+    expect(toBatchCardStatus('confirmed')).toBe('confirmed');
+  });
+
+  it('maps failed to failed', () => {
+    expect(toBatchCardStatus('failed')).toBe('failed');
+  });
+
+  it('maps signing to pending', () => {
+    expect(toBatchCardStatus('signing')).toBe('pending');
+  });
+
+  it('maps unknown status to pending', () => {
+    expect(toBatchCardStatus('anything-else')).toBe('pending');
+  });
+
+  it('maps empty string to pending', () => {
+    expect(toBatchCardStatus('')).toBe('pending');
   });
 });

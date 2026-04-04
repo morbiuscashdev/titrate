@@ -1,24 +1,46 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AmountsStep } from './AmountsStep.js';
+import { AmountsStep, canSubmitAmounts } from './AmountsStep.js';
 
 const mockSaveCampaign = vi.fn().mockResolvedValue(undefined);
 const mockSetActiveStep = vi.fn();
 
-const baseCampaign = {
+type CampaignLike = {
+  readonly id: string;
+  readonly name: string;
+  readonly version: number;
+  readonly chainId: number;
+  readonly rpcUrl: string;
+  readonly funder: string;
+  readonly tokenAddress: string;
+  readonly tokenDecimals: number;
+  readonly contractAddress: string | null;
+  readonly contractVariant: 'simple' | 'full';
+  readonly contractName: string;
+  readonly amountMode: 'uniform' | 'variable';
+  readonly amountFormat: 'integer' | 'decimal';
+  readonly uniformAmount: string | null;
+  readonly batchSize: number;
+  readonly campaignId: string | null;
+  readonly pinnedBlock: number | null;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+};
+
+const baseCampaign: CampaignLike = {
   id: 'campaign-1',
   name: 'Test',
   version: 1,
   chainId: 1,
   rpcUrl: '',
-  funder: '0x0000000000000000000000000000000000000000' as const,
-  tokenAddress: '0x0000000000000000000000000000000000000000' as const,
+  funder: '0x0000000000000000000000000000000000000000',
+  tokenAddress: '0x0000000000000000000000000000000000000000',
   tokenDecimals: 18,
   contractAddress: null,
-  contractVariant: 'simple' as const,
+  contractVariant: 'simple',
   contractName: '',
-  amountMode: 'uniform' as const,
-  amountFormat: 'integer' as const,
+  amountMode: 'uniform',
+  amountFormat: 'integer',
   uniformAmount: null,
   batchSize: 100,
   campaignId: null,
@@ -27,7 +49,7 @@ const baseCampaign = {
   updatedAt: Date.now(),
 };
 
-let activeCampaignOverride: typeof baseCampaign | null = baseCampaign;
+let activeCampaignOverride: CampaignLike | null = baseCampaign;
 
 vi.mock('../providers/CampaignProvider.js', () => ({
   useCampaign: () => ({
@@ -174,5 +196,41 @@ describe('AmountsStep', () => {
     fireEvent.click(screen.getByText('Save & Continue'));
     // saveCampaign should NOT be called since trimmed amount is empty
     expect(mockSaveCampaign).not.toHaveBeenCalled();
+  });
+
+  it('does not save when activeCampaign is null', () => {
+    activeCampaignOverride = null;
+    render(<AmountsStep />);
+    // The button should be disabled in uniform mode with no amount,
+    // but even if forced, handleContinue early-returns
+    expect(screen.getByText('Save & Continue')).toBeDisabled();
+    expect(mockSaveCampaign).not.toHaveBeenCalled();
+  });
+
+  it('does not save when uniform mode and amount is empty and campaign exists', () => {
+    render(<AmountsStep />);
+    // Default uniform mode, no amount entered
+    fireEvent.click(screen.getByText('Save & Continue'));
+    expect(mockSaveCampaign).not.toHaveBeenCalled();
+  });
+});
+
+describe('canSubmitAmounts', () => {
+  it('returns true for variable mode regardless of amount', () => {
+    expect(canSubmitAmounts('variable', '')).toBe(true);
+    expect(canSubmitAmounts('variable', '  ')).toBe(true);
+    expect(canSubmitAmounts('variable', '100')).toBe(true);
+  });
+
+  it('returns false for uniform mode with empty amount', () => {
+    expect(canSubmitAmounts('uniform', '')).toBe(false);
+  });
+
+  it('returns false for uniform mode with whitespace-only amount', () => {
+    expect(canSubmitAmounts('uniform', '   ')).toBe(false);
+  });
+
+  it('returns true for uniform mode with non-empty amount', () => {
+    expect(canSubmitAmounts('uniform', '1000')).toBe(true);
   });
 });

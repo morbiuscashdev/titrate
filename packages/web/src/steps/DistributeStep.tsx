@@ -20,7 +20,7 @@ import type { BatchStatusCardProps } from '../components/BatchStatusCard.js';
 type DistributePhase = 'ready' | 'deploying' | 'approving' | 'distributing' | 'complete';
 
 /** Map SDK batch progress status to the UI card status. */
-function toBatchCardStatus(sdkStatus: string): BatchStatusCardProps['status'] {
+export function toBatchCardStatus(sdkStatus: string): BatchStatusCardProps['status'] {
   if (sdkStatus === 'confirmed') return 'confirmed';
   if (sdkStatus === 'failed') return 'failed';
   return 'pending';

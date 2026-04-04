@@ -169,4 +169,29 @@ describe('WalletStep', () => {
     render(<WalletStep />);
     expect(screen.getByText('Wallet')).toBeInTheDocument();
   });
+
+  it('does not call deriveHotWallet when no active campaign', async () => {
+    walletOverrides = {
+      isConnected: true,
+      address: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
+    };
+    campaignOverrides = { activeCampaign: null };
+
+    render(<WalletStep />);
+    fireEvent.click(screen.getByRole('button', { name: /derive hot wallet/i }));
+
+    // handleDerive early-returns because activeCampaign is null
+    expect(mockDeriveHotWallet).not.toHaveBeenCalled();
+  });
+
+  it('disables derive button when no active campaign', () => {
+    walletOverrides = {
+      isConnected: true,
+      address: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
+    };
+    campaignOverrides = { activeCampaign: null };
+
+    render(<WalletStep />);
+    expect(screen.getByRole('button', { name: /derive hot wallet/i })).toBeDisabled();
+  });
 });

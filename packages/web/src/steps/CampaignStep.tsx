@@ -18,6 +18,14 @@ const chainOptions = SUPPORTED_CHAINS.map((c) => ({
 type ContractVariant = 'simple' | 'full';
 
 /**
+ * Clamp a batch size input value to a minimum of 1.
+ * Non-numeric or falsy values default to 1.
+ */
+export function clampBatchSize(value: string): number {
+  return Math.max(1, Number(value) || 1);
+}
+
+/**
  * Step 1: Campaign setup form.
  *
  * Collects chain selection, token address, contract configuration,
@@ -223,7 +231,7 @@ export function CampaignStep() {
           <input
             type="number"
             value={batchSize}
-            onChange={(e) => setBatchSize(Math.max(1, Number(e.target.value) || 1))}
+            onChange={(e) => setBatchSize(clampBatchSize(e.target.value))}
             min={1}
             className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />

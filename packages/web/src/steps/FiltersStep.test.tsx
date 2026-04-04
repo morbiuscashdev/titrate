@@ -3,37 +3,45 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FiltersStep } from './FiltersStep.js';
 
 const mockSetActiveStep = vi.fn();
+const mockCompleteStep = vi.fn();
 const mockPutPipelineConfig = vi.fn().mockResolvedValue(undefined);
+
+const defaultCampaign = {
+  id: 'campaign-1',
+  name: 'Test',
+  version: 1,
+  chainId: 1,
+  rpcUrl: '',
+  funder: '0x0000000000000000000000000000000000000000',
+  tokenAddress: '0x0000000000000000000000000000000000000000',
+  tokenDecimals: 18,
+  contractAddress: null,
+  contractVariant: 'simple',
+  contractName: '',
+  amountMode: 'uniform',
+  amountFormat: 'integer',
+  uniformAmount: null,
+  batchSize: 100,
+  campaignId: null,
+  pinnedBlock: null,
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+};
+
+let activeCampaignOverride: typeof defaultCampaign | null = defaultCampaign;
+let storageOverride: { pipelineConfigs: { put: ReturnType<typeof vi.fn> } } | null = {
+  pipelineConfigs: { put: mockPutPipelineConfig },
+};
 
 vi.mock('../providers/CampaignProvider.js', () => ({
   useCampaign: () => ({
-    activeCampaign: {
-      id: 'campaign-1',
-      name: 'Test',
-      version: 1,
-      chainId: 1,
-      rpcUrl: '',
-      funder: '0x0000000000000000000000000000000000000000',
-      tokenAddress: '0x0000000000000000000000000000000000000000',
-      tokenDecimals: 18,
-      contractAddress: null,
-      contractVariant: 'simple',
-      contractName: '',
-      amountMode: 'uniform',
-      amountFormat: 'integer',
-      uniformAmount: null,
-      batchSize: 100,
-      campaignId: null,
-      pinnedBlock: null,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    },
+    activeCampaign: activeCampaignOverride,
     campaigns: [],
     activeStepId: 'filters',
     stepStates: [],
     setActiveCampaign: vi.fn(),
     setActiveStep: mockSetActiveStep,
-    completeStep: vi.fn(),
+    completeStep: mockCompleteStep,
     createCampaign: vi.fn(),
     saveCampaign: vi.fn(),
     refreshCampaigns: vi.fn(),
@@ -42,9 +50,7 @@ vi.mock('../providers/CampaignProvider.js', () => ({
 
 vi.mock('../providers/StorageProvider.js', () => ({
   useStorage: () => ({
-    storage: {
-      pipelineConfigs: { put: mockPutPipelineConfig },
-    },
+    storage: storageOverride,
     isUnlocked: true,
   }),
 }));
@@ -57,6 +63,8 @@ vi.stubGlobal('crypto', {
 describe('FiltersStep', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    activeCampaignOverride = defaultCampaign;
+    storageOverride = { pipelineConfigs: { put: mockPutPipelineConfig } };
   });
 
   it('renders step panel with title', () => {
@@ -163,5 +171,28 @@ describe('FiltersStep', () => {
       filterType: 'nonce-range',
       params: { minNonce: '10', maxNonce: '50' },
     });
+  });
+
+  it('does not save when storage is null', async () => {
+    storageOverride = null;
+
+    render(<FiltersStep />);
+    fireEvent.click(screen.getByText('+ Add Filter'));
+    fireEvent.click(screen.getByText('Save & Continue'));
+
+    // handleContinue early-returns, no pipeline config saved
+    expect(mockPutPipelineConfig).not.toHaveBeenCalled();
+    expect(mockSetActiveStep).not.toHaveBeenCalledWith('amounts');
+  });
+
+  it('does not save when activeCampaign is null', async () => {
+    activeCampaignOverride = null;
+
+    render(<FiltersStep />);
+    fireEvent.click(screen.getByText('+ Add Filter'));
+    fireEvent.click(screen.getByText('Save & Continue'));
+
+    // handleContinue early-returns
+    expect(mockPutPipelineConfig).not.toHaveBeenCalled();
   });
 });

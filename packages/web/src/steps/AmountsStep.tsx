@@ -8,6 +8,17 @@ type AmountMode = 'uniform' | 'variable';
 type AmountFormat = 'integer' | 'decimal';
 
 /**
+ * Determine whether the amounts form can be submitted.
+ *
+ * Variable mode is always submittable. Uniform mode requires a non-empty
+ * (trimmed) amount string.
+ */
+export function canSubmitAmounts(mode: string, amount: string): boolean {
+  if (mode === 'variable') return true;
+  return amount.trim().length > 0;
+}
+
+/**
  * Step 4: Distribution amount configuration.
  *
  * Toggles between uniform (same amount per recipient) and variable
@@ -56,7 +67,7 @@ export function AmountsStep() {
     }
   }, [activeCampaign, mode, format, uniformAmount, saveCampaign, setActiveStep]);
 
-  const canContinue = mode === 'variable' || (mode === 'uniform' && uniformAmount.trim().length > 0);
+  const canContinue = canSubmitAmounts(mode, uniformAmount);
 
   return (
     <StepPanel title="Amounts" description="Configure how much each recipient will receive.">

@@ -273,8 +273,14 @@ const mockStorage = {
   },
 };
 
+let storageReturnValue: { storage: typeof mockStorage | null; isUnlocked: boolean; unlock: ReturnType<typeof vi.fn> } = {
+  storage: mockStorage,
+  isUnlocked: false,
+  unlock: vi.fn(),
+};
+
 vi.mock('./StorageProvider.js', () => ({
-  useStorage: () => ({ storage: mockStorage, isUnlocked: false, unlock: vi.fn() }),
+  useStorage: () => storageReturnValue,
 }));
 
 // Stable UUID for deterministic tests
@@ -293,6 +299,7 @@ describe('CampaignProvider', () => {
     vi.clearAllMocks();
     uuidCounter = 0;
     mockCampaignsList.length = 0;
+    storageReturnValue = { storage: mockStorage, isUnlocked: false, unlock: vi.fn() };
   });
 
   it('loads campaigns list on mount', async () => {
@@ -489,6 +496,29 @@ describe('CampaignProvider', () => {
     expect(result.current.stepStates.find((s) => s.id === 'addresses')?.status).toBe('complete');
   });
 
+  it('setActiveCampaign handles campaign not found in storage (null)', async () => {
+    mockStorage.campaigns.get.mockResolvedValue(null);
+
+    const { result } = renderHook(() => useCampaign(), { wrapper });
+
+    await waitFor(() => {
+      expect(mockStorage.campaigns.list).toHaveBeenCalled();
+    });
+
+    act(() => {
+      result.current.setActiveCampaign('nonexistent');
+    });
+
+    await waitFor(() => {
+      // When storage.campaigns.get returns null, campaign is set to null
+      // and addressSets are cleared (line 206)
+      expect(mockStorage.campaigns.get).toHaveBeenCalledWith('nonexistent');
+    });
+
+    // activeCampaign should be null since the campaign wasn't found
+    expect(result.current.activeCampaign).toBeNull();
+  });
+
   it('setActiveCampaign with null clears active campaign', async () => {
     const campaign = makeCampaign({ id: 'c-clear' });
     mockStorage.campaigns.get.mockResolvedValue(campaign);
@@ -672,6 +702,71 @@ describe('CampaignProvider', () => {
       renderHook(() => useCampaign());
     }).toThrow('useCampaign must be used within a CampaignProvider');
     spy.mockRestore();
+  });
+
+  it('createCampaign throws when storage is null', async () => {
+    storageReturnValue = { storage: null, isUnlocked: false, unlock: vi.fn() };
+
+    const { result } = renderHook(() => useCampaign(), { wrapper });
+
+    await expect(
+      act(async () => {
+        await result.current.createCampaign({
+          funder: '0x1234567890abcdef1234567890abcdef12345678' as const,
+          name: 'Test',
+          version: 1,
+          chainId: 1,
+          rpcUrl: '',
+          tokenAddress: ZERO_ADDRESS,
+          tokenDecimals: 18,
+          contractAddress: null,
+          contractVariant: 'simple' as const,
+          contractName: '',
+          amountMode: 'uniform' as const,
+          amountFormat: 'integer' as const,
+          uniformAmount: null,
+          batchSize: 100,
+          campaignId: null,
+          pinnedBlock: null,
+        });
+      }),
+    ).rejects.toThrow('Storage not initialized');
+  });
+
+  it('saveCampaign throws when storage is null', async () => {
+    storageReturnValue = { storage: null, isUnlocked: false, unlock: vi.fn() };
+
+    const { result } = renderHook(() => useCampaign(), { wrapper });
+
+    await expect(
+      act(async () => {
+        await result.current.saveCampaign(makeCampaign());
+      }),
+    ).rejects.toThrow('Storage not initialized');
+  });
+
+  it('deleteCampaign throws when storage is null', async () => {
+    storageReturnValue = { storage: null, isUnlocked: false, unlock: vi.fn() };
+
+    const { result } = renderHook(() => useCampaign(), { wrapper });
+
+    await expect(
+      act(async () => {
+        await result.current.deleteCampaign('some-id');
+      }),
+    ).rejects.toThrow('Storage not initialized');
+  });
+
+  it('cloneCampaign throws when storage is null', async () => {
+    storageReturnValue = { storage: null, isUnlocked: false, unlock: vi.fn() };
+
+    const { result } = renderHook(() => useCampaign(), { wrapper });
+
+    await expect(
+      act(async () => {
+        await result.current.cloneCampaign('some-id');
+      }),
+    ).rejects.toThrow('Storage not initialized');
   });
 
   it('saveCampaign refreshes active campaign state when saving the active one', async () => {

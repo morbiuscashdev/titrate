@@ -124,6 +124,41 @@ describe('StorageProvider', () => {
 
     warnSpy.mockRestore();
   });
+
+  it('logs error when IDB initialization fails', async () => {
+    const { createIDBStorage } = await import('@titrate/storage-idb');
+    const mockedCreate = vi.mocked(createIDBStorage);
+    mockedCreate.mockRejectedValueOnce(new Error('IDB unavailable'));
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    renderHook(() => useStorage(), { wrapper });
+
+    await waitFor(() => {
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Failed to initialize IDB storage:',
+        expect.any(Error),
+      );
+    });
+
+    errorSpy.mockRestore();
+  });
+
+  it('unlock throws when storage is not initialized', async () => {
+    const { createIDBStorage } = await import('@titrate/storage-idb');
+    const mockedCreate = vi.mocked(createIDBStorage);
+    // Make IDB init hang so rawStorage stays null
+    mockedCreate.mockReturnValueOnce(new Promise(() => {}));
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const { result } = renderHook(() => useStorage(), { wrapper });
+
+    // storage is null because IDB never resolved
+    await expect(result.current.unlock('0xsig')).rejects.toThrow('Storage not initialized');
+
+    errorSpy.mockRestore();
+  });
 });
 
 describe('useStorage', () => {

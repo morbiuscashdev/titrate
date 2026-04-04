@@ -86,4 +86,52 @@ describe('PipelineStepEditor', () => {
     render(<PipelineStepEditor stepType="filter" filterType="contract-check" params={{}} />);
     expect(screen.getByText('No additional configuration needed.')).toBeInTheDocument();
   });
+
+  it('calls onParamsChange when Start block input changes for block-scan', () => {
+    const onParamsChange = vi.fn();
+    render(<PipelineStepEditor stepType="source" sourceType="block-scan" params={{}} onParamsChange={onParamsChange} />);
+    const inputs = screen.getAllByRole('textbox');
+    // First input is Start block, second is End block
+    fireEvent.change(inputs[0], { target: { value: '100' } });
+    expect(onParamsChange).toHaveBeenCalledWith({ startBlock: '100' });
+  });
+
+  it('calls onParamsChange when End block input changes for block-scan', () => {
+    const onParamsChange = vi.fn();
+    render(<PipelineStepEditor stepType="source" sourceType="block-scan" params={{}} onParamsChange={onParamsChange} />);
+    const inputs = screen.getAllByRole('textbox');
+    fireEvent.change(inputs[1], { target: { value: '200' } });
+    expect(onParamsChange).toHaveBeenCalledWith({ endBlock: '200' });
+  });
+
+  it('calls onParamsChange when Start block input changes for explorer-scan', () => {
+    const onParamsChange = vi.fn();
+    render(<PipelineStepEditor stepType="source" sourceType="explorer-scan" params={{}} onParamsChange={onParamsChange} />);
+    const inputs = screen.getAllByRole('textbox');
+    fireEvent.change(inputs[0], { target: { value: '500' } });
+    expect(onParamsChange).toHaveBeenCalledWith({ startBlock: '500' });
+  });
+
+  it('renders no source params when sourceType is undefined', () => {
+    render(<PipelineStepEditor stepType="source" params={{}} />);
+    // Source type buttons should render, but no param fields
+    expect(screen.getByText('CSV')).toBeInTheDocument();
+    expect(screen.queryByText('File name')).not.toBeInTheDocument();
+    expect(screen.queryByText('Start block')).not.toBeInTheDocument();
+  });
+
+  it('renders no filter params when filterType is undefined', () => {
+    render(<PipelineStepEditor stepType="filter" params={{}} />);
+    // Filter type buttons should render, but no param fields
+    expect(screen.getByText('Exclude Contracts')).toBeInTheDocument();
+    expect(screen.queryByText('Minimum balance (ETH)')).not.toBeInTheDocument();
+    expect(screen.queryByText('No additional configuration needed.')).not.toBeInTheDocument();
+  });
+
+  it('calls onTypeChange when type button is clicked', () => {
+    const onTypeChange = vi.fn();
+    render(<PipelineStepEditor stepType="source" sourceType="csv" params={{}} onTypeChange={onTypeChange} />);
+    fireEvent.click(screen.getByText('Block Scan'));
+    expect(onTypeChange).toHaveBeenCalledWith('block-scan');
+  });
 });

@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CampaignStep } from './CampaignStep.js';
+import { CampaignStep, clampBatchSize } from './CampaignStep.js';
 
 const mockSaveCampaign = vi.fn().mockResolvedValue(undefined);
 const mockCreateCampaign = vi.fn().mockResolvedValue('new-id');
@@ -187,6 +187,91 @@ describe('CampaignStep', () => {
     expect(simpleButton.className).toContain('ring-blue');
   });
 
+  it('calls saveCampaign when editing an existing campaign', async () => {
+    activeCampaignOverride = {
+      id: 'existing-1',
+      name: 'Existing Campaign',
+      version: 1,
+      chainId: 1,
+      rpcUrl: 'https://eth.llamarpc.com',
+      tokenAddress: '0x0000000000000000000000000000000000000000',
+      tokenDecimals: 18,
+      contractAddress: null,
+      contractVariant: 'simple',
+      contractName: '',
+      amountMode: 'uniform',
+      amountFormat: 'integer',
+      uniformAmount: null,
+      batchSize: 100,
+      campaignId: null,
+      pinnedBlock: null,
+      funder: '0x0000000000000000000000000000000000000000',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    render(<CampaignStep />);
+
+    // The form should be pre-filled with existing campaign data
+    // Update the campaign name and save
+    fireEvent.change(screen.getByPlaceholderText('My Airdrop Campaign'), {
+      target: { value: 'Updated Campaign' },
+    });
+    fireEvent.click(screen.getByText('Save & Continue'));
+
+    await vi.waitFor(() => {
+      expect(mockSaveCampaign).toHaveBeenCalledTimes(1);
+    });
+
+    const saved = mockSaveCampaign.mock.calls[0][0];
+    expect(saved.id).toBe('existing-1');
+    expect(saved.name).toBe('Updated Campaign');
+    expect(saved.chainId).toBe(1);
+    expect(mockCreateCampaign).not.toHaveBeenCalled();
+    expect(mockSetActiveStep).toHaveBeenCalledWith('addresses');
+  });
+
+  it('uses token metadata decimals and symbol when saving existing campaign', async () => {
+    tokenMetadataMock = {
+      data: { name: 'USD Coin', symbol: 'USDC', decimals: 6 },
+      isLoading: false,
+      error: null,
+    };
+
+    activeCampaignOverride = {
+      id: 'existing-2',
+      name: 'Token Campaign',
+      version: 1,
+      chainId: 1,
+      rpcUrl: 'https://eth.llamarpc.com',
+      tokenAddress: '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48',
+      tokenDecimals: 18,
+      contractAddress: null,
+      contractVariant: 'simple',
+      contractName: '',
+      amountMode: 'uniform',
+      amountFormat: 'integer',
+      uniformAmount: null,
+      batchSize: 50,
+      campaignId: null,
+      pinnedBlock: null,
+      funder: '0x0000000000000000000000000000000000000000',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    render(<CampaignStep />);
+    fireEvent.click(screen.getByText('Save & Continue'));
+
+    await vi.waitFor(() => {
+      expect(mockSaveCampaign).toHaveBeenCalledTimes(1);
+    });
+
+    const saved = mockSaveCampaign.mock.calls[0][0];
+    expect(saved.tokenDecimals).toBe(6);
+    expect(saved.contractName).toBe('USDC');
+  });
+
   it('creates new campaign with correct data when no active campaign', async () => {
     render(<CampaignStep />);
     fireEvent.click(screen.getByText('PulseChain'));
@@ -205,5 +290,79 @@ describe('CampaignStep', () => {
     expect(config.rpcUrl).toBe('https://rpc.pulsechain.com');
     expect(config.name).toBe('New Drop');
     expect(config.contractVariant).toBe('full');
+  });
+
+  it('does not save when chainId is null', () => {
+    render(<CampaignStep />);
+    // Only fill campaign name, not chain — chainId remains null
+    fireEvent.change(screen.getByPlaceholderText('My Airdrop Campaign'), {
+      target: { value: 'Test Campaign' },
+    });
+    fireEvent.click(screen.getByText('Save & Continue'));
+    expect(mockCreateCampaign).not.toHaveBeenCalled();
+    expect(mockSaveCampaign).not.toHaveBeenCalled();
+  });
+
+  it('does not save when campaign name is blank', () => {
+    render(<CampaignStep />);
+    fireEvent.click(screen.getByText('Ethereum'));
+    // Leave name empty
+    fireEvent.click(screen.getByText('Save & Continue'));
+    expect(mockCreateCampaign).not.toHaveBeenCalled();
+    expect(mockSaveCampaign).not.toHaveBeenCalled();
+  });
+
+  it('updates RPC URL when typing in the input', () => {
+    render(<CampaignStep />);
+    const rpcInput = screen.getByPlaceholderText('https://...') as HTMLInputElement;
+    fireEvent.change(rpcInput, { target: { value: 'https://custom-rpc.io' } });
+    expect(rpcInput.value).toBe('https://custom-rpc.io');
+  });
+
+  it('updates batch size input value', () => {
+    render(<CampaignStep />);
+    const batchInput = screen.getByDisplayValue('100') as HTMLInputElement;
+    fireEvent.change(batchInput, { target: { value: '50' } });
+    expect(batchInput.value).toBe('50');
+  });
+
+  it('clamps batch size to 1 when set to 0', () => {
+    render(<CampaignStep />);
+    const batchInput = screen.getByDisplayValue('100') as HTMLInputElement;
+    fireEvent.change(batchInput, { target: { value: '0' } });
+    expect(batchInput.value).toBe('1');
+  });
+
+  it('clamps batch size to 1 when set to non-numeric', () => {
+    render(<CampaignStep />);
+    const batchInput = screen.getByDisplayValue('100') as HTMLInputElement;
+    fireEvent.change(batchInput, { target: { value: 'abc' } });
+    expect(batchInput.value).toBe('1');
+  });
+});
+
+describe('clampBatchSize', () => {
+  it('returns 1 for zero', () => {
+    expect(clampBatchSize('0')).toBe(1);
+  });
+
+  it('returns 1 for non-numeric string', () => {
+    expect(clampBatchSize('abc')).toBe(1);
+  });
+
+  it('returns 1 for empty string', () => {
+    expect(clampBatchSize('')).toBe(1);
+  });
+
+  it('returns 1 for negative value', () => {
+    expect(clampBatchSize('-5')).toBe(1);
+  });
+
+  it('returns the number for valid positive values', () => {
+    expect(clampBatchSize('50')).toBe(50);
+  });
+
+  it('returns 1 for NaN-producing input', () => {
+    expect(clampBatchSize('NaN')).toBe(1);
   });
 });
