@@ -40,6 +40,7 @@ export type TokenBalance = {
 
 export type ExplorerBusOptions = {
   readonly apiKey: string;
+  readonly busKey?: string;
   readonly fetchFn?: typeof fetch;
 };
 
