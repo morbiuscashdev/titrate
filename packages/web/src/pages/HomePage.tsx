@@ -84,6 +84,18 @@ export function HomePage() {
     navigate(`/campaign/${id}`);
   }, [createCampaign, navigate]);
 
+  // Keyboard shortcut: Cmd/Ctrl+N creates a new campaign
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'n') {
+        e.preventDefault();
+        void handleCreate();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [handleCreate]);
+
   const handleCardClick = useCallback(
     (id: string) => {
       navigate(`/campaign/${id}`);
