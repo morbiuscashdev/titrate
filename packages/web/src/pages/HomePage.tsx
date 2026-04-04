@@ -43,7 +43,7 @@ const CAMPAIGN_DEFAULTS = {
  * that creates a campaign with defaults and navigates to the campaign editor.
  */
 export function HomePage() {
-  const { campaigns, createCampaign } = useCampaign();
+  const { campaigns, createCampaign, deleteCampaign } = useCampaign();
   const navigate = useNavigate();
 
   const handleCreate = useCallback(async () => {
@@ -56,6 +56,14 @@ export function HomePage() {
       navigate(`/campaign/${id}`);
     },
     [navigate],
+  );
+
+  const handleDelete = useCallback(
+    async (event: React.MouseEvent, id: string) => {
+      event.stopPropagation();
+      await deleteCampaign(id);
+    },
+    [deleteCampaign],
   );
 
   if (campaigns.length === 0) {
@@ -87,16 +95,27 @@ export function HomePage() {
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {campaigns.map((campaign) => (
-          <CampaignCard
-            key={campaign.id}
-            name={campaign.name}
-            chainName={campaign.chainId > 0 ? (getChainConfig(campaign.chainId)?.name ?? `Chain ${campaign.chainId}`) : 'Not configured'}
-            tokenSymbol={campaign.tokenAddress === '0x0000000000000000000000000000000000000000' ? 'N/A' : `${campaign.tokenAddress.slice(0, 6)}...`}
-            addressCount={0}
-            batchProgress={{ completed: 0, total: 0 }}
-            status={deriveCampaignStatus(campaign)}
-            onClick={() => handleCardClick(campaign.id)}
-          />
+          <div key={campaign.id} className="relative group">
+            <CampaignCard
+              name={campaign.name}
+              chainName={campaign.chainId > 0 ? (getChainConfig(campaign.chainId)?.name ?? `Chain ${campaign.chainId}`) : 'Not configured'}
+              tokenSymbol={campaign.tokenAddress === '0x0000000000000000000000000000000000000000' ? 'N/A' : (campaign.contractName || `${campaign.tokenAddress.slice(0, 6)}...`)}
+              addressCount={0}
+              batchProgress={{ completed: 0, total: 0 }}
+              status={deriveCampaignStatus(campaign)}
+              onClick={() => handleCardClick(campaign.id)}
+            />
+            <button
+              type="button"
+              onClick={(e) => handleDelete(e, campaign.id)}
+              className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity rounded-full p-1 text-gray-500 hover:text-red-400 hover:bg-gray-800"
+              aria-label={`Delete ${campaign.name}`}
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
+                <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+              </svg>
+            </button>
+          </div>
         ))}
       </div>
     </div>

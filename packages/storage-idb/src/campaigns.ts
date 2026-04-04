@@ -60,5 +60,9 @@ export function createCampaignStore(db: TitrateDB): CampaignStore {
     return all.map(deserialize);
   }
 
-  return { get, getByIdentity, put, list };
+  async function remove(id: string): Promise<void> {
+    await db.delete('campaigns', id);
+  }
+
+  return { get, getByIdentity, put, list, delete: remove };
 }

@@ -143,7 +143,9 @@ export type CampaignContextValue = {
   ) => Promise<string>;
   readonly saveCampaign: (campaign: StoredCampaign) => Promise<void>;
   readonly completeStep: (stepId: StepId) => void;
+  readonly deleteCampaign: (id: string) => Promise<void>;
   readonly refreshCampaigns: () => Promise<void>;
+  readonly refreshActiveCampaign: () => Promise<void>;
 };
 
 const CampaignContext = createContext<CampaignContextValue | null>(null);
@@ -214,10 +216,37 @@ export function CampaignProvider({ children }: CampaignProviderProps) {
     setActiveStepOverride(stepId);
   }, []);
 
+  // Delete a campaign and refresh the list
+  const deleteCampaign = useCallback(
+    async (id: string): Promise<void> => {
+      if (!storage) throw new Error('Storage not initialized');
+      await storage.campaigns.delete(id);
+      if (activeCampaign?.id === id) {
+        setActiveCampaignState(null);
+        setAddressSets([]);
+        setCompletedSteps(new Set());
+        setActiveStepOverride(null);
+      }
+      await refreshCampaigns();
+    },
+    [storage, activeCampaign, refreshCampaigns],
+  );
+
   // Mark a step as explicitly completed (for steps without intrinsic data checks)
   const completeStep = useCallback((stepId: StepId) => {
     setCompletedSteps((prev) => new Set([...prev, stepId]));
   }, []);
+
+  // Refresh the active campaign's data (address sets, campaign record)
+  const refreshActiveCampaign = useCallback(async () => {
+    if (!storage || !activeCampaign) return;
+    const campaign = await storage.campaigns.get(activeCampaign.id);
+    if (campaign) {
+      setActiveCampaignState(campaign);
+      const sets = await storage.addressSets.getByCampaign(campaign.id);
+      setAddressSets(sets);
+    }
+  }, [storage, activeCampaign]);
 
   // Create a new campaign, save it, refresh the list, and return its id
   const createCampaign = useCallback(
@@ -298,8 +327,10 @@ export function CampaignProvider({ children }: CampaignProviderProps) {
       setActiveStep,
       createCampaign,
       saveCampaign,
+      deleteCampaign,
       completeStep,
       refreshCampaigns,
+      refreshActiveCampaign,
     }),
     [
       campaigns,
@@ -310,8 +341,10 @@ export function CampaignProvider({ children }: CampaignProviderProps) {
       setActiveStep,
       createCampaign,
       saveCampaign,
+      deleteCampaign,
       completeStep,
       refreshCampaigns,
+      refreshActiveCampaign,
     ],
   );
 

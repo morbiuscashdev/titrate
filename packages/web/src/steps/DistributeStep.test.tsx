@@ -1,8 +1,11 @@
-import { render, screen, fireEvent, act } from '@testing-library/react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DistributeStep } from './DistributeStep.js';
 
+// ---- Mock state ----
+
 const mockSetActiveStep = vi.fn();
+const mockSaveCampaign = vi.fn().mockResolvedValue(undefined);
 
 const defaultCampaign = {
   activeCampaign: {
@@ -14,10 +17,10 @@ const defaultCampaign = {
     tokenAddress: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
     tokenDecimals: 18,
     contractAddress: null,
-    contractVariant: 'simple',
+    contractVariant: 'simple' as const,
     contractName: 'USDC',
-    amountMode: 'uniform',
-    amountFormat: 'integer',
+    amountMode: 'uniform' as const,
+    amountFormat: 'integer' as const,
     uniformAmount: '1000',
     batchSize: 100,
     campaignId: null,
@@ -32,7 +35,8 @@ const defaultCampaign = {
   setActiveStep: mockSetActiveStep,
   setActiveCampaign: vi.fn(),
   createCampaign: vi.fn(),
-  saveCampaign: vi.fn(),
+  saveCampaign: mockSaveCampaign,
+  completeStep: vi.fn(),
   refreshCampaigns: vi.fn(),
 };
 
@@ -42,14 +46,67 @@ vi.mock('../providers/CampaignProvider.js', () => ({
   useCampaign: () => ({ ...defaultCampaign, ...campaignOverrides }),
 }));
 
+vi.mock('../providers/ChainProvider.js', () => ({
+  useChain: () => ({
+    publicClient: {
+      waitForTransactionReceipt: vi.fn().mockResolvedValue({ status: 'success' }),
+      readContract: vi.fn().mockResolvedValue(0n),
+    },
+    explorerBus: null,
+    rpcBus: null,
+    chainConfig: null,
+  }),
+}));
+
+const mockStorage = {
+  addressSets: {
+    getByCampaign: vi.fn().mockResolvedValue([]),
+  },
+  addresses: {
+    getBySet: vi.fn().mockResolvedValue([]),
+  },
+};
+
+vi.mock('../providers/StorageProvider.js', () => ({
+  useStorage: () => ({
+    storage: mockStorage,
+    isUnlocked: false,
+    unlock: vi.fn(),
+  }),
+}));
+
+vi.mock('wagmi', () => ({
+  useWalletClient: () => ({
+    data: {
+      account: { address: '0x1234' },
+      writeContract: vi.fn().mockResolvedValue('0xapprovehash'),
+    },
+  }),
+}));
+
+const mockDeployDistributor = vi.fn();
+const mockDisperseTokensSimple = vi.fn();
+const mockDisperseTokens = vi.fn();
+
+vi.mock('@titrate/sdk', () => ({
+  deployDistributor: (...args: unknown[]) => mockDeployDistributor(...args),
+  disperseTokensSimple: (...args: unknown[]) => mockDisperseTokensSimple(...args),
+  disperseTokens: (...args: unknown[]) => mockDisperseTokens(...args),
+}));
+
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.useFakeTimers();
   campaignOverrides = {};
-});
-
-afterEach(() => {
-  vi.useRealTimers();
+  mockStorage.addressSets.getByCampaign.mockResolvedValue([]);
+  mockStorage.addresses.getBySet.mockResolvedValue([]);
+  mockDeployDistributor.mockResolvedValue({
+    address: '0xDeployedContractAddress1234567890123456',
+    txHash: '0xabc123',
+    variant: 'simple',
+    name: 'USDC',
+  });
+  mockDisperseTokensSimple.mockResolvedValue([]);
+  mockDisperseTokens.mockResolvedValue([]);
 });
 
 describe('DistributeStep', () => {
@@ -93,31 +150,158 @@ describe('DistributeStep', () => {
     expect(screen.getByRole('button', { name: /start distribution/i })).toBeInTheDocument();
   });
 
-  it('shows deploying state when deploy is clicked', () => {
+  it('shows deploying state when deploy is clicked', async () => {
+    // Make deploy hang so we can observe the deploying state
+    mockDeployDistributor.mockReturnValue(new Promise(() => {}));
+
     render(<DistributeStep />);
-    fireEvent.click(screen.getByRole('button', { name: /deploy contract/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /deploy contract/i }));
+    });
     expect(screen.getByText(/deploying distribution contract/i)).toBeInTheDocument();
   });
 
-  it('shows batch timeline when distribution starts', () => {
+  it('saves contract address after successful deploy', async () => {
     render(<DistributeStep />);
-    fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
-    expect(screen.getByText(/distribution in progress/i)).toBeInTheDocument();
-    expect(screen.getByText('Batch #1')).toBeInTheDocument();
-    expect(screen.getByText('Batch #2')).toBeInTheDocument();
-    expect(screen.getByText('Batch #3')).toBeInTheDocument();
-  });
 
-  it('shows spend summary on completion', () => {
-    render(<DistributeStep />);
-    fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
-
-    // Advance through all batch confirmations and final completion
-    act(() => {
-      vi.advanceTimersByTime(4000);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /deploy contract/i }));
     });
 
-    expect(screen.getByText('Distribution Summary')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockSaveCampaign).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contractAddress: '0xDeployedContractAddress1234567890123456',
+        }),
+      );
+    });
+  });
+
+  it('shows error when deploy fails', async () => {
+    mockDeployDistributor.mockRejectedValue(new Error('User rejected'));
+
+    render(<DistributeStep />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /deploy contract/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('User rejected')).toBeInTheDocument();
+    });
+  });
+
+  it('shows error when distributing with no recipients', async () => {
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/no recipients loaded/i)).toBeInTheDocument();
+    });
+  });
+
+  it('calls disperseTokensSimple for uniform mode', async () => {
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+      { setId: 'set-1', address: '0xRecipient2000000000000000000000000000002', amount: null },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 2, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+    mockDisperseTokensSimple.mockResolvedValue([
+      {
+        batchIndex: 0,
+        recipients: mockAddresses.map((a) => a.address),
+        amounts: [1000n, 1000n],
+        attempts: [],
+        confirmedTxHash: '0xabc123',
+        blockNumber: null,
+      },
+    ]);
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    // Wait for recipients to load
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(mockDisperseTokensSimple).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contractAddress: '0x1234567890123456789012345678901234567890',
+          variant: 'simple',
+          amount: 1000n,
+        }),
+      );
+    });
+  });
+
+  it('shows spend summary on completion', async () => {
+    mockDisperseTokensSimple.mockResolvedValue([
+      {
+        batchIndex: 0,
+        recipients: ['0xRecipient1000000000000000000000000000001'],
+        amounts: [1000n],
+        attempts: [],
+        confirmedTxHash: '0xabc123',
+        blockNumber: null,
+      },
+    ]);
+
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 1, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    // Wait for recipients to load
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Distribution Summary')).toBeInTheDocument();
+    });
   });
 
   it('shows uniform amount when set', () => {

@@ -73,6 +73,8 @@ export function CampaignStep() {
       const resolvedTokenAddress = normalizedTokenAddress ?? ZERO_ADDRESS;
       const resolvedDecimals = tokenMetadata?.decimals ?? 18;
 
+      const resolvedContractName = tokenMetadata?.symbol ?? activeCampaign?.contractName ?? '';
+
       if (activeCampaign) {
         const updated: StoredCampaign = {
           ...activeCampaign,
@@ -81,6 +83,7 @@ export function CampaignStep() {
           tokenAddress: resolvedTokenAddress,
           tokenDecimals: resolvedDecimals,
           contractVariant,
+          contractName: resolvedContractName,
           name: campaignName.trim(),
           batchSize,
         };
@@ -96,7 +99,7 @@ export function CampaignStep() {
           tokenDecimals: resolvedDecimals,
           contractAddress: null,
           contractVariant,
-          contractName: '',
+          contractName: resolvedContractName,
           amountMode: 'uniform',
           amountFormat: 'integer',
           uniformAmount: null,

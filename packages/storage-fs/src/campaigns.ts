@@ -1,4 +1,4 @@
-import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, readdir, mkdir, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Address } from 'viem';
 import type { CampaignStore, StoredCampaign } from '@titrate/sdk';
@@ -78,5 +78,14 @@ export function createCampaignStore(baseDir: string): CampaignStore {
     return campaigns;
   }
 
-  return { get, getByIdentity, put, list };
+  async function remove(id: string): Promise<void> {
+    await ensureDir();
+    try {
+      await unlink(join(dir, `${id}.json`));
+    } catch {
+      // File may not exist — ignore
+    }
+  }
+
+  return { get, getByIdentity, put, list, delete: remove };
 }

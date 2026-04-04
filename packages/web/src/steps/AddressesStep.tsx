@@ -28,7 +28,7 @@ function parseManualAddresses(text: string): readonly CSVRow[] {
  * advances to filters on continue.
  */
 export function AddressesStep() {
-  const { activeCampaign, setActiveStep } = useCampaign();
+  const { activeCampaign, setActiveStep, refreshActiveCampaign } = useCampaign();
   const { storage } = useStorage();
 
   const [addresses, setAddresses] = useState<readonly CSVRow[]>([]);
@@ -135,11 +135,12 @@ export function AddressesStep() {
           amount: row.amount ?? null,
         })),
       );
+      await refreshActiveCampaign();
       setActiveStep('filters');
     } finally {
       setIsSaving(false);
     }
-  }, [storage, activeCampaign, addresses, fileName, setActiveStep]);
+  }, [storage, activeCampaign, addresses, fileName, setActiveStep, refreshActiveCampaign]);
 
   const previewAddresses = addresses.slice(0, 5);
 

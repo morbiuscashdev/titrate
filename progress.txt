@@ -93,10 +93,24 @@ C (component library) ✅ → B (distribution MVP) ✅ → A (full app) → Z (a
 - HomePage shows real chain names from SDK (getChainConfig)
 - RequirementsStep loads recipient count from address sets in storage
 
-## Remaining Gaps (known, acceptable for MVP)
-- DistributeStep uses placeholder setTimeout logic (no real SDK distributor wired)
+### Phase B: DistributeStep Real Wiring (complete)
+- DistributeStep now calls real deployDistributor + disperseTokensSimple/disperseTokens from SDK
+- Loads recipients from IDB storage on mount
+- onProgress callback wired to BatchTimeline for live batch status
+- SpendSummary computed from real BatchResult data
+- Error handling for missing wallet, chain, contract, empty recipients
+- 177 web tests passing (15 for DistributeStep alone)
+
+## Test Counts
+- Contracts: 49 tests
+- SDK: 394 tests passing (2 Anvil-dependent failures expected)
+- TUI: 33 tests passing (2 Anvil e2e failures expected)
+- storage-fs: 13 tests
+- storage-idb: 36 tests
+- Web: 177 tests
+- Total: ~702 tests
 
 ## Next Steps
-1. Wire DistributeStep to real SDK distributor (deploy + disperse)
-2. Phase A: full app (multi-campaign dashboard, campaign CRUD, clone/archive)
-3. Request caching layer (hash-based pipeline result caching in IDB)
+1. Phase A: full app (multi-campaign dashboard, campaign CRUD, clone/archive)
+2. Request caching layer (hash-based pipeline result caching in IDB)
+3. Token approval flow before distribution (approveOperator / increaseOperatorAllowance)

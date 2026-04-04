@@ -62,6 +62,7 @@ export interface CampaignStore {
   getByIdentity(funder: Address, name: string, version: number): Promise<StoredCampaign | null>;
   put(campaign: StoredCampaign): Promise<void>;
   list(): Promise<readonly StoredCampaign[]>;
+  delete(id: string): Promise<void>;
 }
 
 export interface AddressSetStore {

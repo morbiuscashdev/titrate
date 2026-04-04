@@ -37,6 +37,8 @@ vi.mock('../providers/CampaignProvider.js', () => ({
     createCampaign: vi.fn(),
     saveCampaign: vi.fn(),
     refreshCampaigns: vi.fn(),
+    refreshActiveCampaign: vi.fn().mockResolvedValue(undefined),
+    completeStep: vi.fn(),
   }),
 }));
 

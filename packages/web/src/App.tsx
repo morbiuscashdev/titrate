@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route } from 'react-router';
+import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { ThemeProvider } from './providers/ThemeProvider.js';
 import { WalletProvider } from './providers/WalletProvider.js';
 import { StorageProvider } from './providers/StorageProvider.js';
@@ -53,6 +54,7 @@ function HeaderWalletBadge() {
 
 export function App() {
   return (
+    <ErrorBoundary>
     <ThemeProvider>
       <WalletProvider>
         <StorageProvider>
@@ -73,5 +75,6 @@ export function App() {
         </StorageProvider>
       </WalletProvider>
     </ThemeProvider>
+    </ErrorBoundary>
   );
 }

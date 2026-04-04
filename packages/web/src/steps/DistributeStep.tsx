@@ -1,84 +1,336 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { useWalletClient } from 'wagmi';
+import { erc20Abi, formatUnits } from 'viem';
+import type { Address } from 'viem';
+import {
+  deployDistributor,
+  disperseTokens,
+  disperseTokensSimple,
+} from '@titrate/sdk';
+import type { BatchResult, ProgressEvent, StoredAddress } from '@titrate/sdk';
 import { StepPanel } from '../components/StepPanel.js';
 import { BatchTimeline } from '../components/BatchTimeline.js';
 import { SpendSummary } from '../components/SpendSummary.js';
 import { useCampaign } from '../providers/CampaignProvider.js';
+import { useChain } from '../providers/ChainProvider.js';
+import { useStorage } from '../providers/StorageProvider.js';
 import type { BatchStatusCardProps } from '../components/BatchStatusCard.js';
 
 /** Distribution workflow phase. */
-type DistributePhase = 'ready' | 'deploying' | 'distributing' | 'complete';
+type DistributePhase = 'ready' | 'deploying' | 'approving' | 'distributing' | 'complete';
+
+/** Map SDK batch progress status to the UI card status. */
+function toBatchCardStatus(sdkStatus: string): BatchStatusCardProps['status'] {
+  if (sdkStatus === 'confirmed') return 'confirmed';
+  if (sdkStatus === 'failed') return 'failed';
+  return 'pending';
+}
 
 /**
  * Seventh campaign step: deploy contract and distribute tokens.
  *
- * Currently renders placeholder UI for the distribution workflow.
- * Actual contract deployment and batch distribution logic will be
- * wired to real SDK calls in a later phase.
+ * Integrates with the SDK's deployDistributor, disperseTokensSimple,
+ * and disperseTokens to perform real on-chain distribution.
  */
 export function DistributeStep() {
-  const { activeCampaign } = useCampaign();
+  const { activeCampaign, saveCampaign } = useCampaign();
+  const { publicClient } = useChain();
+  const { storage } = useStorage();
+  const { data: walletClient } = useWalletClient();
+
   const [phase, setPhase] = useState<DistributePhase>('ready');
   const [batches, setBatches] = useState<readonly BatchStatusCardProps[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [recipients, setRecipients] = useState<readonly StoredAddress[]>([]);
+  const [results, setResults] = useState<readonly BatchResult[]>([]);
+  const recipientsLoadedRef = useRef(false);
 
   const batchSize = activeCampaign?.batchSize ?? 100;
   const tokenSymbol = activeCampaign?.contractName || 'TOKEN';
-  const hasContract = activeCampaign?.contractAddress !== null && activeCampaign?.contractAddress !== undefined;
+  const tokenDecimals = activeCampaign?.tokenDecimals ?? 18;
+  const hasContract =
+    activeCampaign?.contractAddress !== null &&
+    activeCampaign?.contractAddress !== undefined;
 
-  const handleDeploy = useCallback(() => {
+  // Load recipients from storage when campaign is active
+  useEffect(() => {
+    if (!activeCampaign || !storage || recipientsLoadedRef.current) return;
+
+    recipientsLoadedRef.current = true;
+    void (async () => {
+      try {
+        const sets = await storage.addressSets.getByCampaign(activeCampaign.id);
+        const sourceSets = sets.filter((s) => s.type === 'source');
+        const allAddresses: StoredAddress[] = [];
+        for (const set of sourceSets) {
+          const addrs = await storage.addresses.getBySet(set.id);
+          allAddresses.push(...addrs);
+        }
+        setRecipients(allAddresses);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Failed to load recipients';
+        setError(message);
+      }
+    })();
+  }, [activeCampaign, storage]);
+
+  // Reset loaded flag when campaign changes
+  useEffect(() => {
+    recipientsLoadedRef.current = false;
+    setRecipients([]);
+    setError(null);
+    setBatches([]);
+    setResults([]);
+    setPhase('ready');
+  }, [activeCampaign?.id]);
+
+  const handleDeploy = useCallback(async () => {
+    if (!activeCampaign) return;
+
+    if (!walletClient) {
+      setError('Wallet not connected. Please connect your wallet first.');
+      return;
+    }
+
+    if (!publicClient) {
+      setError('Chain not configured. Please select a chain first.');
+      return;
+    }
+
+    setError(null);
     setPhase('deploying');
-    // Placeholder: simulate deploy completion
-    setTimeout(() => {
-      setPhase('ready');
-    }, 1500);
-  }, []);
 
-  const handleDistribute = useCallback(() => {
+    try {
+      const result = await deployDistributor({
+        variant: activeCampaign.contractVariant,
+        name: activeCampaign.contractName,
+        walletClient,
+        publicClient,
+      });
+
+      await saveCampaign({
+        ...activeCampaign,
+        contractAddress: result.address,
+      });
+
+      setPhase('ready');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Contract deployment failed';
+      setError(message);
+      setPhase('ready');
+    }
+  }, [activeCampaign, walletClient, publicClient, saveCampaign]);
+
+  const handleDistribute = useCallback(async () => {
+    if (!activeCampaign) return;
+
+    if (!walletClient) {
+      setError('Wallet not connected. Please connect your wallet first.');
+      return;
+    }
+
+    if (!publicClient) {
+      setError('Chain not configured. Please select a chain first.');
+      return;
+    }
+
+    if (!activeCampaign.contractAddress) {
+      setError('Contract not deployed. Please deploy the contract first.');
+      return;
+    }
+
+    if (recipients.length === 0) {
+      setError('No recipients loaded. Please add addresses first.');
+      return;
+    }
+
+    setError(null);
+
+    // Compute total ERC-20 needed for approval
+    let totalNeeded = 0n;
+    if (activeCampaign.amountMode === 'uniform') {
+      totalNeeded = BigInt(activeCampaign.uniformAmount ?? '0') * BigInt(recipients.length);
+    } else {
+      for (const r of recipients) {
+        totalNeeded += BigInt(r.amount ?? '0');
+      }
+    }
+
+    // Check and request ERC-20 approval if needed
+    if (totalNeeded > 0n) {
+      setPhase('approving');
+      try {
+        const currentAllowance = await publicClient.readContract({
+          address: activeCampaign.tokenAddress,
+          abi: erc20Abi,
+          functionName: 'allowance',
+          args: [walletClient.account!.address, activeCampaign.contractAddress as Address],
+        }) as bigint;
+
+        if (currentAllowance < totalNeeded) {
+          const approveHash = await walletClient.writeContract({
+            address: activeCampaign.tokenAddress,
+            abi: erc20Abi,
+            functionName: 'approve',
+            args: [activeCampaign.contractAddress as Address, totalNeeded],
+            account: walletClient.account!,
+            chain: undefined,
+          });
+          await publicClient.waitForTransactionReceipt({ hash: approveHash });
+        }
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : 'Token approval failed';
+        setError(message);
+        setPhase('ready');
+        return;
+      }
+    }
+
     setPhase('distributing');
 
-    // Placeholder: create mock batches to show timeline progress
-    const mockBatchCount = 3;
-    const mockBatches: BatchStatusCardProps[] = Array.from(
-      { length: mockBatchCount },
+    const totalBatches = Math.ceil(recipients.length / batchSize);
+    const initialBatches: BatchStatusCardProps[] = Array.from(
+      { length: totalBatches },
       (_, index) => ({
         batchIndex: index,
-        recipientCount: batchSize,
+        recipientCount: Math.min(
+          batchSize,
+          recipients.length - index * batchSize,
+        ),
         status: 'pending' as const,
       }),
     );
-    setBatches(mockBatches);
+    setBatches(initialBatches);
 
-    // Placeholder: simulate batch completion one at a time
-    let current = 0;
-    const interval = setInterval(() => {
-      if (current >= mockBatchCount) {
-        clearInterval(interval);
-        setPhase('complete');
-        return;
-      }
+    const onProgress = (event: ProgressEvent) => {
+      if (event.type !== 'batch') return;
+
       setBatches((prev) =>
-        prev.map((batch, index) =>
-          index === current
-            ? { ...batch, status: 'confirmed' as const }
+        prev.map((batch) =>
+          batch.batchIndex === event.batchIndex
+            ? { ...batch, status: toBatchCardStatus(event.status) }
             : batch,
         ),
       );
-      current += 1;
-    }, 1000);
-  }, [batchSize]);
+    };
+
+    try {
+      const recipientAddresses = recipients.map((r) => r.address);
+      let batchResults: BatchResult[];
+
+      if (activeCampaign.amountMode === 'uniform') {
+        batchResults = await disperseTokensSimple({
+          contractAddress: activeCampaign.contractAddress as Address,
+          variant: activeCampaign.contractVariant,
+          token: activeCampaign.tokenAddress,
+          recipients: recipientAddresses,
+          amount: BigInt(activeCampaign.uniformAmount ?? '0'),
+          walletClient,
+          publicClient,
+          batchSize,
+          onProgress,
+        });
+      } else {
+        const amounts = recipients.map((r) => BigInt(r.amount ?? '0'));
+        batchResults = await disperseTokens({
+          contractAddress: activeCampaign.contractAddress as Address,
+          variant: activeCampaign.contractVariant,
+          token: activeCampaign.tokenAddress,
+          recipients: recipientAddresses,
+          amounts,
+          walletClient,
+          publicClient,
+          batchSize,
+          onProgress,
+        });
+      }
+
+      setResults(batchResults);
+
+      // Update batches with final tx hashes
+      setBatches((prev) =>
+        prev.map((batch) => {
+          const result = batchResults.find(
+            (r) => r.batchIndex === batch.batchIndex,
+          );
+          if (!result) return batch;
+          return {
+            ...batch,
+            status: result.confirmedTxHash ? 'confirmed' : 'failed',
+            txHash: result.confirmedTxHash ?? undefined,
+          };
+        }),
+      );
+
+      setPhase('complete');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Distribution failed';
+      setError(message);
+      setPhase('complete');
+    }
+  }, [
+    activeCampaign,
+    walletClient,
+    publicClient,
+    recipients,
+    batchSize,
+  ]);
+
+  // Compute spend summary from results
+  const summaryData = (() => {
+    const recipientSet = new Set<string>();
+    let totalTokensSent = 0n;
+    let confirmedCount = 0;
+    let failedCount = 0;
+
+    for (const result of results) {
+      if (result.confirmedTxHash) {
+        confirmedCount++;
+        for (const addr of result.recipients) {
+          recipientSet.add(addr.toLowerCase());
+        }
+        for (const amount of result.amounts) {
+          totalTokensSent += amount;
+        }
+      } else {
+        failedCount++;
+      }
+    }
+
+    return {
+      totalTokensSent: formatUnits(totalTokensSent, tokenDecimals),
+      uniqueRecipients: recipientSet.size,
+      batchCount: results.length,
+      confirmedBatches: confirmedCount,
+      failedBatches: failedCount,
+    };
+  })();
 
   return (
-    <StepPanel title="Distribute" description="Deploy the distribution contract and send tokens to recipients.">
+    <StepPanel
+      title="Distribute"
+      description="Deploy the distribution contract and send tokens to recipients."
+    >
       {!activeCampaign && (
         <p className="text-sm text-gray-400">No active campaign selected.</p>
       )}
 
       {activeCampaign && (
         <div className="space-y-6">
+          {/* Error display */}
+          {error && (
+            <div className="rounded-md bg-red-900/20 p-3 text-sm text-red-400 ring-1 ring-red-900/30">
+              {error}
+            </div>
+          )}
+
           {/* Pre-distribution summary */}
           {phase === 'ready' && (
             <div className="space-y-4">
               <div className="rounded-lg bg-gray-900 p-4 ring-1 ring-gray-800">
-                <h3 className="text-sm font-semibold text-white mb-3">Distribution Plan</h3>
+                <h3 className="text-sm font-semibold text-white mb-3">
+                  Distribution Plan
+                </h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-400">Campaign</span>
@@ -90,14 +342,24 @@ export function DistributeStep() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">Amount mode</span>
-                    <span className="text-white">{activeCampaign.amountMode}</span>
+                    <span className="text-white">
+                      {activeCampaign.amountMode}
+                    </span>
                   </div>
                   {activeCampaign.uniformAmount && (
                     <div className="flex justify-between">
-                      <span className="text-gray-400">Amount per recipient</span>
-                      <span className="text-white">{activeCampaign.uniformAmount} {tokenSymbol}</span>
+                      <span className="text-gray-400">
+                        Amount per recipient
+                      </span>
+                      <span className="text-white">
+                        {activeCampaign.uniformAmount} {tokenSymbol}
+                      </span>
                     </div>
                   )}
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Recipients</span>
+                    <span className="text-white">{recipients.length}</span>
+                  </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">Contract</span>
                     <span className="text-white">
@@ -131,7 +393,18 @@ export function DistributeStep() {
           {/* Deploying state */}
           {phase === 'deploying' && (
             <div className="rounded-lg bg-gray-900 p-6 ring-1 ring-gray-800 text-center">
-              <p className="text-sm text-gray-400">Deploying distribution contract...</p>
+              <p className="text-sm text-gray-400">
+                Deploying distribution contract...
+              </p>
+            </div>
+          )}
+
+          {/* Approving state */}
+          {phase === 'approving' && (
+            <div className="rounded-lg bg-gray-900 p-6 ring-1 ring-gray-800 text-center">
+              <p className="text-sm text-gray-400">
+                Approving token spend... Please confirm in your wallet.
+              </p>
             </div>
           )}
 
@@ -149,12 +422,12 @@ export function DistributeStep() {
               {phase === 'complete' && (
                 <SpendSummary
                   totalGasEstimate="--"
-                  totalTokensSent="--"
+                  totalTokensSent={summaryData.totalTokensSent}
                   tokenSymbol={tokenSymbol}
-                  uniqueRecipients={0}
-                  batchCount={batches.length}
-                  confirmedBatches={batches.filter((b) => b.status === 'confirmed').length}
-                  failedBatches={batches.filter((b) => b.status === 'failed').length}
+                  uniqueRecipients={summaryData.uniqueRecipients}
+                  batchCount={summaryData.batchCount}
+                  confirmedBatches={summaryData.confirmedBatches}
+                  failedBatches={summaryData.failedBatches}
                 />
               )}
             </div>
