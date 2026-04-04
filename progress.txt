@@ -110,7 +110,17 @@ C (component library) ✅ → B (distribution MVP) ✅ → A (full app) → Z (a
 - Web: 177 tests
 - Total: ~702 tests
 
+### Phase A: Campaign CRUD (partial)
+- Campaign delete: CampaignStore.delete() added to SDK, IDB, FS; wired into HomePage
+- Campaign clone: cloneCampaign() copies config with new ID, clears contractAddress
+- Real address counts loaded from storage in HomePage dashboard cards
+- Token symbol saved from probe to contractName for display downstream
+- Error boundary wraps entire app for crash resilience
+- ERC-20 approval flow checks allowance before distribution, prompts approve if needed
+- refreshActiveCampaign() updates step states after address saving
+
 ## Next Steps
-1. Phase A: full app (multi-campaign dashboard, campaign CRUD, clone/archive)
+1. Phase A continued: campaign archive status, batch progress in cards
 2. Request caching layer (hash-based pipeline result caching in IDB)
-3. Token approval flow before distribution (approveOperator / increaseOperatorAllowance)
+3. Campaign rename inline editing
+4. Loading states / skeleton screens
