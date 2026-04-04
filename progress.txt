@@ -144,8 +144,13 @@ C (component library) ✅ → B (distribution MVP) ✅ → A (full app) → Z (a
 - Web: 183 tests
 - Total: ~708 tests
 
+### Phase A: Final Polish (complete)
+- Code splitting: manual chunks for vendor-react (48KB), vendor-wallet (348KB), vendor-reown (1.4MB)
+- Campaign export/import: JSON download + file upload on Settings page
+- Keyboard shortcut: Cmd/Ctrl+N creates new campaign from HomePage
+
 ## Next Steps
 1. E2E smoke test with real wallet + testnet
-2. Code splitting for Reown AppKit chunk (555KB)
-3. Campaign export/import (JSON backup)
-4. Keyboard shortcuts (Ctrl+N new campaign, etc.)
+2. Landing page or onboarding flow for new users
+3. Campaign status notifications (toast/snackbar)
+4. Responsive mobile layout improvements
