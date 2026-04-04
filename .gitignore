@@ -3,6 +3,6 @@ dist/
 .superpowers/
 .DS_Store
 *.log
-cache/
+packages/contracts/cache/
 out/
 coverage/
