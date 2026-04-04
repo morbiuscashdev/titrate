@@ -43,11 +43,14 @@ export type {
   BatchStore,
   WalletStore,
   PipelineConfigStore,
+  ChainConfigStore,
+  AppSettingsStore,
   StoredCampaign,
   StoredAddressSet,
   StoredAddress,
   StoredBatch,
   StoredWallet,
+  StoredChainConfig,
 } from './storage/index.js';
 
 // Utils

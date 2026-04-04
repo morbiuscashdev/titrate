@@ -44,6 +44,19 @@ export type StoredWallet = {
   readonly createdAt: number;
 };
 
+export type StoredChainConfig = {
+  readonly id: string;
+  readonly chainId: number;
+  readonly name: string;
+  readonly rpcUrl: string;
+  readonly rpcBusKey: string;
+  readonly explorerApiUrl: string;
+  readonly explorerApiKey: string;
+  readonly explorerBusKey: string;
+  readonly trueBlocksUrl: string;
+  readonly trueBlocksBusKey: string;
+};
+
 export interface CampaignStore {
   get(id: string): Promise<StoredCampaign | null>;
   getByIdentity(funder: Address, name: string, version: number): Promise<StoredCampaign | null>;
@@ -80,6 +93,20 @@ export interface PipelineConfigStore {
   put(campaignId: string, config: PipelineConfig): Promise<void>;
 }
 
+export interface ChainConfigStore {
+  get(id: string): Promise<StoredChainConfig | null>;
+  getByChainId(chainId: number): Promise<StoredChainConfig | null>;
+  put(config: StoredChainConfig): Promise<void>;
+  list(): Promise<readonly StoredChainConfig[]>;
+  delete(id: string): Promise<void>;
+}
+
+export interface AppSettingsStore {
+  get(key: string): Promise<string | null>;
+  put(key: string, value: string): Promise<void>;
+  delete(key: string): Promise<void>;
+}
+
 export interface Storage {
   readonly campaigns: CampaignStore;
   readonly addressSets: AddressSetStore;
@@ -87,4 +114,6 @@ export interface Storage {
   readonly batches: BatchStore;
   readonly wallets: WalletStore;
   readonly pipelineConfigs: PipelineConfigStore;
+  readonly chainConfigs: ChainConfigStore;
+  readonly appSettings: AppSettingsStore;
 }
