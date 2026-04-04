@@ -6,16 +6,16 @@ import { useCampaign } from '../providers/CampaignProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
 import { getChainConfig } from '@titrate/sdk';
 
-/** Derive a display status from campaign data for the CampaignCard badge. */
-function deriveCampaignStatus(campaign: {
-  readonly chainId: number;
-  readonly tokenAddress: string;
-}): 'draft' | 'ready' | 'distributing' | 'complete' {
+/** Derive a display status from campaign data and batch progress. */
+function deriveCampaignStatus(
+  campaign: { readonly chainId: number; readonly tokenAddress: string },
+  stats?: { completedBatches: number; totalBatches: number },
+): 'draft' | 'ready' | 'distributing' | 'complete' {
   const ZERO = '0x0000000000000000000000000000000000000000';
-  if (campaign.chainId === 0 || campaign.tokenAddress === ZERO) {
-    return 'draft';
-  }
-  return 'ready';
+  if (campaign.chainId === 0 || campaign.tokenAddress === ZERO) return 'draft';
+  if (!stats || stats.totalBatches === 0) return 'ready';
+  if (stats.completedBatches >= stats.totalBatches) return 'complete';
+  return 'distributing';
 }
 
 const CAMPAIGN_DEFAULTS = {
@@ -48,19 +48,25 @@ export function HomePage() {
   const { storage } = useStorage();
   const navigate = useNavigate();
 
-  // Load address counts per campaign
-  const [addressCounts, setAddressCounts] = useState<Record<string, number>>({});
+  // Load address counts and batch progress per campaign
+  const [campaignStats, setCampaignStats] = useState<Record<string, { addresses: number; completedBatches: number; totalBatches: number }>>({});
   useEffect(() => {
     if (!storage || campaigns.length === 0) return;
     void (async () => {
-      const counts: Record<string, number> = {};
+      const stats: Record<string, { addresses: number; completedBatches: number; totalBatches: number }> = {};
       for (const campaign of campaigns) {
         const sets = await storage.addressSets.getByCampaign(campaign.id);
-        counts[campaign.id] = sets
+        const addresses = sets
           .filter((s) => s.type === 'source')
           .reduce((sum, s) => sum + s.addressCount, 0);
+        const batches = await storage.batches.getByCampaign(campaign.id);
+        stats[campaign.id] = {
+          addresses,
+          completedBatches: batches.filter((b) => b.status === 'confirmed').length,
+          totalBatches: batches.length,
+        };
       }
-      setAddressCounts(counts);
+      setCampaignStats(stats);
     })();
   }, [storage, campaigns]);
 
@@ -127,9 +133,12 @@ export function HomePage() {
               name={campaign.name}
               chainName={campaign.chainId > 0 ? (getChainConfig(campaign.chainId)?.name ?? `Chain ${campaign.chainId}`) : 'Not configured'}
               tokenSymbol={campaign.tokenAddress === '0x0000000000000000000000000000000000000000' ? 'N/A' : (campaign.contractName || `${campaign.tokenAddress.slice(0, 6)}...`)}
-              addressCount={addressCounts[campaign.id] ?? 0}
-              batchProgress={{ completed: 0, total: 0 }}
-              status={deriveCampaignStatus(campaign)}
+              addressCount={campaignStats[campaign.id]?.addresses ?? 0}
+              batchProgress={{
+                completed: campaignStats[campaign.id]?.completedBatches ?? 0,
+                total: campaignStats[campaign.id]?.totalBatches ?? 0,
+              }}
+              status={deriveCampaignStatus(campaign, campaignStats[campaign.id])}
               onClick={() => handleCardClick(campaign.id)}
             />
             <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
