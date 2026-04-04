@@ -144,6 +144,7 @@ export type CampaignContextValue = {
   readonly saveCampaign: (campaign: StoredCampaign) => Promise<void>;
   readonly completeStep: (stepId: StepId) => void;
   readonly deleteCampaign: (id: string) => Promise<void>;
+  readonly cloneCampaign: (id: string) => Promise<string>;
   readonly refreshCampaigns: () => Promise<void>;
   readonly refreshActiveCampaign: () => Promise<void>;
 };
@@ -215,6 +216,29 @@ export function CampaignProvider({ children }: CampaignProviderProps) {
   const setActiveStep = useCallback((stepId: StepId) => {
     setActiveStepOverride(stepId);
   }, []);
+
+  // Clone a campaign with a new ID and name
+  const cloneCampaign = useCallback(
+    async (id: string): Promise<string> => {
+      if (!storage) throw new Error('Storage not initialized');
+      const source = await storage.campaigns.get(id);
+      if (!source) throw new Error(`Campaign ${id} not found`);
+      const newId = crypto.randomUUID();
+      const now = Date.now();
+      const clone: StoredCampaign = {
+        ...source,
+        id: newId,
+        name: `${source.name} (copy)`,
+        contractAddress: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await storage.campaigns.put(clone);
+      await refreshCampaigns();
+      return newId;
+    },
+    [storage, refreshCampaigns],
+  );
 
   // Delete a campaign and refresh the list
   const deleteCampaign = useCallback(
@@ -328,6 +352,7 @@ export function CampaignProvider({ children }: CampaignProviderProps) {
       createCampaign,
       saveCampaign,
       deleteCampaign,
+      cloneCampaign,
       completeStep,
       refreshCampaigns,
       refreshActiveCampaign,
@@ -342,6 +367,7 @@ export function CampaignProvider({ children }: CampaignProviderProps) {
       createCampaign,
       saveCampaign,
       deleteCampaign,
+      cloneCampaign,
       completeStep,
       refreshCampaigns,
       refreshActiveCampaign,
