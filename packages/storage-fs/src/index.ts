@@ -4,6 +4,8 @@ import { createAddressSetStore, createAddressStore } from './address-sets.js';
 import { createBatchStore } from './batches.js';
 import { createWalletStore, createPipelineConfigStore } from './wallets.js';
 
+export { createFileCacheStore } from './cache-store.js';
+
 /**
  * Creates a filesystem-backed Storage instance. All data is persisted under
  * the provided `baseDir`. Each store uses its own subdirectory.

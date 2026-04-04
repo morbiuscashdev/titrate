@@ -5,6 +5,8 @@ import { createAddressSetStore, createAddressStore } from './address-sets.js';
 import { createBatchStore } from './batches.js';
 import { createWalletStore, createPipelineConfigStore } from './wallets.js';
 
+export { createIDBCacheStore } from './cache-store.js';
+
 /**
  * Creates an IndexedDB-backed Storage instance.
  * Opens (or creates) the 'titrate' database, then wires up each store.
