@@ -202,3 +202,12 @@ export type { ValidationIssue, ValidationSeverity } from './validation/index.js'
 // Intervention
 export { createSpotCheck } from './intervention/index.js';
 export type { InterventionPoint, InterventionContext, InterventionAction, InterventionHook, InterventionConfig, InterventionEntry, InterventionJournal, SpotCheckSample, SpotCheckResult } from './intervention/index.js';
+
+// RequestBus
+export {
+  createRequestBus,
+  getOrCreateBus as getOrCreateRequestBus,
+  destroyBus,
+  destroyAllBuses as destroyAllRequestBuses,
+} from './request-bus.js';
+export type { RequestBus, RequestBusOptions } from './request-bus.js';
