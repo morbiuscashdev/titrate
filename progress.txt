@@ -160,8 +160,37 @@ C (component library) ✅ → B (distribution MVP) ✅ → A (full app) → Z (a
 - Web: 185 tests
 - Total: ~710 tests
 
+### Spec Gap Fixes (complete)
+- RPC calls routed through RequestBus for adaptive rate limiting
+- Custom chain option in CampaignStep (chain ID + name + explorer fields + rate limit group)
+- EncryptedField lock triggers unlock flow via useUnlockStorage hook
+- TitrateFull selector-scoped approval via approveOperator + getAllowance
+- getDisperseSelector pure function for correct 4-byte selector per amountMode
+
+### Batch Persistence + Resume (complete)
+- Batch results saved to storage.batches during distribution
+- batchResultToStored pure function (BigInt → string conversion)
+- Resume from last completed batch via computeResumeOffset
+- "Resume Distribution" UI with progress message
+- Auto-detect complete distributions on mount
+
+### UX Polish (complete)
+- Token allowance display in RequirementsStep (green/red vs needed)
+- Toast notification system (ToastProvider + ToastContainer, auto-dismiss 4s)
+- LoadingButton component with inline spinner + primary/secondary variants
+- Responsive mobile layout pass (9 files: flex-wrap, truncate, responsive padding)
+
+## Test Counts
+- Contracts: 49 tests
+- SDK: 394 tests passing (2 Anvil-dependent failures expected)
+- TUI: 33 tests passing (2 Anvil e2e failures expected)
+- storage-fs: 13 tests
+- storage-idb: 36 tests
+- Web: 393 tests (98% coverage)
+- Total: ~918 tests
+
 ## Next Steps
 1. E2E smoke test with real wallet + testnet
 2. Landing page or onboarding flow for new users
-3. Campaign status notifications (toast/snackbar)
-4. Responsive mobile layout improvements
+3. Accessibility audit (keyboard nav, screen reader)
+4. Light theme (add dark: prefix variants to all components)
