@@ -21,7 +21,7 @@ export function Header({ children }: HeaderProps) {
       <a href="/" className="text-lg font-semibold text-white hover:text-gray-300">
         Titrate
       </a>
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
         <ThemeToggle />
         <a
           href="/settings"

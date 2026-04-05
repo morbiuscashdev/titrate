@@ -123,8 +123,8 @@ export function SettingsPage() {
   }, [storage, form, canSave, loadConfigs]);
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
         <h1 className="text-lg font-semibold text-white">Chain Settings</h1>
         {!showForm && (
           <button
@@ -142,7 +142,7 @@ export function SettingsPage() {
 
       {!isUnlocked && (
         <div className="rounded-lg bg-yellow-900/20 p-4 ring-1 ring-yellow-900/30 mb-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm text-yellow-400">
               Storage is locked. Sensitive fields are encrypted.
             </p>
@@ -158,7 +158,7 @@ export function SettingsPage() {
       )}
 
       {showForm && (
-        <div className="rounded-lg bg-gray-900 p-6 ring-1 ring-gray-800 mb-6">
+        <div className="rounded-lg bg-gray-900 p-4 sm:p-6 ring-1 ring-gray-800 mb-6">
           <h2 className="text-sm font-semibold text-white mb-4">New Chain Configuration</h2>
 
           <div className="mb-4">
@@ -289,21 +289,21 @@ export function SettingsPage() {
         <ul className="divide-y divide-gray-800">
           {configs.map((config) => (
             <li key={config.id} className="py-4">
-              <div className="flex items-start justify-between">
-                <div className="space-y-1">
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-1 min-w-0">
                   <p className="text-sm font-medium text-white">{config.name}</p>
                   <p className="text-xs text-gray-400">Chain ID: {config.chainId}</p>
-                  <div className="flex items-center gap-2 text-xs text-gray-400">
-                    <span>RPC:</span>
+                  <div className="flex items-center gap-2 text-xs text-gray-400 min-w-0">
+                    <span className="flex-shrink-0">RPC:</span>
                     {isUnlocked ? (
-                      <span className="font-mono text-gray-300">{config.rpcUrl}</span>
+                      <span className="font-mono text-gray-300 truncate">{config.rpcUrl}</span>
                     ) : (
                       <EncryptedField ciphertext={config.rpcUrl} onUnlock={requestUnlock} />
                     )}
                   </div>
                   {config.explorerApiKey && (
-                    <div className="flex items-center gap-2 text-xs text-gray-400">
-                      <span>Explorer Key:</span>
+                    <div className="flex items-center gap-2 text-xs text-gray-400 min-w-0">
+                      <span className="flex-shrink-0">Explorer Key:</span>
                       {isUnlocked ? (
                         <span className="font-mono text-gray-300">{config.explorerApiKey}</span>
                       ) : (
@@ -315,7 +315,7 @@ export function SettingsPage() {
                 <button
                   type="button"
                   onClick={() => handleDelete(config.id)}
-                  className="text-sm text-red-400 hover:text-red-300 transition-colors"
+                  className="text-sm text-red-400 hover:text-red-300 transition-colors flex-shrink-0"
                 >
                   Delete
                 </button>

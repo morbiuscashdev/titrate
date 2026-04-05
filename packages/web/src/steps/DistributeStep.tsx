@@ -8,8 +8,9 @@ import {
   disperseTokensSimple,
   approveOperator,
   getAllowance,
+  computeResumeOffset,
 } from '@titrate/sdk';
-import type { BatchResult, ProgressEvent, StoredAddress } from '@titrate/sdk';
+import type { BatchResult, ProgressEvent, StoredAddress, StoredBatch } from '@titrate/sdk';
 import { StepPanel } from '../components/StepPanel.js';
 import { BatchTimeline } from '../components/BatchTimeline.js';
 import { SpendSummary } from '../components/SpendSummary.js';
@@ -43,6 +44,32 @@ export function toBatchCardStatus(sdkStatus: string): BatchStatusCardProps['stat
 }
 
 /**
+ * Converts a BatchResult from the SDK into a StoredBatch for IDB persistence.
+ *
+ * @param campaignId - The campaign this batch belongs to
+ * @param result - The SDK batch result to convert
+ * @returns A StoredBatch ready for storage.batches.put()
+ */
+export function batchResultToStored(
+  campaignId: string,
+  result: BatchResult,
+): StoredBatch {
+  return {
+    id: crypto.randomUUID(),
+    campaignId,
+    batchIndex: result.batchIndex,
+    recipients: result.recipients,
+    amounts: result.amounts.map((a) => a.toString()),
+    status: result.confirmedTxHash ? 'confirmed' : 'failed',
+    attempts: result.attempts,
+    confirmedTxHash: result.confirmedTxHash,
+    confirmedBlock: result.blockNumber,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+}
+
+/**
  * Seventh campaign step: deploy contract and distribute tokens.
  *
  * Integrates with the SDK's deployDistributor, disperseTokensSimple,
@@ -59,7 +86,9 @@ export function DistributeStep() {
   const [error, setError] = useState<string | null>(null);
   const [recipients, setRecipients] = useState<readonly StoredAddress[]>([]);
   const [results, setResults] = useState<readonly BatchResult[]>([]);
+  const [savedBatches, setSavedBatches] = useState<readonly StoredBatch[]>([]);
   const recipientsLoadedRef = useRef(false);
+  const savedBatchesLoadedRef = useRef(false);
 
   const batchSize = activeCampaign?.batchSize ?? 100;
   const tokenSymbol = activeCampaign?.contractName || 'TOKEN';
@@ -90,10 +119,59 @@ export function DistributeStep() {
     })();
   }, [activeCampaign, storage]);
 
-  // Reset loaded flag when campaign changes
+  // Load saved batches from IDB when campaign is active
+  useEffect(() => {
+    if (!activeCampaign || !storage || savedBatchesLoadedRef.current) return;
+
+    savedBatchesLoadedRef.current = true;
+    void (async () => {
+      try {
+        const existing = await storage.batches.getByCampaign(activeCampaign.id);
+        setSavedBatches(existing);
+
+        if (existing.length > 0) {
+          // Pre-populate timeline with saved batch cards
+          const cards: BatchStatusCardProps[] = existing.map((b) => ({
+            batchIndex: b.batchIndex,
+            recipientCount: b.recipients.length,
+            status: toBatchCardStatus(b.status),
+            txHash: b.confirmedTxHash ?? undefined,
+          }));
+          setBatches(cards);
+        }
+      } catch {
+        // Non-critical — saved batches are optional for resume
+      }
+    })();
+  }, [activeCampaign, storage]);
+
+  // Detect fully-complete distributions once both saved batches and recipients are loaded
+  useEffect(() => {
+    if (savedBatches.length === 0 || recipients.length === 0 || phase !== 'ready') return;
+
+    const expectedBatchCount = Math.ceil(recipients.length / batchSize);
+    const confirmedCount = savedBatches.filter((b) => b.status === 'confirmed').length;
+
+    if (confirmedCount < expectedBatchCount) return;
+
+    setPhase('complete');
+    const restoredResults: BatchResult[] = savedBatches.map((b) => ({
+      batchIndex: b.batchIndex,
+      recipients: b.recipients,
+      amounts: b.amounts.map((a) => BigInt(a)),
+      attempts: b.attempts,
+      confirmedTxHash: b.confirmedTxHash,
+      blockNumber: b.confirmedBlock,
+    }));
+    setResults(restoredResults);
+  }, [savedBatches, recipients, batchSize, phase]);
+
+  // Reset loaded flags when campaign changes
   useEffect(() => {
     recipientsLoadedRef.current = false;
+    savedBatchesLoadedRef.current = false;
     setRecipients([]);
+    setSavedBatches([]);
     setError(null);
     setBatches([]);
     setResults([]);
@@ -231,19 +309,39 @@ export function DistributeStep() {
 
     setPhase('distributing');
 
-    const totalBatches = Math.ceil(recipients.length / batchSize);
-    const initialBatches: BatchStatusCardProps[] = Array.from(
-      { length: totalBatches },
-      (_, index) => ({
-        batchIndex: index,
-        recipientCount: Math.min(
-          batchSize,
-          recipients.length - index * batchSize,
-        ),
-        status: 'pending' as const,
-      }),
+    // Compute resume offset to skip already-confirmed recipients
+    const resumeOffset = computeResumeOffset(savedBatches, batchSize);
+    let recipientAddresses = recipients.map((r) => r.address);
+    let variableAmounts = recipients.map((r) => BigInt(r.amount ?? '0'));
+
+    if (resumeOffset > 0) {
+      recipientAddresses = recipientAddresses.slice(resumeOffset);
+      variableAmounts = variableAmounts.slice(resumeOffset);
+    }
+
+    // Build initial timeline: keep saved batch cards, add pending for remaining
+    const totalNewBatches = Math.ceil(recipientAddresses.length / batchSize);
+    const savedCards: BatchStatusCardProps[] = savedBatches.map((b) => ({
+      batchIndex: b.batchIndex,
+      recipientCount: b.recipients.length,
+      status: toBatchCardStatus(b.status),
+      txHash: b.confirmedTxHash ?? undefined,
+    }));
+    const newCards: BatchStatusCardProps[] = Array.from(
+      { length: totalNewBatches },
+      (_, index) => {
+        const adjustedIndex = index + (resumeOffset / batchSize);
+        return {
+          batchIndex: adjustedIndex,
+          recipientCount: Math.min(
+            batchSize,
+            recipientAddresses.length - index * batchSize,
+          ),
+          status: 'pending' as const,
+        };
+      },
     );
-    setBatches(initialBatches);
+    setBatches([...savedCards, ...newCards]);
 
     const onProgress = (event: ProgressEvent) => {
       if (event.type !== 'batch') return;
@@ -258,7 +356,6 @@ export function DistributeStep() {
     };
 
     try {
-      const recipientAddresses = recipients.map((r) => r.address);
       let batchResults: BatchResult[];
 
       if (activeCampaign.amountMode === 'uniform') {
@@ -274,18 +371,23 @@ export function DistributeStep() {
           onProgress,
         });
       } else {
-        const amounts = recipients.map((r) => BigInt(r.amount ?? '0'));
         batchResults = await disperseTokens({
           contractAddress: activeCampaign.contractAddress as Address,
           variant: activeCampaign.contractVariant,
           token: activeCampaign.tokenAddress,
           recipients: recipientAddresses,
-          amounts,
+          amounts: variableAmounts,
           walletClient,
           publicClient,
           batchSize,
           onProgress,
         });
+      }
+
+      // Save each batch result to IDB
+      for (const result of batchResults) {
+        const stored = batchResultToStored(activeCampaign.id, result);
+        await storage.batches.put(stored);
       }
 
       setResults(batchResults);
@@ -317,7 +419,15 @@ export function DistributeStep() {
     publicClient,
     recipients,
     batchSize,
+    savedBatches,
+    storage,
   ]);
+
+  // Compute resume state from saved batches
+  const confirmedSavedCount = savedBatches.filter((b) => b.status === 'confirmed').length;
+  const totalSavedCount = savedBatches.length;
+  const hasIncompleteResume = totalSavedCount > 0 && confirmedSavedCount < Math.ceil(recipients.length / batchSize) && phase === 'ready';
+  const isResuming = hasIncompleteResume && confirmedSavedCount > 0;
 
   // Compute spend summary from results
   const summaryData = (() => {
@@ -370,27 +480,27 @@ export function DistributeStep() {
           {/* Pre-distribution summary */}
           {phase === 'ready' && (
             <div className="space-y-4">
-              <div className="rounded-lg bg-gray-900 p-4 ring-1 ring-gray-800">
+              <div className="rounded-lg bg-gray-900 p-3 sm:p-4 ring-1 ring-gray-800">
                 <h3 className="text-sm font-semibold text-white mb-3">
                   Distribution Plan
                 </h3>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
+                  <div className="flex justify-between gap-2">
                     <span className="text-gray-400">Campaign</span>
                     <span className="text-white">{activeCampaign.name}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between gap-2">
                     <span className="text-gray-400">Batch size</span>
                     <span className="text-white">{batchSize}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between gap-2">
                     <span className="text-gray-400">Amount mode</span>
                     <span className="text-white">
                       {activeCampaign.amountMode}
                     </span>
                   </div>
                   {activeCampaign.uniformAmount && (
-                    <div className="flex justify-between">
+                    <div className="flex justify-between gap-2">
                       <span className="text-gray-400">
                         Amount per recipient
                       </span>
@@ -399,11 +509,11 @@ export function DistributeStep() {
                       </span>
                     </div>
                   )}
-                  <div className="flex justify-between">
+                  <div className="flex justify-between gap-2">
                     <span className="text-gray-400">Recipients</span>
                     <span className="text-white">{recipients.length}</span>
                   </div>
-                  <div className="flex justify-between">
+                  <div className="flex justify-between gap-2">
                     <span className="text-gray-400">Contract</span>
                     <span className="text-white">
                       {hasContract ? 'Deployed' : 'Not deployed'}
@@ -412,7 +522,17 @@ export function DistributeStep() {
                 </div>
               </div>
 
-              <div className="flex gap-3">
+              {isResuming && (
+                <div className="rounded-md bg-yellow-900/20 p-3 text-sm text-yellow-400 ring-1 ring-yellow-900/30">
+                  {confirmedSavedCount} of {Math.ceil(recipients.length / batchSize)} batches completed. Resume from batch {confirmedSavedCount + 1}?
+                </div>
+              )}
+
+              {isResuming && batches.length > 0 && (
+                <BatchTimeline batches={batches} />
+              )}
+
+              <div className="flex flex-wrap gap-3">
                 {!hasContract && (
                   <button
                     type="button"
@@ -427,7 +547,7 @@ export function DistributeStep() {
                   onClick={handleDistribute}
                   className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 text-sm font-medium"
                 >
-                  Start Distribution
+                  {isResuming ? 'Resume Distribution' : 'Start Distribution'}
                 </button>
               </div>
             </div>

@@ -12,7 +12,7 @@ export type AppShellProps = {
 export function AppShell({ steps, onStepClick, children }: AppShellProps) {
   return (
     <div className="min-h-screen bg-gray-950 text-white">
-      <div className="mx-auto max-w-5xl px-4 py-8 lg:flex lg:gap-8">
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 py-6 sm:py-8 lg:flex lg:gap-8">
         <aside className="hidden lg:block lg:w-56 lg:shrink-0">
           <TimelineRail steps={steps} onStepClick={onStepClick} />
         </aside>

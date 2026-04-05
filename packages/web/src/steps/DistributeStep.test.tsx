@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DistributeStep, toBatchCardStatus, getDisperseSelector } from './DistributeStep.js';
+import { DistributeStep, toBatchCardStatus, getDisperseSelector, batchResultToStored } from './DistributeStep.js';
 
 // ---- Mock state ----
 
@@ -68,6 +68,10 @@ const mockStorage = {
   addresses: {
     getBySet: vi.fn().mockResolvedValue([]),
   },
+  batches: {
+    getByCampaign: vi.fn().mockResolvedValue([]),
+    put: vi.fn().mockResolvedValue(undefined),
+  },
 };
 
 vi.mock('../providers/StorageProvider.js', () => ({
@@ -101,6 +105,10 @@ vi.mock('@titrate/sdk', () => ({
   disperseTokens: (...args: unknown[]) => mockDisperseTokens(...args),
   approveOperator: (...args: unknown[]) => mockApproveOperator(...args),
   getAllowance: (...args: unknown[]) => mockGetAllowance(...args),
+  computeResumeOffset: (batches: { status: string }[], batchSize: number) => {
+    const confirmed = batches.filter((b: { status: string }) => b.status === 'confirmed').length;
+    return confirmed * batchSize;
+  },
 }));
 
 beforeEach(() => {
@@ -113,6 +121,8 @@ beforeEach(() => {
   };
   mockStorage.addressSets.getByCampaign.mockResolvedValue([]);
   mockStorage.addresses.getBySet.mockResolvedValue([]);
+  mockStorage.batches.getByCampaign.mockResolvedValue([]);
+  mockStorage.batches.put.mockResolvedValue(undefined);
   mockDeployDistributor.mockResolvedValue({
     address: '0xDeployedContractAddress1234567890123456',
     txHash: '0xabc123',
@@ -931,6 +941,264 @@ describe('DistributeStep', () => {
       expect(screen.getByText('Operator approval rejected')).toBeInTheDocument();
     });
   });
+
+  it('loads saved batches on mount and shows in timeline', async () => {
+    const savedBatchData = [
+      {
+        id: 'batch-1',
+        campaignId: 'test-1',
+        batchIndex: 0,
+        recipients: ['0xRecipient1000000000000000000000000000001'] as const,
+        amounts: ['1000'] as const,
+        status: 'confirmed' as const,
+        attempts: [],
+        confirmedTxHash: '0xabc123' as const,
+        confirmedBlock: null,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+    ];
+
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+      { setId: 'set-1', address: '0xRecipient2000000000000000000000000000002', amount: null },
+    ];
+
+    mockStorage.batches.getByCampaign.mockResolvedValue(savedBatchData);
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 2, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+        batchSize: 1,
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(mockStorage.batches.getByCampaign).toHaveBeenCalledWith('test-1');
+    });
+
+    // Saved batch should appear as a card in timeline
+    await waitFor(() => {
+      expect(screen.getByText('Batch #1')).toBeInTheDocument();
+    });
+  });
+
+  it('shows resume button when incomplete batches exist', async () => {
+    const savedBatchData = [
+      {
+        id: 'batch-1',
+        campaignId: 'test-1',
+        batchIndex: 0,
+        recipients: ['0xRecipient1000000000000000000000000000001'] as const,
+        amounts: ['1000'] as const,
+        status: 'confirmed' as const,
+        attempts: [],
+        confirmedTxHash: '0xabc123' as const,
+        confirmedBlock: null,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+    ];
+
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+      { setId: 'set-1', address: '0xRecipient2000000000000000000000000000002', amount: null },
+    ];
+
+    mockStorage.batches.getByCampaign.mockResolvedValue(savedBatchData);
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 2, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+        batchSize: 1,
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /resume distribution/i })).toBeInTheDocument();
+    });
+
+    // Should show the resume message
+    await waitFor(() => {
+      expect(screen.getByText(/1 of 2 batches completed/i)).toBeInTheDocument();
+    });
+  });
+
+  it('resumes distribution skipping confirmed recipients', async () => {
+    const savedBatchData = [
+      {
+        id: 'batch-1',
+        campaignId: 'test-1',
+        batchIndex: 0,
+        recipients: ['0xRecipient1000000000000000000000000000001'] as const,
+        amounts: ['1000'] as const,
+        status: 'confirmed' as const,
+        attempts: [],
+        confirmedTxHash: '0xabc123' as const,
+        confirmedBlock: null,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+    ];
+
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+      { setId: 'set-1', address: '0xRecipient2000000000000000000000000000002', amount: null },
+    ];
+
+    mockStorage.batches.getByCampaign.mockResolvedValue(savedBatchData);
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 2, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+    mockDisperseTokensSimple.mockResolvedValue([
+      {
+        batchIndex: 1,
+        recipients: ['0xRecipient2000000000000000000000000000002'],
+        amounts: [1000n],
+        attempts: [],
+        confirmedTxHash: '0xdef456',
+        blockNumber: null,
+      },
+    ]);
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+        batchSize: 1,
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /resume distribution/i })).toBeInTheDocument();
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /resume distribution/i }));
+    });
+
+    await waitFor(() => {
+      // Should only send the second recipient (first was already confirmed)
+      expect(mockDisperseTokensSimple).toHaveBeenCalledWith(
+        expect.objectContaining({
+          recipients: ['0xRecipient2000000000000000000000000000002'],
+        }),
+      );
+    });
+  });
+
+  it('saves batch results to IDB after distribution', async () => {
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 1, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+    mockDisperseTokensSimple.mockResolvedValue([
+      {
+        batchIndex: 0,
+        recipients: ['0xRecipient1000000000000000000000000000001'],
+        amounts: [1000n],
+        attempts: [],
+        confirmedTxHash: '0xabc123',
+        blockNumber: null,
+      },
+    ]);
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(mockStorage.batches.put).toHaveBeenCalledWith(
+        expect.objectContaining({
+          campaignId: 'test-1',
+          batchIndex: 0,
+          status: 'confirmed',
+          confirmedTxHash: '0xabc123',
+        }),
+      );
+    });
+  });
+
+  it('shows distribution complete with spend summary when all batches confirmed on load', async () => {
+    const savedBatchData = [
+      {
+        id: 'batch-1',
+        campaignId: 'test-1',
+        batchIndex: 0,
+        recipients: ['0xRecipient1000000000000000000000000000001'] as const,
+        amounts: ['1000'] as const,
+        status: 'confirmed' as const,
+        attempts: [],
+        confirmedTxHash: '0xabc123' as const,
+        confirmedBlock: null,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+    ];
+
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+    ];
+
+    mockStorage.batches.getByCampaign.mockResolvedValue(savedBatchData);
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 1, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+        batchSize: 1,
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    // All batches confirmed on load -> should show Distribution Summary
+    await waitFor(() => {
+      expect(screen.getByText('Distribution Summary')).toBeInTheDocument();
+    });
+  });
 });
 
 describe('getDisperseSelector', () => {
@@ -970,5 +1238,80 @@ describe('toBatchCardStatus', () => {
 
   it('maps empty string to pending', () => {
     expect(toBatchCardStatus('')).toBe('pending');
+  });
+});
+
+describe('batchResultToStored', () => {
+  it('converts a confirmed BatchResult to StoredBatch', () => {
+    const result = {
+      batchIndex: 0,
+      recipients: ['0xRecipient1000000000000000000000000000001' as const],
+      amounts: [1000n],
+      attempts: [],
+      confirmedTxHash: '0xabc123' as const,
+      blockNumber: 42n,
+    };
+
+    const stored = batchResultToStored('campaign-1', result);
+
+    expect(stored.campaignId).toBe('campaign-1');
+    expect(stored.batchIndex).toBe(0);
+    expect(stored.recipients).toEqual(['0xRecipient1000000000000000000000000000001']);
+    expect(stored.amounts).toEqual(['1000']);
+    expect(stored.status).toBe('confirmed');
+    expect(stored.confirmedTxHash).toBe('0xabc123');
+    expect(stored.confirmedBlock).toBe(42n);
+    expect(stored.id).toBeTruthy();
+    expect(stored.createdAt).toBeGreaterThan(0);
+    expect(stored.updatedAt).toBeGreaterThan(0);
+  });
+
+  it('converts a failed BatchResult to StoredBatch', () => {
+    const result = {
+      batchIndex: 1,
+      recipients: ['0xRecipient2000000000000000000000000000002' as const],
+      amounts: [500n],
+      attempts: [],
+      confirmedTxHash: null,
+      blockNumber: null,
+    };
+
+    const stored = batchResultToStored('campaign-2', result);
+
+    expect(stored.status).toBe('failed');
+    expect(stored.confirmedTxHash).toBeNull();
+    expect(stored.confirmedBlock).toBeNull();
+  });
+
+  it('converts bigint amounts to strings', () => {
+    const result = {
+      batchIndex: 0,
+      recipients: ['0xRecipient1000000000000000000000000000001' as const],
+      amounts: [123456789012345678901234567890n],
+      attempts: [],
+      confirmedTxHash: '0xabc' as const,
+      blockNumber: null,
+    };
+
+    const stored = batchResultToStored('campaign-3', result);
+
+    expect(stored.amounts).toEqual(['123456789012345678901234567890']);
+    expect(typeof stored.amounts[0]).toBe('string');
+  });
+
+  it('generates unique IDs for each call', () => {
+    const result = {
+      batchIndex: 0,
+      recipients: ['0xRecipient1000000000000000000000000000001' as const],
+      amounts: [100n],
+      attempts: [],
+      confirmedTxHash: '0xabc' as const,
+      blockNumber: null,
+    };
+
+    const stored1 = batchResultToStored('campaign-1', result);
+    const stored2 = batchResultToStored('campaign-1', result);
+
+    expect(stored1.id).not.toBe(stored2.id);
   });
 });

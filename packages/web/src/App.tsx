@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { ThemeProvider } from './providers/ThemeProvider.js';
+import { ToastProvider } from './providers/ToastProvider.js';
 import { WalletProvider } from './providers/WalletProvider.js';
 import { StorageProvider } from './providers/StorageProvider.js';
 import { CacheProvider } from './providers/CacheProvider.js';
@@ -57,6 +58,7 @@ export function App() {
   return (
     <ErrorBoundary>
     <ThemeProvider>
+      <ToastProvider>
       <WalletProvider>
         <StorageProvider>
           <CacheProvider>
@@ -78,6 +80,7 @@ export function App() {
           </CacheProvider>
         </StorageProvider>
       </WalletProvider>
+      </ToastProvider>
     </ThemeProvider>
     </ErrorBoundary>
   );

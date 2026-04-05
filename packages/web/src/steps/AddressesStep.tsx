@@ -158,7 +158,7 @@ export function AddressesStep() {
             role="button"
             tabIndex={0}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click(); }}
-            className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors ${
+            className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 sm:p-8 min-h-[120px] transition-colors ${
               isDragOver
                 ? 'border-blue-500 bg-blue-500/5'
                 : 'border-gray-700 bg-gray-900 hover:border-gray-600'
@@ -208,7 +208,7 @@ export function AddressesStep() {
         {/* Address Preview */}
         {addresses.length > 0 && (
           <div className="rounded-lg bg-gray-900 p-4 ring-1 ring-gray-800">
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <span className="text-sm font-medium text-white">
                 {addresses.length.toLocaleString()} addresses loaded
               </span>
@@ -219,7 +219,7 @@ export function AddressesStep() {
                 <span className="text-xs text-gray-500">{fileName}</span>
               )}
             </div>
-            <div className="space-y-1 font-mono text-xs text-gray-400">
+            <div className="space-y-1 font-mono text-xs text-gray-400 overflow-x-auto">
               {previewAddresses.map((row) => (
                 <div key={row.address} className="flex justify-between">
                   <span>{row.address}</span>

@@ -79,6 +79,10 @@ vi.mock('../hooks/useTokenBalance.js', () => ({
   useTokenBalance: () => ({ data: tokenBalanceData, isLoading: false }),
 }));
 
+vi.mock('@tanstack/react-query', () => ({
+  useQuery: () => ({ data: undefined, isLoading: false }),
+}));
+
 vi.mock('../providers/StorageProvider.js', () => ({
   useStorage: () => ({
     storage: {

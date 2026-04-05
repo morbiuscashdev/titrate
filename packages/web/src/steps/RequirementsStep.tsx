@@ -1,5 +1,6 @@
 import { useMemo, useCallback, useState, useEffect } from 'react';
-import { formatUnits } from 'viem';
+import { formatUnits, erc20Abi } from 'viem';
+import { useQuery } from '@tanstack/react-query';
 import { StepPanel } from '../components/StepPanel.js';
 import { RequirementsPanel } from '../components/RequirementsPanel.js';
 import { useWallet } from '../providers/WalletProvider.js';
@@ -39,7 +40,7 @@ const DEFAULT_BATCH_SIZE = 100;
 export function RequirementsStep() {
   const { address, perryMode } = useWallet();
   const { activeCampaign, setActiveStep } = useCampaign();
-  const { chainConfig } = useChain();
+  const { publicClient } = useChain();
   const { storage } = useStorage();
 
   // Load recipient count from storage
@@ -63,6 +64,21 @@ export function RequirementsStep() {
 
   const { data: nativeBalance, isLoading: isLoadingNative } = useNativeBalance(fundingAddress);
   const { data: tokenBalance, isLoading: isLoadingToken } = useTokenBalance(tokenAddress, fundingAddress);
+
+  const contractAddress = activeCampaign?.contractAddress as Address | null;
+
+  const { data: allowance } = useQuery({
+    queryKey: ['token-allowance', tokenAddress, fundingAddress, contractAddress],
+    queryFn: () =>
+      publicClient!.readContract({
+        address: tokenAddress!,
+        abi: erc20Abi,
+        functionName: 'allowance',
+        args: [fundingAddress!, contractAddress!],
+      }),
+    enabled: !!publicClient && !!tokenAddress && !!fundingAddress && !!contractAddress,
+    staleTime: 15_000,
+  });
 
   const requirements = useMemo(() => {
     if (!activeCampaign) {
@@ -96,6 +112,13 @@ export function RequirementsStep() {
     : '...';
 
   const tokenSymbol = activeCampaign?.contractName || 'TOKEN';
+
+  const allowanceFormatted = allowance !== undefined
+    ? formatUnits(allowance, tokenDecimals)
+    : '...';
+  const allowanceSufficient = requirements !== null
+    && allowance !== undefined
+    && allowance >= requirements.erc20Needed;
 
   const isSufficient = useMemo(() => {
     if (!requirements || nativeBalance === undefined || tokenBalance === undefined) {
@@ -135,6 +158,17 @@ export function RequirementsStep() {
             batchCount={requirements?.batchCount ?? 0}
             isSufficient={isSufficient}
           />
+
+          {contractAddress && (
+            <div className="rounded-lg bg-gray-900 p-4 ring-1 ring-gray-800">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-400">Token Allowance</span>
+                <span className={allowanceSufficient ? 'text-green-400' : 'text-red-400'}>
+                  {allowanceFormatted} / {erc20NeededFormatted} {tokenSymbol}
+                </span>
+              </div>
+            </div>
+          )}
 
           {perryMode && (
             <div className="rounded-md bg-purple-900/20 p-3 text-sm text-purple-400 ring-1 ring-purple-900/30">

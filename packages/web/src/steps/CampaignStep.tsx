@@ -324,7 +324,7 @@ export function CampaignStep() {
         {/* Contract Variant */}
         <div>
           <label className="text-sm font-medium text-gray-300 mb-2 block">Contract Variant</label>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             <button
               type="button"
               onClick={() => setContractVariant('simple')}

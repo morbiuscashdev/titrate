@@ -20,11 +20,11 @@ const statusMap: Record<CampaignCardProps['status'], 'pending' | 'active' | 'com
 export function CampaignCard({ name, chainName, tokenSymbol, addressCount, batchProgress, status, onClick }: CampaignCardProps) {
   return (
     <div role="button" tabIndex={0} onClick={onClick} onKeyDown={(e) => e.key === 'Enter' && onClick?.()} className="rounded-lg bg-gray-900 p-4 ring-1 ring-gray-800 hover:ring-gray-700 cursor-pointer transition-colors">
-      <div className="flex items-start justify-between">
-        <h3 className="text-sm font-semibold text-white">{name}</h3>
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="text-sm font-semibold text-white min-w-0 truncate">{name}</h3>
         <StatusBadge status={statusMap[status]} label={status} />
       </div>
-      <div className="mt-3 flex items-center gap-3 text-xs text-gray-400">
+      <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-400">
         <span>{chainName}</span>
         <span>&middot;</span>
         <span>{tokenSymbol}</span>
