@@ -8,7 +8,7 @@ import { Skeleton } from './Skeleton.js';
  */
 export function CampaignCardSkeleton() {
   return (
-    <div className="rounded-lg bg-gray-900 p-4 ring-1 ring-gray-800">
+    <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800">
       <div className="flex items-start justify-between">
         <Skeleton className="h-4 w-32" />
         <Skeleton className="h-5 w-14 rounded-full" />

@@ -24,9 +24,9 @@ const filterTypes = [
 function ParamField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <div>
-      <label className="block text-xs text-gray-500 mb-1">{label}</label>
+      <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">{label}</label>
       <input type="text" value={value} onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-lg bg-gray-800 px-3 py-2 text-sm text-white ring-1 ring-gray-700 placeholder:text-gray-600 focus:ring-blue-500 focus:outline-none" />
+        className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:ring-blue-500 focus:outline-none" />
     </div>
   );
 }
@@ -58,7 +58,7 @@ function FilterParams({ filterType, params, onParamsChange }: { filterType: stri
   }
   if (filterType === 'token-recipients') return <ParamField label="Token address" value={params.tokenAddress ?? ''} onChange={(v) => update('tokenAddress', v)} />;
   if (filterType === 'csv-exclusion') return <ParamField label="Exclusion CSV" value={params.fileName ?? ''} onChange={(v) => update('fileName', v)} />;
-  return <p className="text-xs text-gray-500">No additional configuration needed.</p>;
+  return <p className="text-xs text-gray-400 dark:text-gray-500">No additional configuration needed.</p>;
 }
 
 export function PipelineStepEditor({ stepType, sourceType, filterType, params, onParamsChange, onTypeChange }: PipelineStepEditorProps) {
@@ -70,7 +70,7 @@ export function PipelineStepEditor({ stepType, sourceType, filterType, params, o
         {types.map((t) => (
           <button key={t.value} type="button" onClick={() => onTypeChange?.(t.value)}
             className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition-colors ${
-              selectedType === t.value ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30' : 'bg-gray-900 text-gray-400 ring-gray-800 hover:ring-gray-700'
+              selectedType === t.value ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30' : 'bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-800 hover:ring-gray-300 dark:hover:ring-gray-700'
             }`}>{t.label}</button>
         ))}
       </div>

@@ -178,7 +178,7 @@ export function CampaignStep() {
       <div className="space-y-6">
         {/* Chain Selection */}
         <div>
-          <label className="text-sm font-medium text-gray-300 mb-1 block">Chain</label>
+          <label className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Chain</label>
           <ChainSelector
             chains={chainOptions}
             selectedChainId={isCustomChain ? null : chainId}
@@ -190,7 +190,7 @@ export function CampaignStep() {
             className={`mt-2 rounded-lg px-4 py-2 text-sm font-medium ring-1 transition-colors ${
               isCustomChain
                 ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30'
-                : 'bg-gray-900 text-gray-400 ring-gray-800 hover:ring-gray-700'
+                : 'bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-800 hover:ring-gray-300 dark:hover:ring-gray-700'
             }`}
           >
             Custom
@@ -201,23 +201,25 @@ export function CampaignStep() {
         {isCustomChain && (
           <div className="space-y-4">
             <div>
-              <label className="text-sm font-medium text-gray-300 mb-1 block">Chain ID</label>
+              <label htmlFor="custom-chain-id" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Chain ID</label>
               <input
+                id="custom-chain-id"
                 type="number"
                 value={chainId ?? ''}
                 onChange={(e) => setChainId(e.target.value ? Number(e.target.value) : null)}
                 placeholder="e.g. 42161"
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
             <div>
-              <label className="text-sm font-medium text-gray-300 mb-1 block">Chain Name</label>
+              <label htmlFor="custom-chain-name" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Chain Name</label>
               <input
+                id="custom-chain-name"
                 type="text"
                 value={customChainName}
                 onChange={(e) => setCustomChainName(e.target.value)}
                 placeholder="e.g. My Custom Chain"
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
           </div>
@@ -225,27 +227,29 @@ export function CampaignStep() {
 
         {/* RPC URL */}
         <div>
-          <label className="text-sm font-medium text-gray-300 mb-1 block">RPC URL</label>
+          <label htmlFor="rpc-url" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">RPC URL</label>
           <input
+            id="rpc-url"
             type="text"
             value={rpcUrl}
             onChange={(e) => setRpcUrl(e.target.value)}
             placeholder="https://..."
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
         {/* Rate Limit Group */}
         <div>
-          <label className="text-sm font-medium text-gray-300 mb-1 block">Rate limit group</label>
+          <label htmlFor="rate-limit-group" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Rate limit group</label>
           <input
+            id="rate-limit-group"
             type="text"
             value={rateLimitGroup}
             onChange={(e) => setRateLimitGroup(e.target.value)}
             placeholder={(() => { try { return rpcUrl ? new URL(rpcUrl).hostname : 'auto-derived from RPC URL'; } catch { return 'auto-derived from RPC URL'; } })()}
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
             Share rate limits across endpoints (e.g., &quot;alchemy&quot; for all Alchemy chains).
           </p>
         </div>
@@ -255,30 +259,32 @@ export function CampaignStep() {
           <button
             type="button"
             onClick={() => setShowAdvanced(!showAdvanced)}
-            className="text-sm text-gray-400 hover:text-gray-300 transition-colors"
+            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
           >
             {showAdvanced ? 'Hide advanced' : 'Show advanced'}
           </button>
           {showAdvanced && (
             <div className="mt-3 space-y-4">
               <div>
-                <label className="text-sm font-medium text-gray-300 mb-1 block">Explorer API URL</label>
+                <label htmlFor="explorer-api-url" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Explorer API URL</label>
                 <input
+                  id="explorer-api-url"
                   type="text"
                   value={explorerApiUrl}
                   onChange={(e) => setExplorerApiUrl(e.target.value)}
                   placeholder="https://api.etherscan.io/api"
-                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
               <div>
-                <label className="text-sm font-medium text-gray-300 mb-1 block">Explorer API Key</label>
+                <label htmlFor="explorer-api-key" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Explorer API Key</label>
                 <input
+                  id="explorer-api-key"
                   type="text"
                   value={explorerApiKey}
                   onChange={(e) => setExplorerApiKey(e.target.value)}
                   placeholder="Your API key"
-                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 />
               </div>
             </div>
@@ -287,16 +293,17 @@ export function CampaignStep() {
 
         {/* Token Address */}
         <div>
-          <label className="text-sm font-medium text-gray-300 mb-1 block">Token Address</label>
+          <label htmlFor="token-address" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Token Address</label>
           <input
+            id="token-address"
             type="text"
             value={tokenAddress}
             onChange={(e) => setTokenAddress(e.target.value)}
             placeholder="0x..."
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           {normalizedTokenAddress && isProbing && (
-            <div className="mt-2 flex items-center gap-2 text-sm text-gray-400">
+            <div className="mt-2 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
               <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
                 <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
                 <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" className="opacity-75" />
@@ -305,11 +312,11 @@ export function CampaignStep() {
             </div>
           )}
           {normalizedTokenAddress && !isProbing && tokenMetadata && (
-            <div className="mt-2 rounded-lg bg-gray-900 p-3 ring-1 ring-gray-800">
+            <div className="mt-2 rounded-lg bg-gray-50 dark:bg-gray-900 p-3 ring-1 ring-gray-200 dark:ring-gray-800">
               <div className="flex items-center gap-3 text-sm">
-                <span className="font-medium text-white">{tokenMetadata.name}</span>
-                <span className="text-gray-400">({tokenMetadata.symbol})</span>
-                <span className="text-gray-500">{tokenMetadata.decimals} decimals</span>
+                <span className="font-medium text-gray-900 dark:text-white">{tokenMetadata.name}</span>
+                <span className="text-gray-500 dark:text-gray-400">({tokenMetadata.symbol})</span>
+                <span className="text-gray-400 dark:text-gray-500">{tokenMetadata.decimals} decimals</span>
               </div>
             </div>
           )}
@@ -323,15 +330,16 @@ export function CampaignStep() {
 
         {/* Contract Variant */}
         <div>
-          <label className="text-sm font-medium text-gray-300 mb-2 block">Contract Variant</label>
+          <label className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2 block">Contract Variant</label>
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
               onClick={() => setContractVariant('simple')}
-              className={`rounded-lg px-4 py-2 text-sm font-medium ring-1 transition-colors ${
+              aria-pressed={contractVariant === 'simple'}
+              className={`rounded-lg px-4 py-2 text-sm font-medium ring-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                 contractVariant === 'simple'
                   ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30'
-                  : 'bg-gray-900 text-gray-400 ring-gray-800 hover:ring-gray-700'
+                  : 'bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-800 hover:ring-gray-300 dark:hover:ring-gray-700'
               }`}
             >
               Simple
@@ -339,10 +347,11 @@ export function CampaignStep() {
             <button
               type="button"
               onClick={() => setContractVariant('full')}
-              className={`rounded-lg px-4 py-2 text-sm font-medium ring-1 transition-colors ${
+              aria-pressed={contractVariant === 'full'}
+              className={`rounded-lg px-4 py-2 text-sm font-medium ring-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
                 contractVariant === 'full'
                   ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30'
-                  : 'bg-gray-900 text-gray-400 ring-gray-800 hover:ring-gray-700'
+                  : 'bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-800 hover:ring-gray-300 dark:hover:ring-gray-700'
               }`}
             >
               Full
@@ -352,27 +361,29 @@ export function CampaignStep() {
 
         {/* Campaign Name */}
         <div>
-          <label className="text-sm font-medium text-gray-300 mb-1 block">Campaign Name</label>
+          <label htmlFor="campaign-name" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Campaign Name</label>
           <input
+            id="campaign-name"
             type="text"
             value={campaignName}
             onChange={(e) => setCampaignName(e.target.value)}
             placeholder="My Airdrop Campaign"
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
         </div>
 
         {/* Batch Size */}
         <div>
-          <label className="text-sm font-medium text-gray-300 mb-1 block">Batch Size</label>
+          <label htmlFor="batch-size" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Batch Size</label>
           <input
+            id="batch-size"
             type="number"
             value={batchSize}
             onChange={(e) => setBatchSize(clampBatchSize(e.target.value))}
             min={1}
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
-          <p className="mt-1 text-xs text-gray-500">Number of recipients per transaction batch.</p>
+          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Number of recipients per transaction batch.</p>
         </div>
 
         {/* Save */}

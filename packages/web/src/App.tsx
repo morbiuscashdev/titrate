@@ -65,15 +65,20 @@ export function App() {
             <CampaignProvider>
               <ChainBridge>
                 <BrowserRouter>
+                  <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-blue-600 focus:px-4 focus:py-2 focus:text-white">
+                    Skip to content
+                  </a>
                   <Header>
                     <HeaderWalletBadge />
                   </Header>
+                  <div id="main-content">
                   <Routes>
                     <Route path="/" element={<HomePage />} />
                     <Route path="/campaign/:id" element={<CampaignPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
+                  </div>
                 </BrowserRouter>
               </ChainBridge>
             </CampaignProvider>

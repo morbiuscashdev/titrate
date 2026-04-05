@@ -51,7 +51,7 @@ export function InlineEdit({ value, onSave, className = '' }: InlineEditProps) {
         onBlur={handleSave}
         onKeyDown={handleKeyDown}
         onClick={(e) => e.stopPropagation()}
-        className={`bg-gray-800 border border-blue-500 rounded px-1 py-0 text-white outline-none ${className}`}
+        className={`bg-white dark:bg-gray-800 border border-blue-500 rounded px-1 py-0 text-gray-900 dark:text-white outline-none ${className}`}
       />
     );
   }

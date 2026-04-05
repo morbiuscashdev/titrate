@@ -84,10 +84,10 @@ export function AmountsStep() {
 
         {/* Total display for uniform mode */}
         {mode === 'uniform' && uniformAmount.trim() && (
-          <div className="rounded-lg bg-gray-900 p-4 ring-1 ring-gray-800">
-            <p className="text-sm text-gray-400">
+          <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800">
+            <p className="text-sm text-gray-500 dark:text-gray-400">
               Each recipient will receive{' '}
-              <span className="font-medium text-white">{uniformAmount}</span>{' '}
+              <span className="font-medium text-gray-900 dark:text-white">{uniformAmount}</span>{' '}
               tokens ({format} format).
             </p>
           </div>

@@ -45,8 +45,8 @@ export function WalletStep() {
   return (
     <StepPanel title="Wallet" description="Connect your wallet and optionally derive a hot wallet for distribution.">
       {!isConnected && (
-        <div className="rounded-lg bg-gray-900 p-6 ring-1 ring-gray-800 text-center">
-          <p className="text-sm text-gray-400">Connect your wallet using the button in the header.</p>
+        <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-6 ring-1 ring-gray-200 dark:ring-gray-800 text-center">
+          <p className="text-sm text-gray-500 dark:text-gray-400">Connect your wallet using the button in the header.</p>
         </div>
       )}
 
@@ -59,11 +59,11 @@ export function WalletStep() {
 
           {/* Perry mode section */}
           <div className="space-y-3">
-            <h3 className="text-sm font-medium text-gray-300">Perry Mode (Hot Wallet)</h3>
+            <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300">Perry Mode (Hot Wallet)</h3>
 
             {!perryMode && (
               <div className="space-y-3">
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-400 dark:text-gray-500">
                   Derive a deterministic hot wallet from your connected wallet. Fund it externally before distributing.
                 </p>
                 <button
@@ -99,7 +99,7 @@ export function WalletStep() {
                 <button
                   type="button"
                   onClick={clearPerryMode}
-                  className="bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg px-4 py-2 text-sm"
+                  className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm"
                 >
                   Clear Perry Mode
                 </button>

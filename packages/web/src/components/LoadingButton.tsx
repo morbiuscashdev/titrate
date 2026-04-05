@@ -25,14 +25,14 @@ export function LoadingButton({
   const base =
     variant === 'primary'
       ? 'bg-blue-600 hover:bg-blue-700 text-white'
-      : 'bg-gray-800 hover:bg-gray-700 text-gray-300';
+      : 'bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300';
 
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled || isLoading}
-      className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2 ${base} ${className ?? ''}`}
+      className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 ${base} ${className ?? ''}`}
     >
       {isLoading && <Spinner />}
       {children}

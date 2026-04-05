@@ -29,10 +29,10 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   render(): ReactNode {
     if (this.state.error) {
       return (
-        <div className="min-h-screen bg-gray-950 flex items-center justify-center p-8">
-          <div className="max-w-md rounded-lg bg-gray-900 p-6 ring-1 ring-gray-800 text-center">
-            <h2 className="text-lg font-semibold text-white mb-2">Something went wrong</h2>
-            <p className="text-sm text-gray-400 mb-4">{this.state.error.message}</p>
+        <div className="min-h-screen bg-white dark:bg-gray-950 flex items-center justify-center p-8">
+          <div className="max-w-md rounded-lg bg-gray-50 dark:bg-gray-900 p-6 ring-1 ring-gray-200 dark:ring-gray-800 text-center">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Something went wrong</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{this.state.error.message}</p>
             <button
               type="button"
               onClick={() => this.setState({ error: null })}

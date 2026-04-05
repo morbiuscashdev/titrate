@@ -88,13 +88,13 @@ export function FiltersStep() {
         {filters.length > 0 && (
           <div className="space-y-4">
             {filters.map((filter, index) => (
-              <div key={filter.id} className="rounded-lg bg-gray-900 p-4 ring-1 ring-gray-800">
+              <div key={filter.id} className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800">
                 <div className="mb-3 flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-300">Filter {index + 1}</span>
+                  <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Filter {index + 1}</span>
                   <button
                     type="button"
                     onClick={() => handleRemoveFilter(filter.id)}
-                    className="text-xs text-gray-500 hover:text-red-400 transition-colors"
+                    className="text-xs text-gray-400 dark:text-gray-500 hover:text-red-400 transition-colors"
                   >
                     Remove
                   </button>
@@ -115,7 +115,7 @@ export function FiltersStep() {
         <button
           type="button"
           onClick={handleAddFilter}
-          className="bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+          className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
         >
           + Add Filter
         </button>

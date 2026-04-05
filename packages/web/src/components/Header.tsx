@@ -17,8 +17,8 @@ export type HeaderProps = {
  */
 export function Header({ children }: HeaderProps) {
   return (
-    <header className="flex items-center justify-between border-b border-gray-800 bg-gray-950 px-4 py-3">
-      <a href="/" className="text-lg font-semibold text-white hover:text-gray-300">
+    <header className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-4 py-3">
+      <a href="/" className="text-lg font-semibold text-gray-900 dark:text-white hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-md">
         Titrate
       </a>
       <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
@@ -26,7 +26,7 @@ export function Header({ children }: HeaderProps) {
         <a
           href="/settings"
           aria-label="Settings"
-          className="text-gray-400 hover:text-white transition-colors"
+          className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-md"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"

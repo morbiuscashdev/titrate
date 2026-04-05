@@ -5,6 +5,7 @@ import { CampaignCard } from '../components/CampaignCard.js';
 import { CampaignCardSkeleton } from '../components/CampaignCardSkeleton.js';
 import { Skeleton } from '../components/Skeleton.js';
 import { InlineEdit } from '../components/InlineEdit.js';
+import { WelcomeCard } from '../components/WelcomeCard.js';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
 import { getChainConfig } from '@titrate/sdk';
@@ -163,18 +164,7 @@ export function HomePage() {
   }
 
   if (campaigns.length === 0) {
-    return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4">
-        <p className="text-gray-500">No campaigns yet</p>
-        <button
-          type="button"
-          onClick={handleCreate}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
-        >
-          New Campaign
-        </button>
-      </div>
-    );
+    return <WelcomeCard onCreateCampaign={handleCreate} />;
   }
 
   const archivedCount = campaigns.filter((c) => c.archived).length;
@@ -183,12 +173,12 @@ export function HomePage() {
     <div className="mx-auto max-w-5xl px-4 py-8">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
         <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-          <h1 className="text-lg font-semibold text-white">Campaigns</h1>
+          <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Campaigns</h1>
           {archivedCount > 0 && (
             <button
               type="button"
               onClick={() => setShowArchived((v) => !v)}
-              className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+              className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
             >
               {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
             </button>
@@ -221,7 +211,7 @@ export function HomePage() {
               <button
                 type="button"
                 onClick={(e) => handleRename(e, campaign.id)}
-                className="rounded-full p-1 text-gray-500 hover:text-green-400 hover:bg-gray-800"
+                className="rounded-full p-1 text-gray-500 hover:text-green-400 hover:bg-gray-200 dark:hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 aria-label={`Rename ${campaign.name}`}
                 title="Rename"
               >
@@ -232,7 +222,7 @@ export function HomePage() {
               <button
                 type="button"
                 onClick={(e) => handleArchive(e, campaign.id)}
-                className="rounded-full p-1 text-gray-500 hover:text-yellow-400 hover:bg-gray-800"
+                className="rounded-full p-1 text-gray-500 hover:text-yellow-400 hover:bg-gray-200 dark:hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 aria-label={campaign.archived ? `Unarchive ${campaign.name}` : `Archive ${campaign.name}`}
                 title={campaign.archived ? 'Unarchive' : 'Archive'}
               >
@@ -244,7 +234,7 @@ export function HomePage() {
               <button
                 type="button"
                 onClick={(e) => handleClone(e, campaign.id)}
-                className="rounded-full p-1 text-gray-500 hover:text-blue-400 hover:bg-gray-800"
+                className="rounded-full p-1 text-gray-500 hover:text-blue-400 hover:bg-gray-200 dark:hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 aria-label={`Clone ${campaign.name}`}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">
@@ -255,7 +245,7 @@ export function HomePage() {
               <button
                 type="button"
                 onClick={(e) => handleDelete(e, campaign.id)}
-                className="rounded-full p-1 text-gray-500 hover:text-red-400 hover:bg-gray-800"
+                className="rounded-full p-1 text-gray-500 hover:text-red-400 hover:bg-gray-200 dark:hover:bg-gray-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 aria-label={`Delete ${campaign.name}`}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4">

@@ -21,13 +21,13 @@ export function EncryptedField({ ciphertext, onUnlock }: EncryptedFieldProps) {
     : ciphertext;
 
   return (
-    <span className="inline-flex items-center gap-1.5 font-mono text-sm text-gray-500">
+    <span className="inline-flex items-center gap-1.5 font-mono text-sm text-gray-400 dark:text-gray-500">
       <span aria-label="Encrypted value">{truncated}</span>
       <button
         type="button"
         onClick={onUnlock}
         aria-label="Unlock"
-        className="cursor-pointer text-gray-500 hover:text-gray-300 transition-colors"
+        className="cursor-pointer text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-sm"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"

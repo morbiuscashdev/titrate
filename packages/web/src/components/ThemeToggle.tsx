@@ -27,8 +27,8 @@ function MonitorIcon() {
   );
 }
 
-const active = 'bg-gray-700 text-white';
-const inactive = 'bg-gray-900 text-gray-400 hover:text-gray-200';
+const active = 'bg-gray-200 dark:bg-gray-700 text-gray-900 dark:text-white';
+const inactive = 'bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200';
 
 /**
  * Two-button theme toggle group.
@@ -50,13 +50,13 @@ export function ThemeToggle() {
   const isSystem = theme === 'system';
 
   return (
-    <div className="inline-flex rounded-lg ring-1 ring-gray-700" role="group">
+    <div className="inline-flex rounded-lg ring-1 ring-gray-300 dark:ring-gray-700" role="group">
       <button
         type="button"
         onClick={handleLightDarkClick}
         aria-pressed={isManual}
         aria-label={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-        className={`rounded-l-lg px-2.5 py-1.5 ${isManual ? active : inactive}`}
+        className={`rounded-l-lg px-2.5 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:z-10 ${isManual ? active : inactive}`}
       >
         {resolvedTheme === 'dark' ? <MoonIcon /> : <SunIcon />}
       </button>
@@ -65,7 +65,7 @@ export function ThemeToggle() {
         onClick={() => setTheme('system')}
         aria-pressed={isSystem}
         aria-label="Use system theme"
-        className={`rounded-r-lg px-2.5 py-1.5 ${isSystem ? active : inactive}`}
+        className={`rounded-r-lg px-2.5 py-1.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:z-10 ${isSystem ? active : inactive}`}
       >
         <MonitorIcon />
       </button>

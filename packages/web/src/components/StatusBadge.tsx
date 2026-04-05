@@ -8,7 +8,7 @@ const statusStyles: Record<StatusBadgeProps['status'], string> = {
   active: 'bg-blue-400/10 text-blue-400 ring-blue-400/20',
   complete: 'bg-green-400/10 text-green-400 ring-green-400/20',
   error: 'bg-red-400/10 text-red-400 ring-red-400/20',
-  locked: 'bg-gray-700/10 text-gray-600 ring-gray-700/20',
+  locked: 'bg-gray-300/10 dark:bg-gray-700/10 text-gray-400 dark:text-gray-600 ring-gray-300/20 dark:ring-gray-700/20',
 };
 
 export function StatusBadge({ status, label }: StatusBadgeProps) {

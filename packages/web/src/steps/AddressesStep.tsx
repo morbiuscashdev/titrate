@@ -149,7 +149,7 @@ export function AddressesStep() {
       <div className="space-y-6">
         {/* CSV Upload */}
         <div>
-          <label className="text-sm font-medium text-gray-300 mb-1 block">CSV Upload</label>
+          <label className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">CSV Upload</label>
           <div
             onDrop={handleDrop}
             onDragOver={handleDragOver}
@@ -158,17 +158,17 @@ export function AddressesStep() {
             role="button"
             tabIndex={0}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click(); }}
-            className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 sm:p-8 min-h-[120px] transition-colors ${
+            className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 sm:p-8 min-h-[120px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 ${
               isDragOver
                 ? 'border-blue-500 bg-blue-500/5'
-                : 'border-gray-700 bg-gray-900 hover:border-gray-600'
+                : 'border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 hover:border-gray-400 dark:hover:border-gray-600'
             }`}
           >
-            <svg className="mb-2 h-8 w-8 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <svg className="mb-2 h-8 w-8 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
             </svg>
-            <p className="text-sm text-gray-400">Drop a CSV file here or click to browse</p>
-            <p className="mt-1 text-xs text-gray-600">Supports address and address,amount formats</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Drop a CSV file here or click to browse</p>
+            <p className="mt-1 text-xs text-gray-400 dark:text-gray-600">Supports address and address,amount formats</p>
           </div>
           <input
             ref={fileInputRef}
@@ -182,19 +182,20 @@ export function AddressesStep() {
 
         {/* Manual Entry */}
         <div>
-          <label className="text-sm font-medium text-gray-300 mb-1 block">Manual Entry</label>
+          <label htmlFor="manual-addresses" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Manual Entry</label>
           <textarea
+            id="manual-addresses"
             value={manualText}
             onChange={(e) => setManualText(e.target.value)}
             placeholder="Paste addresses, one per line..."
             rows={4}
-            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
+            className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
           />
           <button
             type="button"
             onClick={handleManualParse}
             disabled={!manualText.trim()}
-            className="mt-2 bg-gray-800 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-300 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+            className="mt-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
           >
             Parse Addresses
           </button>
@@ -207,27 +208,27 @@ export function AddressesStep() {
 
         {/* Address Preview */}
         {addresses.length > 0 && (
-          <div className="rounded-lg bg-gray-900 p-4 ring-1 ring-gray-800">
+          <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm font-medium text-white">
+              <span className="text-sm font-medium text-gray-900 dark:text-white">
                 {addresses.length.toLocaleString()} addresses loaded
               </span>
               {hasAmounts && (
-                <span className="text-xs text-gray-400">Includes amounts</span>
+                <span className="text-xs text-gray-500 dark:text-gray-400">Includes amounts</span>
               )}
               {fileName && (
-                <span className="text-xs text-gray-500">{fileName}</span>
+                <span className="text-xs text-gray-400 dark:text-gray-500">{fileName}</span>
               )}
             </div>
-            <div className="space-y-1 font-mono text-xs text-gray-400 overflow-x-auto">
+            <div className="space-y-1 font-mono text-xs text-gray-500 dark:text-gray-400 overflow-x-auto">
               {previewAddresses.map((row) => (
                 <div key={row.address} className="flex justify-between">
                   <span>{row.address}</span>
-                  {row.amount && <span className="text-gray-500">{row.amount}</span>}
+                  {row.amount && <span className="text-gray-400 dark:text-gray-500">{row.amount}</span>}
                 </div>
               ))}
               {addresses.length > 5 && (
-                <p className="pt-1 text-gray-600">...and {(addresses.length - 5).toLocaleString()} more</p>
+                <p className="pt-1 text-gray-400 dark:text-gray-600">...and {(addresses.length - 5).toLocaleString()} more</p>
               )}
             </div>
           </div>

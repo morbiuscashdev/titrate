@@ -139,13 +139,13 @@ export function RequirementsStep() {
   return (
     <StepPanel title="Requirements" description="Verify your wallet has sufficient funds for distribution.">
       {!activeCampaign && (
-        <p className="text-sm text-gray-400">No active campaign selected.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">No active campaign selected.</p>
       )}
 
       {activeCampaign && (
         <div className="space-y-6">
           {isLoading && (
-            <p className="text-sm text-gray-500">Loading balances...</p>
+            <p className="text-sm text-gray-400 dark:text-gray-500">Loading balances...</p>
           )}
 
           <RequirementsPanel
@@ -160,9 +160,9 @@ export function RequirementsStep() {
           />
 
           {contractAddress && (
-            <div className="rounded-lg bg-gray-900 p-4 ring-1 ring-gray-800">
+            <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-400">Token Allowance</span>
+                <span className="text-gray-500 dark:text-gray-400">Token Allowance</span>
                 <span className={allowanceSufficient ? 'text-green-400' : 'text-red-400'}>
                   {allowanceFormatted} / {erc20NeededFormatted} {tokenSymbol}
                 </span>

@@ -10,7 +10,7 @@ export function BatchTimeline({ batches }: BatchTimelineProps) {
     return <p className="text-sm text-gray-500">No batches yet</p>;
   }
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-2" aria-live="polite" aria-label="Batch progress">
       {batches.map((batch) => (
         <BatchStatusCard key={batch.batchIndex} {...batch} />
       ))}

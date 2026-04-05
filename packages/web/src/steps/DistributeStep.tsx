@@ -465,7 +465,7 @@ export function DistributeStep() {
       description="Deploy the distribution contract and send tokens to recipients."
     >
       {!activeCampaign && (
-        <p className="text-sm text-gray-400">No active campaign selected.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">No active campaign selected.</p>
       )}
 
       {activeCampaign && (
@@ -480,42 +480,42 @@ export function DistributeStep() {
           {/* Pre-distribution summary */}
           {phase === 'ready' && (
             <div className="space-y-4">
-              <div className="rounded-lg bg-gray-900 p-3 sm:p-4 ring-1 ring-gray-800">
-                <h3 className="text-sm font-semibold text-white mb-3">
+              <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-3 sm:p-4 ring-1 ring-gray-200 dark:ring-gray-800">
+                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
                   Distribution Plan
                 </h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between gap-2">
-                    <span className="text-gray-400">Campaign</span>
-                    <span className="text-white">{activeCampaign.name}</span>
+                    <span className="text-gray-500 dark:text-gray-400">Campaign</span>
+                    <span className="text-gray-900 dark:text-white">{activeCampaign.name}</span>
                   </div>
                   <div className="flex justify-between gap-2">
-                    <span className="text-gray-400">Batch size</span>
-                    <span className="text-white">{batchSize}</span>
+                    <span className="text-gray-500 dark:text-gray-400">Batch size</span>
+                    <span className="text-gray-900 dark:text-white">{batchSize}</span>
                   </div>
                   <div className="flex justify-between gap-2">
-                    <span className="text-gray-400">Amount mode</span>
-                    <span className="text-white">
+                    <span className="text-gray-500 dark:text-gray-400">Amount mode</span>
+                    <span className="text-gray-900 dark:text-white">
                       {activeCampaign.amountMode}
                     </span>
                   </div>
                   {activeCampaign.uniformAmount && (
                     <div className="flex justify-between gap-2">
-                      <span className="text-gray-400">
+                      <span className="text-gray-500 dark:text-gray-400">
                         Amount per recipient
                       </span>
-                      <span className="text-white">
+                      <span className="text-gray-900 dark:text-white">
                         {activeCampaign.uniformAmount} {tokenSymbol}
                       </span>
                     </div>
                   )}
                   <div className="flex justify-between gap-2">
-                    <span className="text-gray-400">Recipients</span>
-                    <span className="text-white">{recipients.length}</span>
+                    <span className="text-gray-500 dark:text-gray-400">Recipients</span>
+                    <span className="text-gray-900 dark:text-white">{recipients.length}</span>
                   </div>
                   <div className="flex justify-between gap-2">
-                    <span className="text-gray-400">Contract</span>
-                    <span className="text-white">
+                    <span className="text-gray-500 dark:text-gray-400">Contract</span>
+                    <span className="text-gray-900 dark:text-white">
                       {hasContract ? 'Deployed' : 'Not deployed'}
                     </span>
                   </div>
@@ -537,7 +537,7 @@ export function DistributeStep() {
                   <button
                     type="button"
                     onClick={handleDeploy}
-                    className="bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg px-4 py-2 text-sm"
+                    className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
                   >
                     Deploy Contract
                   </button>
@@ -545,7 +545,7 @@ export function DistributeStep() {
                 <button
                   type="button"
                   onClick={handleDistribute}
-                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 text-sm font-medium"
+                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
                 >
                   {isResuming ? 'Resume Distribution' : 'Start Distribution'}
                 </button>
@@ -553,32 +553,42 @@ export function DistributeStep() {
             </div>
           )}
 
-          {/* Deploying state */}
-          {phase === 'deploying' && (
-            <div className="rounded-lg bg-gray-900 p-6 ring-1 ring-gray-800 text-center">
-              <p className="text-sm text-gray-400">
-                Deploying distribution contract...
-              </p>
-            </div>
-          )}
+          {/* Phase status announcements */}
+          <div role="status" aria-live="polite">
+            {/* Deploying state */}
+            {phase === 'deploying' && (
+              <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-6 ring-1 ring-gray-200 dark:ring-gray-800 text-center">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Deploying distribution contract...
+                </p>
+              </div>
+            )}
 
-          {/* Approving state */}
-          {phase === 'approving' && (
-            <div className="rounded-lg bg-gray-900 p-6 ring-1 ring-gray-800 text-center">
-              <p className="text-sm text-gray-400">
-                Approving token spend... Please confirm in your wallet.
-              </p>
-            </div>
-          )}
+            {/* Approving state */}
+            {phase === 'approving' && (
+              <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-6 ring-1 ring-gray-200 dark:ring-gray-800 text-center">
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  Approving token spend... Please confirm in your wallet.
+                </p>
+              </div>
+            )}
+
+            {/* Distributing state */}
+            {phase === 'distributing' && (
+              <div className="rounded-md bg-blue-900/20 p-3 text-sm text-blue-400 ring-1 ring-blue-900/30">
+                Distribution in progress...
+              </div>
+            )}
+
+            {/* Complete state */}
+            {phase === 'complete' && (
+              <p className="sr-only">Distribution complete.</p>
+            )}
+          </div>
 
           {/* Distribution in progress */}
           {(phase === 'distributing' || phase === 'complete') && (
             <div className="space-y-6">
-              {phase === 'distributing' && (
-                <div className="rounded-md bg-blue-900/20 p-3 text-sm text-blue-400 ring-1 ring-blue-900/30">
-                  Distribution in progress...
-                </div>
-              )}
 
               <BatchTimeline batches={batches} />
 

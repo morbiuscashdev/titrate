@@ -13,11 +13,12 @@ function Toggle({ options, selected, onChange }: {
   onChange?: (value: string) => void;
 }) {
   return (
-    <div className="inline-flex rounded-lg bg-gray-800 p-0.5">
+    <div className="inline-flex rounded-lg bg-gray-200 dark:bg-gray-800 p-0.5">
       {options.map((opt) => (
         <button key={opt.value} type="button" onClick={() => onChange?.(opt.value)}
-          className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-            selected === opt.value ? 'bg-gray-700 text-white' : 'text-gray-400 hover:text-gray-300'
+          aria-pressed={selected === opt.value}
+          className={`rounded-md px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+            selected === opt.value ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
           }`}>{opt.label}</button>
       ))}
     </div>
@@ -32,10 +33,10 @@ export function AmountConfig({ mode, format, uniformAmount, onModeChange, onForm
         <Toggle options={[{ value: 'integer', label: 'Integer' }, { value: 'decimal', label: 'Decimal' }]} selected={format} onChange={(v) => onFormatChange?.(v as 'integer' | 'decimal')} />
       </div>
       {mode === 'uniform' && (
-        <input type="text" value={uniformAmount} onChange={(e) => onAmountChange?.(e.target.value)} placeholder="Enter amount per recipient"
-          className="w-full rounded-lg bg-gray-900 px-3 py-2 text-sm text-white ring-1 ring-gray-800 placeholder:text-gray-600 focus:ring-blue-500 focus:outline-none" />
+        <input type="text" id="uniform-amount" aria-label="Amount per recipient" value={uniformAmount} onChange={(e) => onAmountChange?.(e.target.value)} placeholder="Enter amount per recipient"
+          className="w-full rounded-lg bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-200 dark:ring-gray-800 placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:ring-blue-500 focus:outline-none" />
       )}
-      {mode === 'variable' && <p className="text-xs text-gray-500">Amounts will be read from the CSV file.</p>}
+      {mode === 'variable' && <p className="text-xs text-gray-400 dark:text-gray-500">Amounts will be read from the CSV file.</p>}
     </div>
   );
 }

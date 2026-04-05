@@ -10,9 +10,9 @@ export type SpendSummaryProps = {
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="bg-gray-900 rounded-lg p-3 sm:p-4 ring-1 ring-gray-800">
-      <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
-      <p className="mt-1 text-base sm:text-lg font-semibold text-white truncate">{typeof value === 'number' ? value.toLocaleString() : value}</p>
+    <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 sm:p-4 ring-1 ring-gray-200 dark:ring-gray-800">
+      <p className="text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wide">{label}</p>
+      <p className="mt-1 text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">{typeof value === 'number' ? value.toLocaleString() : value}</p>
     </div>
   );
 }
@@ -20,7 +20,7 @@ function Stat({ label, value }: { label: string; value: string | number }) {
 export function SpendSummary({ totalGasEstimate, totalTokensSent, uniqueRecipients, confirmedBatches, failedBatches }: SpendSummaryProps) {
   return (
     <div>
-      <h3 className="text-sm font-semibold text-white mb-4">Distribution Summary</h3>
+      <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Distribution Summary</h3>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         <Stat label="Tokens sent" value={totalTokensSent} />
         <Stat label="Gas (est.)" value={totalGasEstimate} />

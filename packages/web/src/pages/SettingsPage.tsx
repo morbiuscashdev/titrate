@@ -125,7 +125,7 @@ export function SettingsPage() {
   return (
     <div className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
       <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
-        <h1 className="text-lg font-semibold text-white">Chain Settings</h1>
+        <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Chain Settings</h1>
         {!showForm && (
           <button
             type="button"
@@ -158,11 +158,11 @@ export function SettingsPage() {
       )}
 
       {showForm && (
-        <div className="rounded-lg bg-gray-900 p-4 sm:p-6 ring-1 ring-gray-800 mb-6">
-          <h2 className="text-sm font-semibold text-white mb-4">New Chain Configuration</h2>
+        <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 sm:p-6 ring-1 ring-gray-200 dark:ring-gray-800 mb-6">
+          <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">New Chain Configuration</h2>
 
           <div className="mb-4">
-            <label className="text-sm font-medium text-gray-300 mb-1 block">Chain Preset</label>
+            <label className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Chain Preset</label>
             <ChainSelector
               chains={SUPPORTED_CHAINS}
               selectedChainId={form.selectedChainId}
@@ -172,7 +172,7 @@ export function SettingsPage() {
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
             <div>
-              <label htmlFor="chain-name" className="text-sm font-medium text-gray-300 mb-1 block">
+              <label htmlFor="chain-name" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">
                 Chain Name
               </label>
               <input
@@ -181,11 +181,11 @@ export function SettingsPage() {
                 value={form.name}
                 onChange={(e) => updateField('name', e.target.value)}
                 placeholder="e.g. Ethereum"
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
             </div>
             <div>
-              <label htmlFor="chain-id" className="text-sm font-medium text-gray-300 mb-1 block">
+              <label htmlFor="chain-id" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">
                 Chain ID
               </label>
               <input
@@ -194,13 +194,13 @@ export function SettingsPage() {
                 value={form.chainId}
                 onChange={(e) => updateField('chainId', e.target.value)}
                 placeholder="e.g. 1"
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
             </div>
           </div>
 
           <div className="mb-4">
-            <label htmlFor="rpc-url" className="text-sm font-medium text-gray-300 mb-1 block">
+            <label htmlFor="rpc-url" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">
               RPC URL
             </label>
             <input
@@ -209,13 +209,13 @@ export function SettingsPage() {
               value={form.rpcUrl}
               onChange={(e) => updateField('rpcUrl', e.target.value)}
               placeholder="https://..."
-              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+              className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
             <div>
-              <label htmlFor="explorer-api-url" className="text-sm font-medium text-gray-300 mb-1 block">
+              <label htmlFor="explorer-api-url" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">
                 Explorer API URL <span className="text-gray-500">(optional)</span>
               </label>
               <input
@@ -224,11 +224,11 @@ export function SettingsPage() {
                 value={form.explorerApiUrl}
                 onChange={(e) => updateField('explorerApiUrl', e.target.value)}
                 placeholder="https://api.etherscan.io/api"
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
             </div>
             <div>
-              <label htmlFor="explorer-api-key" className="text-sm font-medium text-gray-300 mb-1 block">
+              <label htmlFor="explorer-api-key" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">
                 Explorer API Key <span className="text-gray-500">(optional)</span>
               </label>
               <input
@@ -237,7 +237,7 @@ export function SettingsPage() {
                 value={form.explorerApiKey}
                 onChange={(e) => updateField('explorerApiKey', e.target.value)}
                 placeholder="Your API key"
-                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+                className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
               />
             </div>
           </div>
@@ -256,7 +256,7 @@ export function SettingsPage() {
             <button
               type="button"
               onClick={handleCancel}
-              className="rounded-lg bg-gray-800 px-4 py-2 text-sm font-medium text-gray-300 hover:bg-gray-700"
+              className="rounded-lg bg-gray-200 dark:bg-gray-800 px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700"
             >
               Cancel
             </button>
@@ -286,26 +286,26 @@ export function SettingsPage() {
       )}
 
       {configs.length > 0 && (
-        <ul className="divide-y divide-gray-800">
+        <ul className="divide-y divide-gray-200 dark:divide-gray-800">
           {configs.map((config) => (
             <li key={config.id} className="py-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1 min-w-0">
-                  <p className="text-sm font-medium text-white">{config.name}</p>
-                  <p className="text-xs text-gray-400">Chain ID: {config.chainId}</p>
-                  <div className="flex items-center gap-2 text-xs text-gray-400 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 dark:text-white">{config.name}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Chain ID: {config.chainId}</p>
+                  <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 min-w-0">
                     <span className="flex-shrink-0">RPC:</span>
                     {isUnlocked ? (
-                      <span className="font-mono text-gray-300 truncate">{config.rpcUrl}</span>
+                      <span className="font-mono text-gray-600 dark:text-gray-300 truncate">{config.rpcUrl}</span>
                     ) : (
                       <EncryptedField ciphertext={config.rpcUrl} onUnlock={requestUnlock} />
                     )}
                   </div>
                   {config.explorerApiKey && (
-                    <div className="flex items-center gap-2 text-xs text-gray-400 min-w-0">
+                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 min-w-0">
                       <span className="flex-shrink-0">Explorer Key:</span>
                       {isUnlocked ? (
-                        <span className="font-mono text-gray-300">{config.explorerApiKey}</span>
+                        <span className="font-mono text-gray-600 dark:text-gray-300">{config.explorerApiKey}</span>
                       ) : (
                         <EncryptedField ciphertext={config.explorerApiKey} onUnlock={requestUnlock} />
                       )}
@@ -326,8 +326,8 @@ export function SettingsPage() {
       )}
 
       {/* Data Export / Import */}
-      <div className="mt-12 border-t border-gray-800 pt-8">
-        <h2 className="text-lg font-semibold text-white mb-4">Data</h2>
+      <div className="mt-12 border-t border-gray-200 dark:border-gray-800 pt-8">
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Data</h2>
         <div className="flex flex-wrap gap-3">
           <button
             type="button"
@@ -343,11 +343,11 @@ export function SettingsPage() {
               a.click();
               URL.revokeObjectURL(url);
             }}
-            className="bg-gray-800 hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-300 rounded-lg px-4 py-2 text-sm transition-colors"
+            className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm transition-colors"
           >
             Export Campaigns
           </button>
-          <label className="bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg px-4 py-2 text-sm transition-colors cursor-pointer">
+          <label className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm transition-colors cursor-pointer">
             Import Campaigns
             <input
               type="file"
@@ -378,7 +378,7 @@ export function SettingsPage() {
             />
           </label>
         </div>
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
           Export saves campaign configurations as JSON. Import merges campaigns into storage (existing campaigns with the same ID are overwritten).
         </p>
       </div>
