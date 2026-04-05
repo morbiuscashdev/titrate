@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useStorage } from '../providers/StorageProvider.js';
 import { useCampaign } from '../providers/CampaignProvider.js';
+import { useUnlockStorage } from '../hooks/useUnlockStorage.js';
 import { EncryptedField } from '../components/EncryptedField.js';
 import { ChainSelector } from '../components/ChainSelector.js';
 import { Skeleton } from '../components/Skeleton.js';
@@ -45,6 +46,7 @@ function deriveBusKey(url: string): string {
 export function SettingsPage() {
   useEffect(() => { document.title = 'Settings — Titrate'; }, []);
   const { storage, isUnlocked } = useStorage();
+  const { requestUnlock } = useUnlockStorage();
   const { campaigns, refreshCampaigns } = useCampaign();
   const [configs, setConfigs] = useState<readonly StoredChainConfig[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -137,6 +139,23 @@ export function SettingsPage() {
           </button>
         )}
       </div>
+
+      {!isUnlocked && (
+        <div className="rounded-lg bg-yellow-900/20 p-4 ring-1 ring-yellow-900/30 mb-6">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-yellow-400">
+              Storage is locked. Sensitive fields are encrypted.
+            </p>
+            <button
+              type="button"
+              onClick={() => void requestUnlock()}
+              className="rounded-lg bg-yellow-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-yellow-500 transition-colors"
+            >
+              Unlock
+            </button>
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <div className="rounded-lg bg-gray-900 p-6 ring-1 ring-gray-800 mb-6">
@@ -279,7 +298,7 @@ export function SettingsPage() {
                     {isUnlocked ? (
                       <span className="font-mono text-gray-300">{config.rpcUrl}</span>
                     ) : (
-                      <EncryptedField ciphertext={config.rpcUrl} />
+                      <EncryptedField ciphertext={config.rpcUrl} onUnlock={requestUnlock} />
                     )}
                   </div>
                   {config.explorerApiKey && (
@@ -288,7 +307,7 @@ export function SettingsPage() {
                       {isUnlocked ? (
                         <span className="font-mono text-gray-300">{config.explorerApiKey}</span>
                       ) : (
-                        <EncryptedField ciphertext={config.explorerApiKey} />
+                        <EncryptedField ciphertext={config.explorerApiKey} onUnlock={requestUnlock} />
                       )}
                     </div>
                   )}

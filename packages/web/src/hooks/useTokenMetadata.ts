@@ -12,7 +12,7 @@ import type { Address } from 'viem';
  * expire (`ttl: null`).
  */
 export function useTokenMetadata(tokenAddress: Address | null) {
-  const { publicClient } = useChain();
+  const { publicClient, rpcBus } = useChain();
   const { cache } = useCache();
 
   return useQuery({
@@ -20,16 +20,15 @@ export function useTokenMetadata(tokenAddress: Address | null) {
     queryFn: async () => {
       if (!publicClient || !tokenAddress) return null;
 
+      const probe = () => probeToken(publicClient, tokenAddress);
+      const busWrapped = rpcBus ? () => rpcBus.execute(probe) : probe;
+
       if (cache) {
         const cacheKey = `token-metadata:${tokenAddress}`;
-        return cache.getOrCompute(
-          cacheKey,
-          () => probeToken(publicClient, tokenAddress),
-          null,
-        );
+        return cache.getOrCompute(cacheKey, busWrapped, null);
       }
 
-      return probeToken(publicClient, tokenAddress);
+      return busWrapped();
     },
     enabled: !!publicClient && !!tokenAddress,
     staleTime: Infinity,

@@ -22,6 +22,15 @@ vi.mock('../providers/CampaignProvider.js', () => ({
   }),
 }));
 
+const mockChainConfigsPut = vi.fn().mockResolvedValue(undefined);
+const mockStorage = {
+  chainConfigs: { put: mockChainConfigsPut },
+};
+
+vi.mock('../providers/StorageProvider.js', () => ({
+  useStorage: () => ({ storage: mockStorage, isUnlocked: false, unlock: vi.fn() }),
+}));
+
 let tokenMetadataMock: { data: unknown; isLoading: boolean; error: unknown } = {
   data: undefined,
   isLoading: false,
@@ -51,6 +60,7 @@ describe('CampaignStep', () => {
     vi.clearAllMocks();
     activeCampaignOverride = null;
     tokenMetadataMock = { data: undefined, isLoading: false, error: null };
+    mockChainConfigsPut.mockClear();
   });
 
   it('renders step panel with title', () => {
@@ -310,6 +320,127 @@ describe('CampaignStep', () => {
     fireEvent.click(screen.getByText('Save & Continue'));
     expect(mockCreateCampaign).not.toHaveBeenCalled();
     expect(mockSaveCampaign).not.toHaveBeenCalled();
+  });
+
+  it('renders Custom button', () => {
+    render(<CampaignStep />);
+    expect(screen.getByText('Custom')).toBeInTheDocument();
+  });
+
+  it('shows chain ID and chain name inputs when Custom is clicked', () => {
+    render(<CampaignStep />);
+    fireEvent.click(screen.getByText('Custom'));
+    expect(screen.getByPlaceholderText('e.g. 42161')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('e.g. My Custom Chain')).toBeInTheDocument();
+  });
+
+  it('clears RPC URL when switching to custom chain', () => {
+    render(<CampaignStep />);
+    fireEvent.click(screen.getByText('Ethereum'));
+    const rpcInput = screen.getByPlaceholderText('https://...') as HTMLInputElement;
+    expect(rpcInput.value).toBe('https://eth.llamarpc.com');
+
+    fireEvent.click(screen.getByText('Custom'));
+    expect(rpcInput.value).toBe('');
+  });
+
+  it('hides custom fields when a preset chain is selected after Custom', () => {
+    render(<CampaignStep />);
+    fireEvent.click(screen.getByText('Custom'));
+    expect(screen.getByPlaceholderText('e.g. 42161')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Ethereum'));
+    expect(screen.queryByPlaceholderText('e.g. 42161')).not.toBeInTheDocument();
+  });
+
+  it('allows saving with a custom chain ID and name', async () => {
+    render(<CampaignStep />);
+    fireEvent.click(screen.getByText('Custom'));
+
+    // Set custom chain ID
+    fireEvent.change(screen.getByPlaceholderText('e.g. 42161'), {
+      target: { value: '42161' },
+    });
+    // Set chain name
+    fireEvent.change(screen.getByPlaceholderText('e.g. My Custom Chain'), {
+      target: { value: 'Arbitrum One' },
+    });
+    // Set RPC URL
+    fireEvent.change(screen.getByPlaceholderText('https://...'), {
+      target: { value: 'https://arb1.arbitrum.io/rpc' },
+    });
+    // Set campaign name
+    fireEvent.change(screen.getByPlaceholderText('My Airdrop Campaign'), {
+      target: { value: 'Custom Chain Campaign' },
+    });
+
+    fireEvent.click(screen.getByText('Save & Continue'));
+
+    await vi.waitFor(() => {
+      expect(mockCreateCampaign).toHaveBeenCalledTimes(1);
+    });
+
+    const config = mockCreateCampaign.mock.calls[0][0];
+    expect(config.chainId).toBe(42161);
+    expect(config.rpcUrl).toBe('https://arb1.arbitrum.io/rpc');
+    expect(config.name).toBe('Custom Chain Campaign');
+  });
+
+  it('renders Show advanced toggle and hides explorer fields by default', () => {
+    render(<CampaignStep />);
+    expect(screen.getByText('Show advanced')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('https://api.etherscan.io/api')).not.toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('Your API key')).not.toBeInTheDocument();
+  });
+
+  it('shows explorer fields when Show advanced is clicked', () => {
+    render(<CampaignStep />);
+    fireEvent.click(screen.getByText('Show advanced'));
+    expect(screen.getByText('Hide advanced')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('https://api.etherscan.io/api')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('Your API key')).toBeInTheDocument();
+  });
+
+  it('hides explorer fields when Hide advanced is clicked', () => {
+    render(<CampaignStep />);
+    fireEvent.click(screen.getByText('Show advanced'));
+    fireEvent.click(screen.getByText('Hide advanced'));
+    expect(screen.getByText('Show advanced')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('https://api.etherscan.io/api')).not.toBeInTheDocument();
+  });
+
+  it('renders rate limit group field', () => {
+    render(<CampaignStep />);
+    expect(screen.getByText('Rate limit group')).toBeInTheDocument();
+  });
+
+  it('saves chain config when explorer fields are filled', async () => {
+    mockCreateCampaign.mockResolvedValue('campaign-123');
+    render(<CampaignStep />);
+    fireEvent.click(screen.getByText('Ethereum'));
+    fireEvent.change(screen.getByPlaceholderText('My Airdrop Campaign'), {
+      target: { value: 'Explorer Campaign' },
+    });
+
+    // Open advanced and fill explorer fields
+    fireEvent.click(screen.getByText('Show advanced'));
+    fireEvent.change(screen.getByPlaceholderText('https://api.etherscan.io/api'), {
+      target: { value: 'https://api.etherscan.io/api' },
+    });
+    fireEvent.change(screen.getByPlaceholderText('Your API key'), {
+      target: { value: 'MYKEY123' },
+    });
+
+    fireEvent.click(screen.getByText('Save & Continue'));
+
+    await vi.waitFor(() => {
+      expect(mockChainConfigsPut).toHaveBeenCalledTimes(1);
+    });
+
+    const chainConfig = mockChainConfigsPut.mock.calls[0][0];
+    expect(chainConfig.explorerApiUrl).toBe('https://api.etherscan.io/api');
+    expect(chainConfig.explorerApiKey).toBe('MYKEY123');
+    expect(chainConfig.chainId).toBe(1);
   });
 
   it('updates RPC URL when typing in the input', () => {

@@ -1,11 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useWalletClient } from 'wagmi';
-import { erc20Abi, formatUnits } from 'viem';
-import type { Address } from 'viem';
+import { erc20Abi, formatUnits, toFunctionSelector } from 'viem';
+import type { Address, Hex } from 'viem';
 import {
   deployDistributor,
   disperseTokens,
   disperseTokensSimple,
+  approveOperator,
+  getAllowance,
 } from '@titrate/sdk';
 import type { BatchResult, ProgressEvent, StoredAddress } from '@titrate/sdk';
 import { StepPanel } from '../components/StepPanel.js';
@@ -15,6 +17,20 @@ import { useCampaign } from '../providers/CampaignProvider.js';
 import { useChain } from '../providers/ChainProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
 import type { BatchStatusCardProps } from '../components/BatchStatusCard.js';
+
+/**
+ * Returns the TitrateFull function selector for the disperse variant
+ * that matches the campaign's amount mode.
+ *
+ * @param amountMode - 'uniform' uses disperseSimple, 'variable' uses disperse
+ * @returns The 4-byte function selector as a Hex string
+ */
+export function getDisperseSelector(amountMode: 'uniform' | 'variable'): Hex {
+  if (amountMode === 'uniform') {
+    return toFunctionSelector('disperseSimple(address,address,address[],uint256,bytes32)');
+  }
+  return toFunctionSelector('disperse(address,address,address[],uint256[],bytes32)');
+}
 
 /** Distribution workflow phase. */
 type DistributePhase = 'ready' | 'deploying' | 'approving' | 'distributing' | 'complete';
@@ -156,27 +172,54 @@ export function DistributeStep() {
       }
     }
 
-    // Check and request ERC-20 approval if needed
+    // Check and request approval if needed
     if (totalNeeded > 0n) {
       setPhase('approving');
       try {
-        const currentAllowance = await publicClient.readContract({
-          address: activeCampaign.tokenAddress,
-          abi: erc20Abi,
-          functionName: 'allowance',
-          args: [walletClient.account!.address, activeCampaign.contractAddress as Address],
-        }) as bigint;
+        const contractAddress = activeCampaign.contractAddress as Address;
 
-        if (currentAllowance < totalNeeded) {
-          const approveHash = await walletClient.writeContract({
+        if (activeCampaign.contractVariant === 'simple') {
+          // Standard ERC-20 approve on the token contract
+          const currentAllowance = await publicClient.readContract({
             address: activeCampaign.tokenAddress,
             abi: erc20Abi,
-            functionName: 'approve',
-            args: [activeCampaign.contractAddress as Address, totalNeeded],
-            account: walletClient.account!,
-            chain: undefined,
+            functionName: 'allowance',
+            args: [walletClient.account!.address, contractAddress],
+          }) as bigint;
+
+          if (currentAllowance < totalNeeded) {
+            const approveHash = await walletClient.writeContract({
+              address: activeCampaign.tokenAddress,
+              abi: erc20Abi,
+              functionName: 'approve',
+              args: [contractAddress, totalNeeded],
+              account: walletClient.account!,
+              chain: undefined,
+            });
+            await publicClient.waitForTransactionReceipt({ hash: approveHash });
+          }
+        } else {
+          // Full variant: selector-scoped approve on the Titrate contract
+          const selector = getDisperseSelector(activeCampaign.amountMode);
+
+          const currentAllowance = await getAllowance({
+            contractAddress,
+            owner: walletClient.account!.address,
+            operator: walletClient.account!.address,
+            selector,
+            publicClient,
           });
-          await publicClient.waitForTransactionReceipt({ hash: approveHash });
+
+          if (currentAllowance < totalNeeded) {
+            await approveOperator({
+              contractAddress,
+              operator: walletClient.account!.address,
+              selector,
+              amount: totalNeeded,
+              walletClient,
+              publicClient,
+            });
+          }
         }
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : 'Token approval failed';

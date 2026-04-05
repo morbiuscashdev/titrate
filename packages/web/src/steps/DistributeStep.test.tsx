@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DistributeStep, toBatchCardStatus } from './DistributeStep.js';
+import { DistributeStep, toBatchCardStatus, getDisperseSelector } from './DistributeStep.js';
 
 // ---- Mock state ----
 
@@ -92,11 +92,15 @@ vi.mock('wagmi', () => ({
 const mockDeployDistributor = vi.fn();
 const mockDisperseTokensSimple = vi.fn();
 const mockDisperseTokens = vi.fn();
+const mockApproveOperator = vi.fn();
+const mockGetAllowance = vi.fn();
 
 vi.mock('@titrate/sdk', () => ({
   deployDistributor: (...args: unknown[]) => mockDeployDistributor(...args),
   disperseTokensSimple: (...args: unknown[]) => mockDisperseTokensSimple(...args),
   disperseTokens: (...args: unknown[]) => mockDisperseTokens(...args),
+  approveOperator: (...args: unknown[]) => mockApproveOperator(...args),
+  getAllowance: (...args: unknown[]) => mockGetAllowance(...args),
 }));
 
 beforeEach(() => {
@@ -117,6 +121,8 @@ beforeEach(() => {
   });
   mockDisperseTokensSimple.mockResolvedValue([]);
   mockDisperseTokens.mockResolvedValue([]);
+  mockApproveOperator.mockResolvedValue('0xapprovehash');
+  mockGetAllowance.mockResolvedValue(0n);
 });
 
 describe('DistributeStep', () => {
@@ -730,6 +736,218 @@ describe('DistributeStep', () => {
     await waitFor(() => {
       expect(screen.getByText('3')).toBeInTheDocument();
     });
+  });
+
+  it('uses selector-scoped approval for full variant with uniform mode', async () => {
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 1, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+    mockGetAllowance.mockResolvedValue(0n);
+    mockApproveOperator.mockResolvedValue('0xapprovehash');
+    mockDisperseTokensSimple.mockResolvedValue([
+      {
+        batchIndex: 0,
+        recipients: ['0xRecipient1000000000000000000000000000001'],
+        amounts: [1000n],
+        attempts: [],
+        confirmedTxHash: '0xabc123',
+        blockNumber: null,
+      },
+    ]);
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+        contractVariant: 'full',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(mockGetAllowance).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contractAddress: '0x1234567890123456789012345678901234567890',
+          selector: getDisperseSelector('uniform'),
+        }),
+      );
+    });
+
+    expect(mockApproveOperator).toHaveBeenCalledWith(
+      expect.objectContaining({
+        contractAddress: '0x1234567890123456789012345678901234567890',
+        selector: getDisperseSelector('uniform'),
+        amount: 1000n,
+      }),
+    );
+  });
+
+  it('uses selector-scoped approval for full variant with variable mode', async () => {
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: '500' },
+      { setId: 'set-1', address: '0xRecipient2000000000000000000000000000002', amount: '750' },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 2, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+    mockGetAllowance.mockResolvedValue(0n);
+    mockApproveOperator.mockResolvedValue('0xapprovehash');
+    mockDisperseTokens.mockResolvedValue([
+      {
+        batchIndex: 0,
+        recipients: mockAddresses.map((a) => a.address),
+        amounts: [500n, 750n],
+        attempts: [],
+        confirmedTxHash: '0xdef456',
+        blockNumber: null,
+      },
+    ]);
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+        contractVariant: 'full',
+        amountMode: 'per-recipient',
+        uniformAmount: null,
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(mockApproveOperator).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contractAddress: '0x1234567890123456789012345678901234567890',
+          selector: getDisperseSelector('variable'),
+          amount: 1250n,
+        }),
+      );
+    });
+  });
+
+  it('skips selector-scoped approval when full variant allowance is sufficient', async () => {
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 1, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+    // Allowance already exceeds totalNeeded
+    mockGetAllowance.mockResolvedValue(2000n);
+    mockDisperseTokensSimple.mockResolvedValue([
+      {
+        batchIndex: 0,
+        recipients: ['0xRecipient1000000000000000000000000000001'],
+        amounts: [1000n],
+        attempts: [],
+        confirmedTxHash: '0xabc123',
+        blockNumber: null,
+      },
+    ]);
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+        contractVariant: 'full',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(mockGetAllowance).toHaveBeenCalled();
+    });
+
+    expect(mockApproveOperator).not.toHaveBeenCalled();
+  });
+
+  it('shows error when full variant approval fails', async () => {
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 1, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+    mockGetAllowance.mockResolvedValue(0n);
+    mockApproveOperator.mockRejectedValue(new Error('Operator approval rejected'));
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+        contractVariant: 'full',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Operator approval rejected')).toBeInTheDocument();
+    });
+  });
+});
+
+describe('getDisperseSelector', () => {
+  it('returns disperseSimple selector for uniform mode', () => {
+    const selector = getDisperseSelector('uniform');
+    expect(selector).toMatch(/^0x[0-9a-f]{8}$/);
+  });
+
+  it('returns disperse selector for variable mode', () => {
+    const selector = getDisperseSelector('variable');
+    expect(selector).toMatch(/^0x[0-9a-f]{8}$/);
+  });
+
+  it('returns different selectors for uniform and variable', () => {
+    const uniform = getDisperseSelector('uniform');
+    const variable = getDisperseSelector('variable');
+    expect(uniform).not.toBe(variable);
   });
 });
 

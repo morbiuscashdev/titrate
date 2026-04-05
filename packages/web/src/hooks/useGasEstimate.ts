@@ -18,18 +18,21 @@ export type GasEstimateParams = {
  * Stale after 30 seconds since gas estimates change with network conditions.
  */
 export function useGasEstimate(params: GasEstimateParams | null) {
-  const { publicClient } = useChain();
+  const { publicClient, rpcBus } = useChain();
 
   return useQuery({
     queryKey: ['gas-estimate', params?.address, params?.functionName, params?.account],
-    queryFn: () =>
-      publicClient!.estimateContractGas({
-        address: params!.address,
-        abi: params!.abi,
-        functionName: params!.functionName,
-        args: [...params!.args],
-        account: params!.account,
-      }),
+    queryFn: () => {
+      const call = () =>
+        publicClient!.estimateContractGas({
+          address: params!.address,
+          abi: params!.abi,
+          functionName: params!.functionName,
+          args: [...params!.args],
+          account: params!.account,
+        });
+      return rpcBus ? rpcBus.execute(call) : call();
+    },
     enabled: !!publicClient && !!params,
     staleTime: 30_000,
   });

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { StepPanel } from '../components/StepPanel.js';
 import { ChainSelector } from '../components/ChainSelector.js';
 import { useCampaign } from '../providers/CampaignProvider.js';
+import { useStorage } from '../providers/StorageProvider.js';
 import { useTokenMetadata } from '../hooks/useTokenMetadata.js';
 import { SUPPORTED_CHAINS, getChainConfig } from '@titrate/sdk';
 import type { Address } from 'viem';
@@ -34,6 +35,7 @@ export function clampBatchSize(value: string): number {
  */
 export function CampaignStep() {
   const { activeCampaign, saveCampaign, createCampaign, setActiveStep } = useCampaign();
+  const { storage } = useStorage();
 
   const [chainId, setChainId] = useState<number | null>(null);
   const [rpcUrl, setRpcUrl] = useState('');
@@ -42,6 +44,12 @@ export function CampaignStep() {
   const [campaignName, setCampaignName] = useState('');
   const [batchSize, setBatchSize] = useState(100);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCustomChain, setIsCustomChain] = useState(false);
+  const [customChainName, setCustomChainName] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [explorerApiUrl, setExplorerApiUrl] = useState('');
+  const [explorerApiKey, setExplorerApiKey] = useState('');
+  const [rateLimitGroup, setRateLimitGroup] = useState('');
 
   // Determine whether the entered token address is valid hex for probing
   const normalizedTokenAddress: Address | null =
@@ -62,13 +70,23 @@ export function CampaignStep() {
     setBatchSize(activeCampaign.batchSize);
   }, [activeCampaign]);
 
-  // Auto-fill RPC URL when chain changes
+  // Auto-fill RPC URL when a preset chain is selected
   const handleChainSelect = useCallback((selectedChainId: number) => {
     setChainId(selectedChainId);
+    setIsCustomChain(false);
+    setCustomChainName('');
     const config = getChainConfig(selectedChainId);
     if (config && config.rpcUrls.length > 0) {
       setRpcUrl(config.rpcUrls[0]);
     }
+  }, []);
+
+  // Switch to custom chain mode
+  const handleCustomChain = useCallback(() => {
+    setIsCustomChain(true);
+    setChainId(null);
+    setRpcUrl('');
+    setCustomChainName('');
   }, []);
 
   const handleSave = useCallback(async () => {
@@ -82,6 +100,8 @@ export function CampaignStep() {
       const resolvedDecimals = tokenMetadata?.decimals ?? 18;
 
       const resolvedContractName = tokenMetadata?.symbol ?? activeCampaign?.contractName ?? '';
+
+      let campaignId: string | null = activeCampaign?.id ?? null;
 
       if (activeCampaign) {
         const updated: StoredCampaign = {
@@ -97,7 +117,7 @@ export function CampaignStep() {
         };
         await saveCampaign(updated);
       } else {
-        await createCampaign({
+        campaignId = await createCampaign({
           funder: ZERO_ADDRESS,
           name: campaignName.trim(),
           version: 1,
@@ -116,6 +136,31 @@ export function CampaignStep() {
           pinnedBlock: null,
         });
       }
+
+      // Persist chain config when explorer or rate limit fields are filled
+      if (storage && campaignId && (explorerApiUrl || explorerApiKey || rateLimitGroup)) {
+        let rpcBusKey = rateLimitGroup;
+        if (!rpcBusKey) {
+          try { rpcBusKey = new URL(rpcUrl).hostname; } catch { rpcBusKey = ''; }
+        }
+        let explorerBusKey = '';
+        if (explorerApiUrl) {
+          try { explorerBusKey = new URL(explorerApiUrl).hostname; } catch { /* empty */ }
+        }
+        await storage.chainConfigs.put({
+          id: `campaign-${campaignId}`,
+          chainId,
+          name: customChainName || `Chain ${chainId}`,
+          rpcUrl,
+          rpcBusKey,
+          explorerApiUrl,
+          explorerApiKey,
+          explorerBusKey,
+          trueBlocksUrl: '',
+          trueBlocksBusKey: '',
+        });
+      }
+
       setActiveStep('addresses');
     } finally {
       setIsSaving(false);
@@ -123,6 +168,7 @@ export function CampaignStep() {
   }, [
     chainId, rpcUrl, normalizedTokenAddress, tokenMetadata, contractVariant,
     campaignName, batchSize, activeCampaign, saveCampaign, createCampaign, setActiveStep,
+    storage, explorerApiUrl, explorerApiKey, rateLimitGroup, customChainName,
   ]);
 
   const canSave = chainId !== null && campaignName.trim().length > 0;
@@ -133,8 +179,49 @@ export function CampaignStep() {
         {/* Chain Selection */}
         <div>
           <label className="text-sm font-medium text-gray-300 mb-1 block">Chain</label>
-          <ChainSelector chains={chainOptions} selectedChainId={chainId} onSelect={handleChainSelect} />
+          <ChainSelector
+            chains={chainOptions}
+            selectedChainId={isCustomChain ? null : chainId}
+            onSelect={handleChainSelect}
+          />
+          <button
+            type="button"
+            onClick={handleCustomChain}
+            className={`mt-2 rounded-lg px-4 py-2 text-sm font-medium ring-1 transition-colors ${
+              isCustomChain
+                ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30'
+                : 'bg-gray-900 text-gray-400 ring-gray-800 hover:ring-gray-700'
+            }`}
+          >
+            Custom
+          </button>
         </div>
+
+        {/* Custom Chain Fields */}
+        {isCustomChain && (
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-gray-300 mb-1 block">Chain ID</label>
+              <input
+                type="number"
+                value={chainId ?? ''}
+                onChange={(e) => setChainId(e.target.value ? Number(e.target.value) : null)}
+                placeholder="e.g. 42161"
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-300 mb-1 block">Chain Name</label>
+              <input
+                type="text"
+                value={customChainName}
+                onChange={(e) => setCustomChainName(e.target.value)}
+                placeholder="e.g. My Custom Chain"
+                className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+            </div>
+          </div>
+        )}
 
         {/* RPC URL */}
         <div>
@@ -146,6 +233,56 @@ export function CampaignStep() {
             placeholder="https://..."
             className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
+        </div>
+
+        {/* Rate Limit Group */}
+        <div>
+          <label className="text-sm font-medium text-gray-300 mb-1 block">Rate limit group</label>
+          <input
+            type="text"
+            value={rateLimitGroup}
+            onChange={(e) => setRateLimitGroup(e.target.value)}
+            placeholder={(() => { try { return rpcUrl ? new URL(rpcUrl).hostname : 'auto-derived from RPC URL'; } catch { return 'auto-derived from RPC URL'; } })()}
+            className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          />
+          <p className="mt-1 text-xs text-gray-500">
+            Share rate limits across endpoints (e.g., &quot;alchemy&quot; for all Alchemy chains).
+          </p>
+        </div>
+
+        {/* Advanced: Explorer Fields */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+            className="text-sm text-gray-400 hover:text-gray-300 transition-colors"
+          >
+            {showAdvanced ? 'Hide advanced' : 'Show advanced'}
+          </button>
+          {showAdvanced && (
+            <div className="mt-3 space-y-4">
+              <div>
+                <label className="text-sm font-medium text-gray-300 mb-1 block">Explorer API URL</label>
+                <input
+                  type="text"
+                  value={explorerApiUrl}
+                  onChange={(e) => setExplorerApiUrl(e.target.value)}
+                  placeholder="https://api.etherscan.io/api"
+                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-300 mb-1 block">Explorer API Key</label>
+                <input
+                  type="text"
+                  value={explorerApiKey}
+                  onChange={(e) => setExplorerApiKey(e.target.value)}
+                  placeholder="Your API key"
+                  className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Token Address */}
