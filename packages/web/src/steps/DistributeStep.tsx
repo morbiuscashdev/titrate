@@ -6,6 +6,7 @@ import {
   deployDistributor,
   disperseTokens,
   disperseTokensSimple,
+  disperseParallel,
   approveOperator,
   getAllowance,
   computeResumeOffset,
@@ -26,6 +27,7 @@ import { useCampaign } from '../providers/CampaignProvider.js';
 import { useChain } from '../providers/ChainProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
 import { useIntervention } from '../providers/InterventionProvider.js';
+import { useWallet } from '../providers/WalletProvider.js';
 import { useLiveFilter, composeLiveFilters } from '../hooks/useLiveFilter.js';
 import { usePipelineLiveFilter } from '../hooks/usePipelineLiveFilter.js';
 import type { BatchStatusCardProps } from '../components/BatchStatusCard.js';
@@ -164,6 +166,7 @@ export function DistributeStep() {
   const { storage } = useStorage();
   const { data: walletClient } = useWalletClient();
   const { createInterventionHook, enabledPoints, setEnabledPoints, journal } = useIntervention();
+  const { walletClients: derivedWalletClients, address: coldWalletAddress } = useWallet();
 
   const [phase, setPhase] = useState<DistributePhase>('ready');
   const [batches, setBatches] = useState<readonly BatchStatusCardProps[]>([]);
@@ -178,6 +181,12 @@ export function DistributeStep() {
     readonly estimatedRemainingMs: number;
   } | null>(null);
   const [pipelineConfig, setPipelineConfig] = useState<PipelineConfig | null>(null);
+  const [sweepAddress, setSweepAddress] = useState<string>('');
+  const [sweepState, setSweepState] = useState<{
+    readonly status: 'idle' | 'sweeping' | 'done' | 'error';
+    readonly progress: number;
+    readonly errorMessage: string | null;
+  }>({ status: 'idle', progress: 0, errorMessage: null });
   const recipientsLoadedRef = useRef(false);
   const savedBatchesLoadedRef = useRef(false);
   const pipelineConfigLoadedRef = useRef(false);
@@ -282,6 +291,11 @@ export function DistributeStep() {
       }
     })();
   }, [activeCampaign, storage]);
+
+  // Default sweep address to the cold wallet address
+  useEffect(() => {
+    if (coldWalletAddress) setSweepAddress(coldWalletAddress);
+  }, [coldWalletAddress]);
 
   // Detect fully-complete distributions once both saved batches and recipients are loaded
   useEffect(() => {
@@ -466,13 +480,58 @@ export function DistributeStep() {
       }
     }
 
+    const useParallel = derivedWalletClients.length > 1;
+    const contractAddress = activeCampaign.contractAddress as Address;
+
     // Check and request approval if needed
     if (totalNeeded > 0n) {
       setPhase('approving');
       try {
-        const contractAddress = activeCampaign.contractAddress as Address;
+        if (useParallel) {
+          // Per-wallet approvals for parallel distribution
+          for (const client of derivedWalletClients) {
+            if (activeCampaign.contractVariant === 'simple') {
+              const currentAllowance = await publicClient.readContract({
+                address: activeCampaign.tokenAddress,
+                abi: erc20Abi,
+                functionName: 'allowance',
+                args: [client.account!.address, contractAddress],
+              }) as bigint;
 
-        if (activeCampaign.contractVariant === 'simple') {
+              if (currentAllowance < totalNeeded / BigInt(derivedWalletClients.length)) {
+                const approveHash = await client.writeContract({
+                  address: activeCampaign.tokenAddress,
+                  abi: erc20Abi,
+                  functionName: 'approve',
+                  args: [contractAddress, totalNeeded],
+                  account: client.account!,
+                  chain: undefined,
+                });
+                await publicClient.waitForTransactionReceipt({ hash: approveHash });
+              }
+            } else {
+              const selector = getDisperseSelector(activeCampaign.amountMode);
+              const currentAllowance = await getAllowance({
+                contractAddress,
+                owner: client.account!.address,
+                operator: client.account!.address,
+                selector,
+                publicClient,
+              });
+
+              if (currentAllowance < totalNeeded / BigInt(derivedWalletClients.length)) {
+                await approveOperator({
+                  contractAddress,
+                  operator: client.account!.address,
+                  selector,
+                  amount: totalNeeded,
+                  walletClient: client,
+                  publicClient,
+                });
+              }
+            }
+          }
+        } else if (activeCampaign.contractVariant === 'simple') {
           // Standard ERC-20 approve on the token contract
           const currentAllowance = await publicClient.readContract({
             address: activeCampaign.tokenAddress,
@@ -633,7 +692,24 @@ export function DistributeStep() {
     try {
       let batchResults: BatchResult[];
 
-      if (activeCampaign.amountMode === 'uniform') {
+      if (useParallel) {
+        // Multi-wallet parallel dispatch
+        const parallelResults = await disperseParallel({
+          contractAddress: activeCampaign.contractAddress as Address,
+          variant: activeCampaign.contractVariant,
+          token: activeCampaign.tokenAddress,
+          recipients: recipientAddresses as Address[],
+          amount: activeCampaign.amountMode === 'uniform' ? BigInt(activeCampaign.uniformAmount ?? '0') : undefined,
+          amounts: activeCampaign.amountMode === 'variable' ? variableAmounts : undefined,
+          walletClients: derivedWalletClients,
+          publicClient,
+          batchSize,
+          gasConfig: sdkGasConfig,
+          onProgress,
+        });
+
+        batchResults = parallelResults.flatMap((pr) => [...pr.results]);
+      } else if (activeCampaign.amountMode === 'uniform') {
         batchResults = await disperseTokensSimple({
           contractAddress: activeCampaign.contractAddress as Address,
           variant: activeCampaign.contractVariant,
@@ -715,7 +791,67 @@ export function DistributeStep() {
     composedLiveFilter,
     createInterventionHook,
     enabledPoints,
+    derivedWalletClients,
   ]);
+
+  /** Sweep remaining token and ETH balances from derived wallets back to a target address. */
+  const handleSweep = useCallback(async () => {
+    if (!sweepAddress || derivedWalletClients.length === 0 || !publicClient || !activeCampaign) return;
+
+    setSweepState({ status: 'sweeping', progress: 0, errorMessage: null });
+
+    try {
+      for (let i = 0; i < derivedWalletClients.length; i++) {
+        const client = derivedWalletClients[i];
+        const walletAddress = client.account!.address;
+        const target = sweepAddress as Address;
+
+        // Sweep tokens
+        const tokenBal = await publicClient.readContract({
+          address: activeCampaign.tokenAddress,
+          abi: erc20Abi,
+          functionName: 'balanceOf',
+          args: [walletAddress],
+        }) as bigint;
+
+        if (tokenBal > 0n) {
+          const hash = await client.writeContract({
+            address: activeCampaign.tokenAddress,
+            abi: erc20Abi,
+            functionName: 'transfer',
+            args: [target, tokenBal],
+            account: client.account!,
+            chain: undefined,
+          });
+          await publicClient.waitForTransactionReceipt({ hash });
+        }
+
+        // Sweep ETH (leave gas for the tx itself)
+        const ethBal = await publicClient.getBalance({ address: walletAddress });
+        const gasPrice = await publicClient.getGasPrice();
+        const gasCost = 21_000n * gasPrice;
+        if (ethBal > gasCost) {
+          const hash = await client.sendTransaction({
+            to: target,
+            value: ethBal - gasCost,
+            account: client.account!,
+            chain: undefined,
+          });
+          await publicClient.waitForTransactionReceipt({ hash });
+        }
+
+        setSweepState((prev) => ({ ...prev, progress: i + 1 }));
+      }
+
+      setSweepState({ status: 'done', progress: derivedWalletClients.length, errorMessage: null });
+    } catch (err: unknown) {
+      setSweepState({
+        status: 'error',
+        progress: 0,
+        errorMessage: err instanceof Error ? err.message : 'Sweep failed',
+      });
+    }
+  }, [sweepAddress, derivedWalletClients, publicClient, activeCampaign]);
 
   // Compute resume state from saved batches
   const confirmedSavedCount = savedBatches.filter((b) => b.status === 'confirmed').length;
@@ -819,6 +955,12 @@ export function DistributeStep() {
                     <span className="text-gray-500 dark:text-gray-400">Recipients</span>
                     <span className="text-gray-900 dark:text-white">{recipients.length}</span>
                   </div>
+                  {derivedWalletClients.length > 1 && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-gray-500 dark:text-gray-400">Wallets</span>
+                      <span className="text-gray-900 dark:text-white">{derivedWalletClients.length} (parallel)</span>
+                    </div>
+                  )}
                   <div className="flex justify-between gap-2">
                     <span className="text-gray-500 dark:text-gray-400">Contract</span>
                     {hasContract ? (
@@ -982,6 +1124,40 @@ export function DistributeStep() {
                   confirmedBatches={summaryData.confirmedBatches}
                   failedBatches={summaryData.failedBatches}
                 />
+              )}
+
+              {phase === 'complete' && derivedWalletClients.length > 1 && (
+                <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800 space-y-4">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Sweep Remaining Balances</h3>
+                  <div>
+                    <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">Sweep to address</label>
+                    <input
+                      type="text"
+                      value={sweepAddress}
+                      onChange={(e) => setSweepAddress(e.target.value)}
+                      placeholder="0x..."
+                      className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none font-mono"
+                    />
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={handleSweep}
+                      disabled={!sweepAddress || sweepState.status === 'sweeping'}
+                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                    >
+                      {sweepState.status === 'sweeping'
+                        ? `Sweeping ${sweepState.progress}/${derivedWalletClients.length}...`
+                        : 'Sweep All to Address'}
+                    </button>
+                    {sweepState.status === 'done' && (
+                      <span className="text-sm text-green-600 dark:text-green-400">Sweep complete</span>
+                    )}
+                    {sweepState.status === 'error' && (
+                      <span className="text-sm text-red-400">{sweepState.errorMessage}</span>
+                    )}
+                  </div>
+                </div>
               )}
 
               {phase === 'complete' && journal.length > 0 && (

@@ -166,7 +166,7 @@ Advanced features for power users.
 ## Post-Completion Log
 
 ### Deferred Scope
-- **Multi-wallet distribution (disperseParallel)**: Requires multiple concurrent wallet connections via wagmi, per-wallet progress UI, and wallet assignment strategy. Complex UX — deserves its own plan.
+- **Multi-wallet distribution (disperseParallel)**: Implemented — derived hot wallets from EIP-712 signature, per-wallet funding, parallel dispatch, sweep-back. See `docs/superpowers/specs/2026-04-06-multi-wallet-parallel-distribution.md`.
 - **increaseOperatorAllowance (top-up vs replace)**: Low priority, simple variant doesn't need it
 - **Memory monitor wiring**: Low priority, cosmetic
 - **token-recipients filter startBlock/endBlock**: Missing params in PipelineStepEditor, not blocking
