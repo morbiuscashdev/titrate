@@ -1,10 +1,19 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FiltersStep, getFilterLabel } from './FiltersStep.js';
 
 const mockSetActiveStep = vi.fn();
 const mockCompleteStep = vi.fn();
 const mockPutPipelineConfig = vi.fn().mockResolvedValue(undefined);
+const mockPipelineExecute = vi.fn();
+const mockGetByCampaign = vi.fn().mockResolvedValue([
+  { id: 'set-1', campaignId: 'campaign-1', name: 'Source', type: 'source', addressCount: 3 },
+]);
+const mockGetBySet = vi.fn().mockResolvedValue([
+  { id: '1', address: '0x1111111111111111111111111111111111111111' },
+  { id: '2', address: '0x2222222222222222222222222222222222222222' },
+  { id: '3', address: '0x3333333333333333333333333333333333333333' },
+]);
 
 const defaultCampaign = {
   id: 'campaign-1',
@@ -29,8 +38,14 @@ const defaultCampaign = {
 };
 
 let activeCampaignOverride: typeof defaultCampaign | null = defaultCampaign;
-let storageOverride: { pipelineConfigs: { put: ReturnType<typeof vi.fn> } } | null = {
+let storageOverride: {
+  pipelineConfigs: { put: ReturnType<typeof vi.fn> };
+  addressSets: { getByCampaign: ReturnType<typeof vi.fn> };
+  addresses: { getBySet: ReturnType<typeof vi.fn> };
+} | null = {
   pipelineConfigs: { put: mockPutPipelineConfig },
+  addressSets: { getByCampaign: mockGetByCampaign },
+  addresses: { getBySet: mockGetBySet },
 };
 
 vi.mock('../providers/CampaignProvider.js', () => ({
@@ -55,6 +70,20 @@ vi.mock('../providers/StorageProvider.js', () => ({
   }),
 }));
 
+vi.mock('@titrate/sdk', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    createPipeline: () => ({
+      execute: (...args: unknown[]) => mockPipelineExecute(...args),
+    }),
+  };
+});
+
+vi.mock('../providers/ChainProvider.js', () => ({
+  useChain: () => ({ publicClient: {}, rpcBus: null, explorerBus: null, chainConfig: null }),
+}));
+
 vi.stubGlobal('crypto', {
   ...globalThis.crypto,
   randomUUID: () => 'filter-uuid-1',
@@ -64,7 +93,19 @@ describe('FiltersStep', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     activeCampaignOverride = defaultCampaign;
-    storageOverride = { pipelineConfigs: { put: mockPutPipelineConfig } };
+    mockGetByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'campaign-1', name: 'Source', type: 'source', addressCount: 3 },
+    ]);
+    mockGetBySet.mockResolvedValue([
+      { id: '1', address: '0x1111111111111111111111111111111111111111' },
+      { id: '2', address: '0x2222222222222222222222222222222222222222' },
+      { id: '3', address: '0x3333333333333333333333333333333333333333' },
+    ]);
+    storageOverride = {
+      pipelineConfigs: { put: mockPutPipelineConfig },
+      addressSets: { getByCampaign: mockGetByCampaign },
+      addresses: { getBySet: mockGetBySet },
+    };
   });
 
   it('renders step panel with title', () => {
@@ -202,9 +243,9 @@ describe('FiltersStep', () => {
     fireEvent.click(screen.getByText('+ Add Filter'));
     // Summary should show "1 filter configured"
     expect(screen.getByText('1 filter configured')).toBeInTheDocument();
-    // Summary note about distribution-time filtering
+    // Summary note about preview hint
     expect(
-      screen.getByText(/filtered during distribution via the live filter pipeline/i),
+      screen.getByText(/use preview filters to see how many addresses pass/i),
     ).toBeInTheDocument();
   });
 
@@ -226,6 +267,106 @@ describe('FiltersStep', () => {
     render(<FiltersStep />);
     expect(screen.queryByText(/filter configured/i)).toBeNull();
     expect(screen.queryByText(/filters configured/i)).toBeNull();
+  });
+
+  it('shows Preview Filters button when filters and addresses are configured', async () => {
+    render(<FiltersStep />);
+    await waitFor(() => {
+      expect(mockGetBySet).toHaveBeenCalled();
+    });
+    fireEvent.click(screen.getByText('+ Add Filter'));
+    await waitFor(() => {
+      expect(screen.getByText('Preview Filters')).toBeInTheDocument();
+    });
+  });
+
+  it('shows no-addresses hint when filters exist but no addresses loaded', async () => {
+    mockGetByCampaign.mockResolvedValue([]);
+    mockGetBySet.mockResolvedValue([]);
+    render(<FiltersStep />);
+    fireEvent.click(screen.getByText('+ Add Filter'));
+    await waitFor(() => {
+      expect(mockGetByCampaign).toHaveBeenCalled();
+    });
+    expect(screen.queryByText('Preview Filters')).not.toBeInTheDocument();
+    expect(screen.getByText(/no addresses loaded yet/i)).toBeInTheDocument();
+  });
+
+  it('runs preview and shows surviving count', async () => {
+    mockPipelineExecute.mockImplementation(async function* () {
+      yield ['0x1111111111111111111111111111111111111111', '0x2222222222222222222222222222222222222222'];
+    });
+
+    render(<FiltersStep />);
+
+    await waitFor(() => {
+      expect(mockGetBySet).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('+ Add Filter'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Preview Filters')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Preview Filters'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/addresses pass/)).toBeInTheDocument();
+    });
+
+    // Verify the inline preview next to the button shows the correct counts
+    const passText = screen.getByText(/addresses pass/);
+    expect(passText.textContent).toContain('2');
+    expect(passText.textContent).toContain('of');
+    expect(passText.textContent).toContain('3');
+  });
+
+  it('shows error when preview fails', async () => {
+    mockPipelineExecute.mockImplementation(async function* () {
+      throw new Error('RPC timeout');
+    });
+
+    render(<FiltersStep />);
+    await waitFor(() => {
+      expect(mockGetBySet).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('+ Add Filter'));
+    await waitFor(() => {
+      expect(screen.getByText('Preview Filters')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('Preview Filters'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/RPC timeout/)).toBeInTheDocument();
+    });
+  });
+
+  it('updates preview hint text in summary after successful preview', async () => {
+    mockPipelineExecute.mockImplementation(async function* () {
+      yield ['0x1111111111111111111111111111111111111111'];
+    });
+
+    render(<FiltersStep />);
+    await waitFor(() => {
+      expect(mockGetBySet).toHaveBeenCalled();
+    });
+
+    fireEvent.click(screen.getByText('+ Add Filter'));
+    await waitFor(() => {
+      expect(screen.getByText('Preview Filters')).toBeInTheDocument();
+    });
+
+    // Before preview: shows hint text
+    expect(screen.getByText(/use preview filters/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Preview Filters'));
+
+    await waitFor(() => {
+      expect(screen.getByText(/will receive tokens/i)).toBeInTheDocument();
+    });
   });
 });
 

@@ -76,7 +76,7 @@ Small, high-impact fixes that connect existing SDK functions to existing UI surf
 
 ---
 
-## Phase 2: Pipeline Execution in FiltersStep — Planned: no
+## Phase 2: Pipeline Execution in FiltersStep — Planned: yes (complete)
 
 Make FiltersStep actually run the pipeline against loaded addresses to show a live preview of filter results before the user continues. This gives immediate feedback on how many addresses survive each filter.
 
