@@ -104,6 +104,7 @@ const mockDisperseTokens = vi.fn();
 const mockApproveOperator = vi.fn();
 const mockGetAllowance = vi.fn();
 const mockValidateBatch = vi.fn().mockReturnValue([]);
+const mockVerifyContract = vi.fn();
 
 vi.mock('@titrate/sdk', () => ({
   deployDistributor: (...args: unknown[]) => mockDeployDistributor(...args),
@@ -116,6 +117,7 @@ vi.mock('@titrate/sdk', () => ({
     return confirmed * batchSize;
   },
   validateBatch: (...args: unknown[]) => mockValidateBatch(...args),
+  verifyContract: (...args: unknown[]) => mockVerifyContract(...args),
   hasErrors: (issues: { severity: string }[]) => issues.some((i: { severity: string }) => i.severity === 'error'),
   hasWarnings: (issues: { severity: string }[]) => issues.some((i: { severity: string }) => i.severity === 'warning'),
   parseGwei: (value: string) => {
@@ -125,6 +127,8 @@ vi.mock('@titrate/sdk', () => ({
   },
 }));
 
+let interventionOverrides: Record<string, unknown> = {};
+
 vi.mock('../providers/InterventionProvider.js', () => ({
   useIntervention: () => ({
     state: { isActive: false, context: null, resolve: null },
@@ -132,6 +136,9 @@ vi.mock('../providers/InterventionProvider.js', () => ({
     enabledPoints: new Set(['stuck-transaction']),
     setEnabledPoints: vi.fn(),
     dismiss: vi.fn(),
+    journal: [],
+    clearJournal: vi.fn(),
+    ...interventionOverrides,
   }),
 }));
 
@@ -144,6 +151,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   campaignOverrides = {};
   chainOverrides = {};
+  interventionOverrides = {};
   walletClientData = {
     account: { address: '0x1234' },
     writeContract: vi.fn().mockResolvedValue('0xapprovehash'),
@@ -163,6 +171,7 @@ beforeEach(() => {
   mockDisperseTokens.mockResolvedValue([]);
   mockApproveOperator.mockResolvedValue('0xapprovehash');
   mockGetAllowance.mockResolvedValue(0n);
+  mockVerifyContract.mockResolvedValue({ success: true, message: 'Verified', explorerUrl: 'https://etherscan.io/address/0x1234' });
 });
 
 describe('DistributeStep', () => {
@@ -1229,6 +1238,98 @@ describe('DistributeStep', () => {
       expect(screen.getByText('Distribution Summary')).toBeInTheDocument();
     });
   });
+
+  it('shows verify button when contract is deployed', () => {
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+    render(<DistributeStep />);
+    expect(screen.getByText('Verify on Explorer')).toBeInTheDocument();
+  });
+
+  it('does not show verify button when contract is not deployed', () => {
+    render(<DistributeStep />);
+    expect(screen.queryByText('Verify on Explorer')).not.toBeInTheDocument();
+  });
+
+  it('calls verifyContract and shows success', async () => {
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+    mockVerifyContract.mockResolvedValue({
+      success: true,
+      message: 'Contract verified',
+      explorerUrl: 'https://etherscan.io/address/0x1234',
+    });
+
+    render(<DistributeStep />);
+    fireEvent.click(screen.getByText('Verify on Explorer'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Verified')).toBeInTheDocument();
+    });
+  });
+
+  it('shows error when verification fails', async () => {
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+    mockVerifyContract.mockResolvedValue({
+      success: false,
+      message: 'Source code mismatch',
+      explorerUrl: null,
+    });
+
+    render(<DistributeStep />);
+    fireEvent.click(screen.getByText('Verify on Explorer'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Source code mismatch')).toBeInTheDocument();
+    });
+  });
+
+  it('shows error when verifyContract throws', async () => {
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+    mockVerifyContract.mockRejectedValue(new Error('Network timeout'));
+
+    render(<DistributeStep />);
+    fireEvent.click(screen.getByText('Verify on Explorer'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Network timeout')).toBeInTheDocument();
+    });
+  });
+
+  it('shows verifying state while verification is in progress', async () => {
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+    mockVerifyContract.mockReturnValue(new Promise(() => {}));
+
+    render(<DistributeStep />);
+    fireEvent.click(screen.getByText('Verify on Explorer'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Verifying...')).toBeInTheDocument();
+    });
+  });
 });
 
 describe('getDisperseSelector', () => {
@@ -1777,5 +1878,114 @@ describe('DistributeStep contract verification display', () => {
   it('shows live filter row in distribution plan', () => {
     render(<DistributeStep />);
     expect(screen.getByText('Live filter')).toBeInTheDocument();
+  });
+
+  it('shows intervention journal in complete phase when entries exist', async () => {
+    const journalEntries = [
+      {
+        timestamp: Date.now(),
+        campaignId: 'test-1',
+        point: 'stuck-transaction' as const,
+        action: 'retry' as const,
+        issueCount: 0,
+      },
+      {
+        timestamp: Date.now(),
+        campaignId: 'test-1',
+        point: 'batch-preview' as const,
+        action: 'approve' as const,
+        issueCount: 0,
+      },
+    ];
+
+    interventionOverrides = { journal: journalEntries };
+
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 1, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+    mockDisperseTokensSimple.mockResolvedValue([
+      {
+        batchIndex: 0,
+        recipients: ['0xRecipient1000000000000000000000000000001'],
+        amounts: [1000n],
+        attempts: [],
+        confirmedTxHash: '0xabc123',
+        blockNumber: null,
+      },
+    ]);
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/Intervention Journal/)).toBeInTheDocument();
+      expect(screen.getByText('stuck-transaction')).toBeInTheDocument();
+      expect(screen.getByText('batch-preview')).toBeInTheDocument();
+      expect(screen.getByText('retry')).toBeInTheDocument();
+      expect(screen.getByText('approve')).toBeInTheDocument();
+    });
+  });
+
+  it('hides intervention journal when no entries exist', async () => {
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 1, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+    mockDisperseTokensSimple.mockResolvedValue([
+      {
+        batchIndex: 0,
+        recipients: ['0xRecipient1000000000000000000000000000001'],
+        amounts: [1000n],
+        attempts: [],
+        confirmedTxHash: '0xabc123',
+        blockNumber: null,
+      },
+    ]);
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('Distribution Summary')).toBeInTheDocument();
+    });
+
+    expect(screen.queryByText(/Intervention Journal/)).not.toBeInTheDocument();
   });
 });

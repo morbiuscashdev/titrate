@@ -11,6 +11,7 @@ import type {
   InterventionContext,
   InterventionAction,
   InterventionHook,
+  InterventionEntry,
 } from '@titrate/sdk';
 
 // ---------------------------------------------------------------------------
@@ -29,6 +30,8 @@ export type InterventionContextValue = {
   readonly enabledPoints: ReadonlySet<InterventionPoint>;
   readonly setEnabledPoints: (points: ReadonlySet<InterventionPoint>) => void;
   readonly dismiss: (action: InterventionAction) => void;
+  readonly journal: readonly InterventionEntry[];
+  readonly clearJournal: () => void;
 };
 
 // ---------------------------------------------------------------------------
@@ -72,6 +75,7 @@ export function InterventionProvider({ children }: InterventionProviderProps) {
   const [state, setState] = useState<InterventionState>(INITIAL_STATE);
   const [enabledPoints, setEnabledPoints] =
     useState<ReadonlySet<InterventionPoint>>(DEFAULT_ENABLED_POINTS);
+  const [journal, setJournal] = useState<readonly InterventionEntry[]>([]);
 
   const dismiss = useCallback((action: InterventionAction) => {
     setState((prev) => {
@@ -80,7 +84,21 @@ export function InterventionProvider({ children }: InterventionProviderProps) {
       }
       return INITIAL_STATE;
     });
-  }, []);
+    // Record journal entry from current state (read before clearing)
+    const currentContext = state.context;
+    if (currentContext) {
+      const entry: InterventionEntry = {
+        timestamp: Date.now(),
+        campaignId: currentContext.campaignId ?? '',
+        point: currentContext.point,
+        action: action.type,
+        issueCount: currentContext.issues?.length ?? 0,
+      };
+      setJournal((j) => [...j, entry]);
+    }
+  }, [state.context]);
+
+  const clearJournal = useCallback(() => setJournal([]), []);
 
   const createInterventionHook = useCallback((): InterventionHook => {
     return (context: InterventionContext) => {
@@ -101,8 +119,10 @@ export function InterventionProvider({ children }: InterventionProviderProps) {
       enabledPoints,
       setEnabledPoints,
       dismiss,
+      journal,
+      clearJournal,
     }),
-    [state, createInterventionHook, enabledPoints, setEnabledPoints, dismiss],
+    [state, createInterventionHook, enabledPoints, setEnabledPoints, dismiss, journal, clearJournal],
   );
 
   return (

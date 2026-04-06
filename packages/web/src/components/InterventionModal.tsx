@@ -1,4 +1,5 @@
 import { useIntervention } from '../providers/InterventionProvider.js';
+import { createSpotCheck } from '@titrate/sdk';
 import type { InterventionContext } from '@titrate/sdk';
 
 // ---------------------------------------------------------------------------
@@ -43,12 +44,49 @@ function BatchPreviewContent({ context }: { readonly context: InterventionContex
     ? context.amounts.reduce((sum, a) => sum + a, 0n)
     : 0n;
 
+  const spotCheck = context.addresses && context.addresses.length > 0
+    ? createSpotCheck(
+        context.addresses,
+        (context.metadata?.explorerBaseUrl as string) ?? 'https://etherscan.io',
+        {
+          sampleSize: Math.min(5, context.addresses.length),
+          amounts: context.amounts,
+        },
+      )
+    : null;
+
   return (
-    <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+    <div className="space-y-3 text-sm text-gray-700 dark:text-gray-300">
       <p>
         Batch #{context.batchIndex ?? 0}: {addressCount} address{addressCount !== 1 ? 'es' : ''},{' '}
         {totalTokens.toString()} tokens total.
       </p>
+      {spotCheck && spotCheck.samples.length > 0 && (
+        <div>
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+            Spot Check ({spotCheck.sampleSize} of {spotCheck.totalCount})
+          </p>
+          <div className="space-y-1">
+            {spotCheck.samples.map((sample) => (
+              <div key={sample.index} className="flex items-center justify-between text-xs">
+                <a
+                  href={sample.explorerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
+                >
+                  {sample.address.slice(0, 10)}...{sample.address.slice(-6)}
+                </a>
+                {sample.amount !== undefined && (
+                  <span className="text-gray-500 dark:text-gray-400">
+                    {sample.amount.toString()} tokens
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

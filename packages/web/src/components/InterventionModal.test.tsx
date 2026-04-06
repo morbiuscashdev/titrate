@@ -7,6 +7,31 @@ import {
 } from '../providers/InterventionProvider.js';
 import type { InterventionContext, InterventionAction } from '@titrate/sdk';
 
+vi.mock('@titrate/sdk', async () => {
+  const actual = await vi.importActual<Record<string, unknown>>('@titrate/sdk');
+  return {
+    ...actual,
+    createSpotCheck: (
+      addresses: string[],
+      explorerUrl: string,
+      options?: { sampleSize?: number; amounts?: bigint[] },
+    ) => {
+      const baseUrl = explorerUrl.endsWith('/') ? explorerUrl.slice(0, -1) : explorerUrl;
+      const size = Math.min(options?.sampleSize ?? 5, addresses.length);
+      return {
+        samples: addresses.slice(0, size).map((addr, i) => ({
+          index: i,
+          address: addr,
+          amount: options?.amounts?.[i],
+          explorerUrl: `${baseUrl}/address/${addr}`,
+        })),
+        totalCount: addresses.length,
+        sampleSize: size,
+      };
+    },
+  };
+});
+
 /**
  * Helper that renders the InterventionModal inside its provider
  * and provides a way to trigger an intervention via the hook.
@@ -48,6 +73,25 @@ function TestHarness() {
         }}
       >
         Trigger Batch Preview
+      </button>
+      <button
+        data-testid="trigger-batch-preview-multi"
+        onClick={() => {
+          const hook = createInterventionHook();
+          void hook({
+            point: 'batch-preview',
+            campaignId: 'test',
+            batchIndex: 2,
+            addresses: [
+              '0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' as const,
+              '0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB' as const,
+              '0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC' as const,
+            ],
+            amounts: [500n, 300n, 200n],
+          });
+        }}
+      >
+        Trigger Batch Preview Multi
       </button>
       <button
         data-testid="trigger-stuck"
@@ -282,5 +326,52 @@ describe('InterventionModal', () => {
     });
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('shows spot check samples in batch-preview modal', async () => {
+    renderWithProvider();
+
+    act(() => {
+      screen.getByTestId('enable-all').click();
+    });
+
+    act(() => {
+      screen.getByTestId('trigger-batch-preview-multi').click();
+    });
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    // Spot check header
+    expect(screen.getByText('Spot Check (3 of 3)')).toBeInTheDocument();
+
+    // Truncated addresses: first 10 chars + "..." + last 6 chars
+    expect(screen.getByText('0xAAAAAAAA...AAAAAA')).toBeInTheDocument();
+    expect(screen.getByText('0xBBBBBBBB...BBBBBB')).toBeInTheDocument();
+    expect(screen.getByText('0xCCCCCCCC...CCCCCC')).toBeInTheDocument();
+
+    // Token amounts
+    expect(screen.getByText('500 tokens')).toBeInTheDocument();
+    expect(screen.getByText('300 tokens')).toBeInTheDocument();
+    expect(screen.getByText('200 tokens')).toBeInTheDocument();
+
+    // Explorer links
+    const links = screen.getAllByRole('link');
+    expect(links).toHaveLength(3);
+    expect(links[0]).toHaveAttribute(
+      'href',
+      'https://etherscan.io/address/0xAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+    );
+    expect(links[1]).toHaveAttribute(
+      'href',
+      'https://etherscan.io/address/0xBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB',
+    );
+    expect(links[2]).toHaveAttribute(
+      'href',
+      'https://etherscan.io/address/0xCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC',
+    );
   });
 });

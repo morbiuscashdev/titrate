@@ -93,7 +93,7 @@ Make FiltersStep actually run the pipeline against loaded addresses to show a li
 
 ---
 
-## Phase 3: Contract Verification + Intervention Journal + Spot Checks — Planned: no
+## Phase 3: Contract Verification + Intervention Journal + Spot Checks — Planned: yes (complete)
 
 Complete the post-deployment and during-distribution workflow.
 

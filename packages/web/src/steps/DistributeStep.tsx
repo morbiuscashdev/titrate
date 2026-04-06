@@ -13,6 +13,7 @@ import {
   validateBatch,
   hasErrors,
   hasWarnings,
+  verifyContract,
 } from '@titrate/sdk';
 import type { BatchResult, GasConfig, InterventionConfig, PipelineConfig, ProgressEvent, StoredAddress, StoredBatch } from '@titrate/sdk';
 import { StepPanel } from '../components/StepPanel.js';
@@ -162,7 +163,7 @@ export function DistributeStep() {
   const { publicClient, chainConfig } = useChain();
   const { storage } = useStorage();
   const { data: walletClient } = useWalletClient();
-  const { createInterventionHook, enabledPoints, setEnabledPoints } = useIntervention();
+  const { createInterventionHook, enabledPoints, setEnabledPoints, journal } = useIntervention();
 
   const [phase, setPhase] = useState<DistributePhase>('ready');
   const [batches, setBatches] = useState<readonly BatchStatusCardProps[]>([]);
@@ -180,6 +181,11 @@ export function DistributeStep() {
   const recipientsLoadedRef = useRef(false);
   const savedBatchesLoadedRef = useRef(false);
   const pipelineConfigLoadedRef = useRef(false);
+  const [verifyState, setVerifyState] = useState<{
+    readonly status: 'idle' | 'verifying' | 'success' | 'error';
+    readonly message: string | null;
+    readonly explorerUrl: string | null;
+  }>({ status: 'idle', message: null, explorerUrl: null });
 
   const rawBatchSize = activeCampaign?.batchSize ?? 100;
   const { effectiveBatchSize, wasClamped } = useMemo(
@@ -310,6 +316,7 @@ export function DistributeStep() {
     setBatches([]);
     setResults([]);
     setPhase('ready');
+    setVerifyState({ status: 'idle', message: null, explorerUrl: null });
   }, [activeCampaign?.id]);
 
   const handleDeploy = useCallback(async () => {
@@ -348,6 +355,31 @@ export function DistributeStep() {
       setPhase('ready');
     }
   }, [activeCampaign, walletClient, publicClient, saveCampaign]);
+
+  const handleVerify = useCallback(async () => {
+    if (!activeCampaign?.contractAddress || !activeCampaign.chainId) return;
+
+    setVerifyState({ status: 'verifying', message: null, explorerUrl: null });
+    try {
+      const result = await verifyContract({
+        address: activeCampaign.contractAddress as Address,
+        name: activeCampaign.contractName || 'Titrate',
+        variant: activeCampaign.contractVariant,
+        chainId: activeCampaign.chainId,
+      });
+      setVerifyState({
+        status: result.success ? 'success' : 'error',
+        message: result.message,
+        explorerUrl: result.explorerUrl,
+      });
+    } catch (err: unknown) {
+      setVerifyState({
+        status: 'error',
+        message: err instanceof Error ? err.message : 'Verification failed',
+        explorerUrl: null,
+      });
+    }
+  }, [activeCampaign]);
 
   const handleDistribute = useCallback(async () => {
     if (!activeCampaign) return;
@@ -798,6 +830,34 @@ export function DistributeStep() {
                       <span className="text-gray-900 dark:text-white">Not deployed</span>
                     )}
                   </div>
+                  {hasContract && (
+                    <div className="flex items-center gap-3 mt-1">
+                      <button
+                        type="button"
+                        onClick={handleVerify}
+                        disabled={verifyState.status === 'verifying'}
+                        className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 disabled:opacity-50 transition-colors"
+                      >
+                        {verifyState.status === 'verifying' ? 'Verifying...' : 'Verify on Explorer'}
+                      </button>
+                      {verifyState.status === 'success' && verifyState.explorerUrl && (
+                        <a
+                          href={verifyState.explorerUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-xs text-green-600 dark:text-green-400 hover:text-green-500"
+                        >
+                          Verified
+                        </a>
+                      )}
+                      {verifyState.status === 'success' && !verifyState.explorerUrl && (
+                        <span className="text-xs text-green-600 dark:text-green-400">Verified</span>
+                      )}
+                      {verifyState.status === 'error' && (
+                        <span className="text-xs text-red-400">{verifyState.message}</span>
+                      )}
+                    </div>
+                  )}
                   <div className="flex justify-between gap-2">
                     <span className="text-gray-500 dark:text-gray-400">Live filter</span>
                     {liveFilterStatus === 'on' ? (
@@ -922,6 +982,35 @@ export function DistributeStep() {
                   confirmedBatches={summaryData.confirmedBatches}
                   failedBatches={summaryData.failedBatches}
                 />
+              )}
+
+              {phase === 'complete' && journal.length > 0 && (
+                <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800">
+                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+                    Intervention Journal ({journal.length} {journal.length === 1 ? 'entry' : 'entries'})
+                  </h3>
+                  <div className="space-y-2">
+                    {journal.map((entry, index) => (
+                      <div key={index} className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2">
+                          <span className="text-gray-400 dark:text-gray-500">
+                            {new Date(entry.timestamp).toLocaleTimeString()}
+                          </span>
+                          <span className="font-medium text-gray-700 dark:text-gray-300">
+                            {entry.point}
+                          </span>
+                        </div>
+                        <span className={
+                          entry.action === 'approve' ? 'text-green-600 dark:text-green-400' :
+                          entry.action === 'abort' ? 'text-red-600 dark:text-red-400' :
+                          'text-gray-600 dark:text-gray-300'
+                        }>
+                          {entry.action}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
           )}
