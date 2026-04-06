@@ -28,7 +28,7 @@ export type { ParsedCSV, ParseCSVOptions, ValidationResult, ConflictResult } fro
 export { union, intersect, difference, symmetricDifference } from './sets/index.js';
 
 // Wallet
-export { createEIP712Message, deriveHotWallet, InvalidSignatureError } from './wallet/index.js';
+export { createEIP712Message, deriveHotWallet, deriveWalletAtIndex, deriveMultipleWallets, InvalidSignatureError, suggestWalletCount, zeroPrivateKey } from './wallet/index.js';
 export type { EIP712MessageParams, EIP712TypedData, DerivedWallet } from './wallet/index.js';
 
 // Encode
