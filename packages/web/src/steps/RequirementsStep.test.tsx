@@ -8,9 +8,11 @@ const defaultWallet = {
   isConnected: true,
   address: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12' as string | undefined,
   chainId: 1 as number | undefined,
-  perryMode: null as { isActive: true; hotAddress: string; coldAddress: string } | null,
+  perryMode: null as { isActive: true; wallets: { address: string; privateKey: string }[]; coldAddress: string; offset: number } | null,
   deriveHotWallet: vi.fn(),
+  deriveHotWallets: vi.fn(),
   clearPerryMode: vi.fn(),
+  walletClients: [] as unknown[],
 };
 
 const defaultCampaign = {
@@ -157,8 +159,9 @@ describe('RequirementsStep', () => {
     walletOverrides = {
       perryMode: {
         isActive: true,
-        hotAddress: '0x1111111111111111111111111111111111111111',
+        wallets: [{ address: '0x1111111111111111111111111111111111111111', privateKey: '0x' + '00'.repeat(32) }],
         coldAddress: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
+        offset: 0,
       },
     };
     render(<RequirementsStep />);
@@ -171,8 +174,9 @@ describe('RequirementsStep', () => {
     walletOverrides = {
       perryMode: {
         isActive: true,
-        hotAddress: '0x1111111111111111111111111111111111111111',
+        wallets: [{ address: '0x1111111111111111111111111111111111111111', privateKey: '0x' + '00'.repeat(32) }],
         coldAddress: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
+        offset: 0,
       },
     };
     render(<RequirementsStep />);

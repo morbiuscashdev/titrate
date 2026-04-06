@@ -72,7 +72,7 @@ export function RequirementsStep() {
 
   /** The address that will fund distribution (hot wallet if perry mode, otherwise connected). */
   const fundingAddress: Address | null = perryMode
-    ? perryMode.hotAddress
+    ? perryMode.wallets[0].address
     : address ?? null;
 
   const tokenAddress: Address | null = activeCampaign?.tokenAddress ?? null;

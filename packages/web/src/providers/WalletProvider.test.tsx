@@ -48,17 +48,37 @@ vi.mock('@titrate/sdk', () => ({
     primaryType: 'Derive',
     message: {},
   })),
-  deriveHotWallet: vi.fn(() => ({
-    address: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef' as const,
-    privateKey: '0x01' as const,
+  deriveMultipleWallets: vi.fn(() => ([
+    {
+      address: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef' as const,
+      privateKey: ('0x' + 'ab'.repeat(32)) as const,
+    },
+  ])),
+  zeroPrivateKey: vi.fn((wallet: { address: string; privateKey: string }) => ({
+    address: wallet.address,
+    privateKey: '0x' + '00'.repeat(32),
   })),
 }));
 
-import { WalletProvider, useWallet } from './WalletProvider.js';
-import { createEIP712Message, deriveHotWallet } from '@titrate/sdk';
+vi.mock('viem', async () => {
+  const actual = await vi.importActual<Record<string, unknown>>('viem');
+  return {
+    ...actual,
+    createWalletClient: vi.fn(() => ({ type: 'mock-wallet-client' })),
+    http: vi.fn(() => 'mock-transport'),
+  };
+});
 
-const mockedDeriveHotWallet = vi.mocked(deriveHotWallet);
+vi.mock('viem/accounts', () => ({
+  privateKeyToAccount: vi.fn(() => ({ address: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef' })),
+}));
+
+import { WalletProvider, useWallet } from './WalletProvider.js';
+import { createEIP712Message, deriveMultipleWallets, zeroPrivateKey } from '@titrate/sdk';
+
+const mockedDeriveMultipleWallets = vi.mocked(deriveMultipleWallets);
 const mockedCreateEIP712Message = vi.mocked(createEIP712Message);
+const mockedZeroPrivateKey = vi.mocked(zeroPrivateKey);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -154,12 +174,20 @@ describe('useWallet', () => {
 
     expect(mockSignTypedDataAsync).toHaveBeenCalledOnce();
 
-    expect(mockedDeriveHotWallet).toHaveBeenCalledWith('0xabcdef1234');
+    expect(mockedDeriveMultipleWallets).toHaveBeenCalledWith({
+      signature: '0xabcdef1234',
+      count: 1,
+      offset: 0,
+    });
 
     expect(result.current.perryMode).toEqual({
       isActive: true,
-      hotAddress: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
       coldAddress: '0x1234567890abcdef1234567890abcdef12345678',
+      wallets: [{
+        address: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+        privateKey: '0x' + 'ab'.repeat(32),
+      }],
+      offset: 0,
     });
   });
 

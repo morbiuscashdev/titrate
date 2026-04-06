@@ -6,13 +6,17 @@ const mockSetActiveStep = vi.fn();
 const mockDeriveHotWallet = vi.fn();
 const mockClearPerryMode = vi.fn();
 
+const mockDeriveHotWallets = vi.fn();
+
 const defaultWallet = {
   isConnected: false,
   address: undefined as string | undefined,
   chainId: undefined as number | undefined,
-  perryMode: null as { isActive: true; hotAddress: string; coldAddress: string } | null,
+  perryMode: null as { isActive: true; wallets: { address: string; privateKey: string }[]; coldAddress: string; offset: number } | null,
   deriveHotWallet: mockDeriveHotWallet,
+  deriveHotWallets: mockDeriveHotWallets,
   clearPerryMode: mockClearPerryMode,
+  walletClients: [] as unknown[],
 };
 
 const defaultCampaign = {
@@ -110,8 +114,9 @@ describe('WalletStep', () => {
       address: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
       perryMode: {
         isActive: true,
-        hotAddress: '0x1111111111111111111111111111111111111111',
+        wallets: [{ address: '0x1111111111111111111111111111111111111111', privateKey: '0x' + '00'.repeat(32) }],
         coldAddress: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
+        offset: 0,
       },
     };
 
@@ -126,8 +131,9 @@ describe('WalletStep', () => {
       address: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
       perryMode: {
         isActive: true,
-        hotAddress: '0x1111111111111111111111111111111111111111',
+        wallets: [{ address: '0x1111111111111111111111111111111111111111', privateKey: '0x' + '00'.repeat(32) }],
         coldAddress: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
+        offset: 0,
       },
     };
 

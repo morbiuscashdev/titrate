@@ -10,8 +10,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createAppKit } from '@reown/appkit/react';
 import { mainnet, base, arbitrum } from '@reown/appkit/networks';
 import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
-import { createEIP712Message, deriveHotWallet } from '@titrate/sdk';
-import type { Address, Hex } from 'viem';
+import { createEIP712Message, deriveMultipleWallets, zeroPrivateKey } from '@titrate/sdk';
+import type { DerivedWallet } from '@titrate/sdk';
+import { createWalletClient, http } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import type { Address, Hex, WalletClient } from 'viem';
 
 /** Use env var for project ID, fall back to empty string (won't work but won't crash). */
 const projectId = import.meta.env.VITE_REOWN_PROJECT_ID ?? '';
@@ -48,11 +51,12 @@ createAppKit({
  */
 export const queryClient = new QueryClient();
 
-/** Perry mode state when a hot wallet has been derived. */
+/** Perry mode state when hot wallets have been derived. */
 export type PerryModeState = {
   readonly isActive: true;
-  readonly hotAddress: Address;
   readonly coldAddress: Address;
+  readonly wallets: readonly DerivedWallet[];
+  readonly offset: number;
 };
 
 /** Values exposed by the wallet context. */
@@ -62,7 +66,14 @@ export type WalletContextValue = {
   readonly chainId: number | undefined;
   readonly perryMode: PerryModeState | null;
   readonly deriveHotWallet: (campaignName: string, version: number) => Promise<void>;
+  readonly deriveHotWallets: (params: {
+    readonly campaignName: string;
+    readonly version: number;
+    readonly count: number;
+    readonly offset?: number;
+  }) => Promise<void>;
   readonly clearPerryMode: () => void;
+  readonly walletClients: readonly WalletClient[];
 };
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -75,12 +86,20 @@ function WalletInner({ children }: { readonly children: ReactNode }) {
   const { address, isConnected, chainId } = useAccount();
   const { signTypedDataAsync } = useSignTypedData();
   const [perryMode, setPerryMode] = useState<PerryModeState | null>(null);
+  const [walletClients, setWalletClients] = useState<readonly WalletClient[]>([]);
 
-  const handleDeriveHotWallet = useCallback(
-    async (campaignName: string, version: number) => {
+  const handleDeriveHotWallets = useCallback(
+    async (params: {
+      readonly campaignName: string;
+      readonly version: number;
+      readonly count: number;
+      readonly offset?: number;
+    }) => {
       if (!address) {
         throw new Error('Wallet not connected');
       }
+
+      const { campaignName, version, count, offset = 0 } = params;
 
       const message = createEIP712Message({
         funder: address,
@@ -95,18 +114,45 @@ function WalletInner({ children }: { readonly children: ReactNode }) {
         message: message.message,
       });
 
-      const derived = deriveHotWallet(signature as Hex);
+      const wallets = deriveMultipleWallets({
+        signature: signature as Hex,
+        count,
+        offset,
+      });
 
+      const clients = wallets.map((wallet) =>
+        createWalletClient({
+          account: privateKeyToAccount(wallet.privateKey),
+          transport: http(),
+        }),
+      );
+
+      setWalletClients(clients);
       setPerryMode({
         isActive: true,
-        hotAddress: derived.address,
         coldAddress: address,
+        wallets,
+        offset,
       });
     },
     [address, signTypedDataAsync],
   );
 
-  const clearPerryMode = useCallback(() => setPerryMode(null), []);
+  const handleDeriveHotWallet = useCallback(
+    (campaignName: string, version: number) =>
+      handleDeriveHotWallets({ campaignName, version, count: 1 }),
+    [handleDeriveHotWallets],
+  );
+
+  const clearPerryMode = useCallback(() => {
+    if (perryMode) {
+      for (const wallet of perryMode.wallets) {
+        zeroPrivateKey(wallet);
+      }
+    }
+    setPerryMode(null);
+    setWalletClients([]);
+  }, [perryMode]);
 
   return (
     <WalletContext.Provider
@@ -116,7 +162,9 @@ function WalletInner({ children }: { readonly children: ReactNode }) {
         chainId,
         perryMode,
         deriveHotWallet: handleDeriveHotWallet,
+        deriveHotWallets: handleDeriveHotWallets,
         clearPerryMode,
+        walletClients,
       }}
     >
       {children}

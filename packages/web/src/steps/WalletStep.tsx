@@ -86,10 +86,10 @@ export function WalletStep() {
             {perryMode && (
               <div className="space-y-3">
                 <WalletBadge
-                  address={perryMode.hotAddress}
+                  address={perryMode.wallets[0].address}
                   chainName={chainName}
                   perryMode={{
-                    hotAddress: perryMode.hotAddress,
+                    hotAddress: perryMode.wallets[0].address,
                     coldAddress: perryMode.coldAddress,
                   }}
                 />
