@@ -36,6 +36,29 @@ const DEFAULT_FEE_BUMP_WAD = 125_000_000_000_000_000n; // 0.125 WAD = 12.5% bump
 export type LiveFilter = (addresses: readonly Address[]) => Promise<readonly Address[]>;
 
 /**
+ * Controls block-by-block revalidation of pending batches.
+ * When a pending tx has recipients that no longer pass the live filter,
+ * it can be replaced with a corrected tx (fewer recipients, same nonce).
+ * Each replacement bumps fees by feeBumpWad.
+ */
+export type RevalidationConfig = {
+  /**
+   * Minimum number of invalidated addresses to trigger a replacement.
+   * If fewer than this many addresses fail revalidation, let the tx land as-is.
+   * Default: 2 (tolerate 1 slip-through per batch).
+   */
+  readonly invalidThreshold?: number;
+  /**
+   * How often to re-check pending txs, in blocks. Default: 1 (every block).
+   */
+  readonly recheckBlocks?: number;
+  /**
+   * Max replacement attempts per batch before giving up. Default: 3.
+   */
+  readonly maxReplacements?: number;
+};
+
+/**
  * Gas configuration for disperse operations.
  */
 export type GasConfig = {
@@ -74,6 +97,8 @@ export type DisperseParams = {
   readonly interventionConfig?: InterventionConfig;
   /** Number of batches to pipeline without waiting for confirmation. Default: 1 (serial). */
   readonly nonceWindow?: number;
+  /** Block-by-block revalidation of pending batches. Requires liveFilter. */
+  readonly revalidation?: RevalidationConfig;
 };
 
 export type DisperseSimpleParams = {
@@ -93,6 +118,8 @@ export type DisperseSimpleParams = {
   readonly interventionConfig?: InterventionConfig;
   /** Number of batches to pipeline without waiting for confirmation. Default: 1 (serial). */
   readonly nonceWindow?: number;
+  /** Block-by-block revalidation of pending batches. Requires liveFilter. */
+  readonly revalidation?: RevalidationConfig;
 };
 
 /**
@@ -678,5 +705,245 @@ async function executeBatch(params: ExecuteBatchParams): Promise<BatchAttempt> {
     return droppedResult({ nonce, gasEstimate: gasLimit });
   } catch {
     return droppedResult();
+  }
+}
+
+/**
+ * Monitors a pending batch and replaces it if the live filter invalidates
+ * too many recipients. Polls every `recheckBlocks` blocks. Each replacement
+ * bumps fees and rebuilds the tx with only the still-valid addresses.
+ *
+ * Returns the final attempt (either the original confirmed, a replacement
+ * confirmed, or dropped if replacements are exhausted).
+ */
+async function revalidatePendingBatch(params: {
+  readonly contractAddress: Address;
+  readonly abi: never;
+  readonly functionName: string;
+  readonly originalRecipients: readonly Address[];
+  readonly originalAmounts: readonly bigint[];
+  readonly variant: 'simple' | 'full';
+  readonly token: Address;
+  readonly from: Address;
+  readonly campaignId: Hex;
+  readonly isSimple: boolean;
+  readonly amount?: bigint;
+  readonly nonce: number;
+  readonly walletClient: WalletClient;
+  readonly publicClient: PublicClient;
+  readonly liveFilter: LiveFilter;
+  readonly gasConfig?: GasConfig;
+  readonly revalidation: RevalidationConfig;
+  readonly pendingTxHash: Hex;
+}): Promise<{ readonly attempt: BatchAttempt; readonly finalRecipients: readonly Address[]; readonly finalAmounts: readonly bigint[] }> {
+  const {
+    contractAddress, abi, functionName, originalRecipients, originalAmounts,
+    variant, token, from, campaignId, isSimple, amount,
+    nonce, walletClient, publicClient, liveFilter, gasConfig, revalidation, pendingTxHash,
+  } = params;
+
+  const threshold = revalidation.invalidThreshold ?? 2;
+  const recheckBlocks = revalidation.recheckBlocks ?? 1;
+  const maxReplacements = revalidation.maxReplacements ?? 3;
+  const headroom = gasConfig?.headroom ?? 'medium';
+  const { numerator, denominator } = HEADROOM_MULTIPLIERS[headroom];
+  const bumpWad = gasConfig?.feeBumpWad ?? DEFAULT_FEE_BUMP_WAD;
+
+  let currentRecipients = [...originalRecipients];
+  let currentAmounts = [...originalAmounts];
+  let currentTxHash = pendingTxHash;
+  let replacementCount = 0;
+  let lastCheckedBlock = await publicClient.getBlockNumber();
+
+  // Track fees for bumping
+  const block = await publicClient.getBlock({ blockTag: 'latest' });
+  let currentMaxFee = (block.baseFeePerGas ?? 0n) * 2n;
+  let currentPriorityFee = await getPriorityFee(publicClient, gasConfig?.priority ?? 'medium');
+
+  while (true) {
+    // Check if the tx confirmed
+    const currentNonce = await publicClient.getTransactionCount({
+      address: walletClient.account!.address,
+      blockTag: 'latest',
+    });
+
+    if (currentNonce > nonce) {
+      // Tx confirmed — try to get receipt for the gas data
+      try {
+        const receipt = await publicClient.waitForTransactionReceipt({
+          hash: currentTxHash,
+          timeout: 5_000,
+        });
+        return {
+          attempt: {
+            txHash: currentTxHash,
+            nonce,
+            gasEstimate: receipt.gasUsed,
+            maxFeePerGas: currentMaxFee,
+            maxPriorityFeePerGas: currentPriorityFee,
+            timestamp: Date.now(),
+            outcome: receipt.status === 'success' ? 'confirmed' : 'reverted',
+          },
+          finalRecipients: currentRecipients,
+          finalAmounts: currentAmounts,
+        };
+      } catch {
+        return {
+          attempt: {
+            txHash: currentTxHash, nonce, gasEstimate: 0n,
+            maxFeePerGas: currentMaxFee, maxPriorityFeePerGas: currentPriorityFee,
+            timestamp: Date.now(), outcome: 'confirmed',
+          },
+          finalRecipients: currentRecipients,
+          finalAmounts: currentAmounts,
+        };
+      }
+    }
+
+    // Wait for the next recheck block
+    const currentBlock = await publicClient.getBlockNumber();
+    if (currentBlock - lastCheckedBlock < BigInt(recheckBlocks)) {
+      await new Promise((r) => setTimeout(r, 2_000));
+      continue;
+    }
+    lastCheckedBlock = currentBlock;
+
+    // Exhausted replacement budget — just wait for confirmation
+    if (replacementCount >= maxReplacements) {
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash: currentTxHash,
+        timeout: 120_000,
+      });
+      return {
+        attempt: {
+          txHash: currentTxHash, nonce, gasEstimate: receipt.gasUsed,
+          maxFeePerGas: currentMaxFee, maxPriorityFeePerGas: currentPriorityFee,
+          timestamp: Date.now(), outcome: receipt.status === 'success' ? 'confirmed' : 'reverted',
+        },
+        finalRecipients: currentRecipients,
+        finalAmounts: currentAmounts,
+      };
+    }
+
+    // Re-run live filter on current recipients
+    const stillValid = await liveFilter(currentRecipients);
+    const invalidCount = currentRecipients.length - stillValid.length;
+
+    if (invalidCount < threshold) continue; // Tolerable — let it land
+
+    // Too many invalidated — build replacement tx
+    const validSet = new Set(stillValid.map((a) => a.toLowerCase()));
+    const newRecipients: Address[] = [];
+    const newAmounts: bigint[] = [];
+    for (let i = 0; i < currentRecipients.length; i++) {
+      if (validSet.has(currentRecipients[i].toLowerCase())) {
+        newRecipients.push(currentRecipients[i]);
+        newAmounts.push(currentAmounts[i]);
+      }
+    }
+
+    if (newRecipients.length === 0) {
+      // All invalidated — can't replace with empty tx, let original land
+      const receipt = await publicClient.waitForTransactionReceipt({
+        hash: currentTxHash,
+        timeout: 120_000,
+      });
+      return {
+        attempt: {
+          txHash: currentTxHash, nonce, gasEstimate: receipt.gasUsed,
+          maxFeePerGas: currentMaxFee, maxPriorityFeePerGas: currentPriorityFee,
+          timestamp: Date.now(), outcome: receipt.status === 'success' ? 'confirmed' : 'reverted',
+        },
+        finalRecipients: currentRecipients,
+        finalAmounts: currentAmounts,
+      };
+    }
+
+    // Bump fees for replacement
+    const minPriorityFee = currentPriorityFee + currentPriorityFee * bumpWad / WAD;
+    const minMaxFee = currentMaxFee + currentMaxFee * bumpWad / WAD;
+    const freshBlock = await publicClient.getBlock({ blockTag: 'latest' });
+    const freshBaseFee = freshBlock.baseFeePerGas ?? 0n;
+    const freshPriorityFee = await getPriorityFee(publicClient, gasConfig?.priority ?? 'medium');
+    currentPriorityFee = minPriorityFee > freshPriorityFee ? minPriorityFee : freshPriorityFee;
+    const calculatedMaxFee = freshBaseFee * 2n + currentPriorityFee;
+    currentMaxFee = calculatedMaxFee > minMaxFee ? calculatedMaxFee : minMaxFee;
+
+    // Abort if fee cap exceeded
+    if (gasConfig?.maxPriorityFee !== undefined && currentPriorityFee > gasConfig.maxPriorityFee) {
+      break;
+    }
+
+    // Build replacement args
+    const isNative = token === ZERO_ADDRESS;
+    const replacementArgs: readonly unknown[] = isSimple
+      ? variant === 'simple'
+        ? [token, newRecipients, amount!]
+        : [token, from, newRecipients, amount!, campaignId]
+      : variant === 'simple'
+        ? [token, newRecipients, newAmounts]
+        : [token, from, newRecipients, newAmounts, campaignId];
+    const replacementValue = isNative
+      ? isSimple
+        ? amount! * BigInt(newRecipients.length)
+        : newAmounts.reduce((s, a) => s + a, 0n)
+      : 0n;
+
+    try {
+      const gasEstimate = await publicClient.estimateContractGas({
+        address: contractAddress, abi, functionName,
+        args: replacementArgs as never,
+        value: replacementValue,
+        account: walletClient.account!,
+      });
+      const gasLimit = (gasEstimate * numerator) / denominator;
+
+      const hash = await walletClient.writeContract({
+        address: contractAddress, abi, functionName,
+        args: replacementArgs as never,
+        value: replacementValue,
+        gas: gasLimit,
+        maxFeePerGas: currentMaxFee,
+        maxPriorityFeePerGas: currentPriorityFee,
+        account: walletClient.account!,
+        chain: undefined,
+        nonce,
+      });
+
+      currentTxHash = hash;
+      currentRecipients = newRecipients;
+      currentAmounts = newAmounts;
+      replacementCount++;
+    } catch {
+      // Replacement failed — let original land
+      break;
+    }
+  }
+
+  // Fallback: wait for whatever's pending
+  try {
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash: currentTxHash,
+      timeout: 120_000,
+    });
+    return {
+      attempt: {
+        txHash: currentTxHash, nonce, gasEstimate: receipt.gasUsed,
+        maxFeePerGas: currentMaxFee, maxPriorityFeePerGas: currentPriorityFee,
+        timestamp: Date.now(), outcome: receipt.status === 'success' ? 'confirmed' : 'reverted',
+      },
+      finalRecipients: currentRecipients,
+      finalAmounts: currentAmounts,
+    };
+  } catch {
+    return {
+      attempt: {
+        txHash: currentTxHash, nonce, gasEstimate: 0n,
+        maxFeePerGas: currentMaxFee, maxPriorityFeePerGas: currentPriorityFee,
+        timestamp: Date.now(), outcome: 'dropped',
+      },
+      finalRecipients: currentRecipients,
+      finalAmounts: currentAmounts,
+    };
   }
 }

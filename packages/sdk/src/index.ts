@@ -142,6 +142,7 @@ export type {
   LiveFilter,
   GasConfig,
   GasSpeed,
+  RevalidationConfig,
   ApproveOperatorParams,
   IncreaseAllowanceParams,
   GetAllowanceParams,
