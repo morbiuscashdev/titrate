@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useWalletClient } from 'wagmi';
-import { erc20Abi, formatUnits, toFunctionSelector } from 'viem';
+import { erc20Abi, formatUnits, parseUnits, toFunctionSelector } from 'viem';
 import type { Address, Hex } from 'viem';
 import {
   deployDistributor,
@@ -9,14 +9,20 @@ import {
   approveOperator,
   getAllowance,
   computeResumeOffset,
+  parseGwei,
 } from '@titrate/sdk';
-import type { BatchResult, ProgressEvent, StoredAddress, StoredBatch } from '@titrate/sdk';
+import type { BatchResult, GasConfig, InterventionConfig, PipelineConfig, ProgressEvent, StoredAddress, StoredBatch } from '@titrate/sdk';
 import { StepPanel } from '../components/StepPanel.js';
 import { BatchTimeline } from '../components/BatchTimeline.js';
 import { SpendSummary } from '../components/SpendSummary.js';
+import { GasConfigPanel, DEFAULT_GAS_CONFIG, percentToFeeBumpWad } from '../components/GasConfigPanel.js';
+import type { GasConfigState } from '../components/GasConfigPanel.js';
+import { InterventionControls } from '../components/InterventionControls.js';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useChain } from '../providers/ChainProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
+import { useIntervention } from '../providers/InterventionProvider.js';
+import { useLiveFilter, composeLiveFilters } from '../hooks/useLiveFilter.js';
 import type { BatchStatusCardProps } from '../components/BatchStatusCard.js';
 
 /**
@@ -90,6 +96,58 @@ export function batchResultToStored(
 }
 
 /**
+ * Derives the block explorer base URL from the explorer API URL.
+ * For example, "https://api.etherscan.io/api" becomes "https://etherscan.io".
+ *
+ * @returns The explorer base URL, or null if it cannot be derived
+ */
+export function deriveExplorerBaseUrl(explorerApiUrl: string | undefined): string | null {
+  if (!explorerApiUrl) return null;
+  try {
+    const url = new URL(explorerApiUrl);
+    // Strip "api." prefix and "/api" path suffix
+    const host = url.hostname.replace(/^api\./, '');
+    return `${url.protocol}//${host}`;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Renders a contract address as a truncated monospace string, optionally
+ * linked to the block explorer when an explorer API URL is configured.
+ */
+function ContractAddressLink({
+  address,
+  explorerApiUrl,
+}: {
+  readonly address: string;
+  readonly explorerApiUrl?: string;
+}) {
+  const baseUrl = deriveExplorerBaseUrl(explorerApiUrl);
+  const truncated = `${address.slice(0, 10)}...${address.slice(-6)}`;
+
+  if (baseUrl) {
+    return (
+      <a
+        href={`${baseUrl}/address/${address}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 font-mono text-xs"
+      >
+        {truncated}
+      </a>
+    );
+  }
+
+  return (
+    <span className="text-gray-900 dark:text-white font-mono text-xs">
+      {truncated}
+    </span>
+  );
+}
+
+/**
  * Seventh campaign step: deploy contract and distribute tokens.
  *
  * Integrates with the SDK's deployDistributor, disperseTokensSimple,
@@ -97,9 +155,10 @@ export function batchResultToStored(
  */
 export function DistributeStep() {
   const { activeCampaign, saveCampaign } = useCampaign();
-  const { publicClient } = useChain();
+  const { publicClient, chainConfig } = useChain();
   const { storage } = useStorage();
   const { data: walletClient } = useWalletClient();
+  const { createInterventionHook, enabledPoints, setEnabledPoints } = useIntervention();
 
   const [phase, setPhase] = useState<DistributePhase>('ready');
   const [batches, setBatches] = useState<readonly BatchStatusCardProps[]>([]);
@@ -107,13 +166,16 @@ export function DistributeStep() {
   const [recipients, setRecipients] = useState<readonly StoredAddress[]>([]);
   const [results, setResults] = useState<readonly BatchResult[]>([]);
   const [savedBatches, setSavedBatches] = useState<readonly StoredBatch[]>([]);
+  const [gasConfig, setGasConfig] = useState<GasConfigState>(DEFAULT_GAS_CONFIG);
   const [throughput, setThroughput] = useState<{
     readonly addressesPerHour: number;
     readonly addressesCompleted: number;
     readonly estimatedRemainingMs: number;
   } | null>(null);
+  const [pipelineConfig, setPipelineConfig] = useState<PipelineConfig | null>(null);
   const recipientsLoadedRef = useRef(false);
   const savedBatchesLoadedRef = useRef(false);
+  const pipelineConfigLoadedRef = useRef(false);
 
   const rawBatchSize = activeCampaign?.batchSize ?? 100;
   const { effectiveBatchSize, wasClamped } = useMemo(
@@ -126,6 +188,21 @@ export function DistributeStep() {
   const hasContract =
     activeCampaign?.contractAddress !== null &&
     activeCampaign?.contractAddress !== undefined;
+
+  // Registry-based live filter for TitrateFull (double-send protection)
+  const registryFilter = useLiveFilter({
+    contractAddress: (activeCampaign?.contractAddress ?? null) as Address | null,
+    campaignId: activeCampaign?.campaignId ?? null,
+    variant: activeCampaign?.contractVariant ?? 'simple',
+  });
+
+  // Compose the registry filter with any future pipeline-based filters
+  const composedLiveFilter = useMemo(
+    () => composeLiveFilters(registryFilter),
+    [registryFilter],
+  );
+
+  const liveFilterStatus: 'on' | 'off' = composedLiveFilter ? 'on' : 'off';
 
   // Load recipients from storage when campaign is active
   useEffect(() => {
@@ -175,6 +252,21 @@ export function DistributeStep() {
     })();
   }, [activeCampaign, storage]);
 
+  // Load pipeline config from storage when campaign is active
+  useEffect(() => {
+    if (!activeCampaign || !storage || pipelineConfigLoadedRef.current) return;
+
+    pipelineConfigLoadedRef.current = true;
+    void (async () => {
+      try {
+        const config = await storage.pipelineConfigs.get(activeCampaign.id);
+        setPipelineConfig(config);
+      } catch {
+        // Non-critical — pipeline config is optional
+      }
+    })();
+  }, [activeCampaign, storage]);
+
   // Detect fully-complete distributions once both saved batches and recipients are loaded
   useEffect(() => {
     if (savedBatches.length === 0 || recipients.length === 0 || phase !== 'ready') return;
@@ -200,8 +292,10 @@ export function DistributeStep() {
   useEffect(() => {
     recipientsLoadedRef.current = false;
     savedBatchesLoadedRef.current = false;
+    pipelineConfigLoadedRef.current = false;
     setRecipients([]);
     setSavedBatches([]);
+    setPipelineConfig(null);
     setError(null);
     setBatches([]);
     setResults([]);
@@ -439,6 +533,29 @@ export function DistributeStep() {
       );
     };
 
+    // Build SDK GasConfig from UI state
+    const sdkGasConfig: GasConfig = {
+      headroom: gasConfig.headroom,
+      priority: gasConfig.priority,
+      maxBaseFee: gasConfig.maxBaseFeeGwei ? parseGwei(gasConfig.maxBaseFeeGwei) : undefined,
+      maxPriorityFee: gasConfig.maxPriorityFeeGwei ? parseGwei(gasConfig.maxPriorityFeeGwei) : undefined,
+      maxTotalGasCost: gasConfig.maxTotalGasCostEth ? parseUnits(gasConfig.maxTotalGasCostEth, 18) : undefined,
+      feeBumpWad: gasConfig.feeBumpPercent ? percentToFeeBumpWad(gasConfig.feeBumpPercent) : undefined,
+    };
+
+    const revalidation = gasConfig.enableRevalidation
+      ? { invalidThreshold: gasConfig.invalidThreshold }
+      : undefined;
+
+    // Build intervention config from the provider
+    const interventionHook = createInterventionHook();
+    const interventionConfig: InterventionConfig = {
+      onIntervention: interventionHook,
+      reviewBeforeEachBatch: enabledPoints.has('batch-preview'),
+      autoApproveClean: true,
+      stuckTransactionTimeout: enabledPoints.has('stuck-transaction') ? 60_000 : undefined,
+    };
+
     try {
       let batchResults: BatchResult[];
 
@@ -452,7 +569,12 @@ export function DistributeStep() {
           walletClient,
           publicClient,
           batchSize,
+          liveFilter: composedLiveFilter,
           onProgress,
+          gasConfig: sdkGasConfig,
+          nonceWindow: gasConfig.nonceWindow,
+          revalidation,
+          interventionConfig,
         });
       } else {
         batchResults = await disperseTokens({
@@ -464,7 +586,12 @@ export function DistributeStep() {
           walletClient,
           publicClient,
           batchSize,
+          liveFilter: composedLiveFilter,
           onProgress,
+          gasConfig: sdkGasConfig,
+          nonceWindow: gasConfig.nonceWindow,
+          revalidation,
+          interventionConfig,
         });
       }
 
@@ -510,6 +637,10 @@ export function DistributeStep() {
     batchSize,
     savedBatches,
     storage,
+    gasConfig,
+    composedLiveFilter,
+    createInterventionHook,
+    enabledPoints,
   ]);
 
   // Compute resume state from saved batches
@@ -616,16 +747,47 @@ export function DistributeStep() {
                   </div>
                   <div className="flex justify-between gap-2">
                     <span className="text-gray-500 dark:text-gray-400">Contract</span>
-                    <span className="text-gray-900 dark:text-white">
-                      {hasContract ? 'Deployed' : 'Not deployed'}
-                    </span>
+                    {hasContract ? (
+                      <ContractAddressLink
+                        address={activeCampaign.contractAddress as string}
+                        explorerApiUrl={chainConfig?.explorerApiUrl}
+                      />
+                    ) : (
+                      <span className="text-gray-900 dark:text-white">Not deployed</span>
+                    )}
                   </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-gray-500 dark:text-gray-400">Live filter</span>
+                    {liveFilterStatus === 'on' ? (
+                      <span className="text-green-600 dark:text-green-400">ON (registry check)</span>
+                    ) : (
+                      <span className="text-gray-400 dark:text-gray-500">OFF</span>
+                    )}
+                  </div>
+                  {pipelineConfig && pipelineConfig.steps.length > 0 && (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-gray-500 dark:text-gray-400">Pipeline filters</span>
+                      <span className="text-gray-900 dark:text-white">
+                        {pipelineConfig.steps.filter((s) => s.type === 'filter').length} configured
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
+
+              <GasConfigPanel config={gasConfig} onChange={setGasConfig} />
+
+              <InterventionControls enabledPoints={enabledPoints} onChange={setEnabledPoints} />
 
               {wasClamped && (
                 <div className="rounded-md bg-yellow-900/20 p-3 text-sm text-yellow-600 dark:text-yellow-400">
                   Batch size clamped from {rawBatchSize} to {effectiveBatchSize} to fit within gas limit.
+                </div>
+              )}
+
+              {activeCampaign.contractVariant === 'simple' && (
+                <div className="rounded-md bg-gray-100 dark:bg-gray-900/50 p-3 text-xs text-gray-500 dark:text-gray-400 ring-1 ring-gray-200 dark:ring-gray-800">
+                  Live filter (double-send protection) requires the Full contract variant. The Simple variant does not include an on-chain recipient registry.
                 </div>
               )}
 

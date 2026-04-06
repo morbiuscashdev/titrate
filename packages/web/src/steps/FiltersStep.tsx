@@ -11,6 +11,23 @@ type FilterEntry = {
   readonly params: Record<string, string>;
 };
 
+/** Human-readable labels for each filter type. */
+const FILTER_LABELS: Record<string, string> = {
+  'contract-check': 'Exclude Contracts',
+  'min-balance': 'Min Balance',
+  'nonce-range': 'Nonce Range',
+  'token-recipients': 'Token Recipients',
+  'csv-exclusion': 'CSV Exclusion',
+};
+
+/**
+ * Returns a human-readable label for a filter type.
+ * Falls back to the raw type string if no label is defined.
+ */
+export function getFilterLabel(filterType: string): string {
+  return FILTER_LABELS[filterType] ?? filterType;
+}
+
 const DEFAULT_FILTER_TYPE: FilterType = 'contract-check';
 
 /**
@@ -119,6 +136,23 @@ export function FiltersStep() {
         >
           + Add Filter
         </button>
+
+        {/* Filter summary */}
+        {filters.length > 0 && (
+          <div className="rounded-md bg-blue-900/10 dark:bg-blue-900/20 p-3 text-sm text-blue-700 dark:text-blue-400 ring-1 ring-blue-200 dark:ring-blue-900/30">
+            <p className="font-medium">
+              {filters.length} {filters.length === 1 ? 'filter' : 'filters'} configured
+            </p>
+            <ul className="mt-1 list-disc list-inside text-xs text-blue-600 dark:text-blue-300">
+              {filters.map((f) => (
+                <li key={f.id}>{getFilterLabel(f.filterType)}</li>
+              ))}
+            </ul>
+            <p className="mt-2 text-xs text-blue-500 dark:text-blue-400/70">
+              Addresses will be filtered during distribution via the live filter pipeline.
+            </p>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex gap-3">

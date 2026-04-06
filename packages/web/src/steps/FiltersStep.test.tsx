@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { FiltersStep } from './FiltersStep.js';
+import { FiltersStep, getFilterLabel } from './FiltersStep.js';
 
 const mockSetActiveStep = vi.fn();
 const mockCompleteStep = vi.fn();
@@ -88,7 +88,8 @@ describe('FiltersStep', () => {
     fireEvent.click(screen.getByText('+ Add Filter'));
     expect(screen.getByText('Filter 1')).toBeInTheDocument();
     // Default filter type is contract-check -> "Exclude Contracts"
-    expect(screen.getByText('Exclude Contracts')).toBeInTheDocument();
+    // Appears in both the type selector button and the filter summary
+    expect(screen.getAllByText('Exclude Contracts').length).toBeGreaterThanOrEqual(1);
   });
 
   it('shows save button after adding a filter', () => {
@@ -194,5 +195,50 @@ describe('FiltersStep', () => {
 
     // handleContinue early-returns
     expect(mockPutPipelineConfig).not.toHaveBeenCalled();
+  });
+
+  it('shows filter summary with count and labels', () => {
+    render(<FiltersStep />);
+    fireEvent.click(screen.getByText('+ Add Filter'));
+    // Summary should show "1 filter configured"
+    expect(screen.getByText('1 filter configured')).toBeInTheDocument();
+    // Summary note about distribution-time filtering
+    expect(
+      screen.getByText(/filtered during distribution via the live filter pipeline/i),
+    ).toBeInTheDocument();
+  });
+
+  it('shows plural filter count for multiple filters', () => {
+    // Stub randomUUID to return unique IDs
+    let callCount = 0;
+    vi.stubGlobal('crypto', {
+      ...globalThis.crypto,
+      randomUUID: () => `filter-uuid-${++callCount}`,
+    });
+
+    render(<FiltersStep />);
+    fireEvent.click(screen.getByText('+ Add Filter'));
+    fireEvent.click(screen.getByText('+ Add Filter'));
+    expect(screen.getByText('2 filters configured')).toBeInTheDocument();
+  });
+
+  it('hides filter summary when no filters are configured', () => {
+    render(<FiltersStep />);
+    expect(screen.queryByText(/filter configured/i)).toBeNull();
+    expect(screen.queryByText(/filters configured/i)).toBeNull();
+  });
+});
+
+describe('getFilterLabel', () => {
+  it('returns label for known filter types', () => {
+    expect(getFilterLabel('contract-check')).toBe('Exclude Contracts');
+    expect(getFilterLabel('min-balance')).toBe('Min Balance');
+    expect(getFilterLabel('nonce-range')).toBe('Nonce Range');
+    expect(getFilterLabel('token-recipients')).toBe('Token Recipients');
+    expect(getFilterLabel('csv-exclusion')).toBe('CSV Exclusion');
+  });
+
+  it('falls back to raw type string for unknown types', () => {
+    expect(getFilterLabel('custom-filter')).toBe('custom-filter');
   });
 });

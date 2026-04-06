@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DistributeStep, toBatchCardStatus, getDisperseSelector, batchResultToStored, clampBatchSizeForGas } from './DistributeStep.js';
+import { DistributeStep, toBatchCardStatus, getDisperseSelector, batchResultToStored, clampBatchSizeForGas, deriveExplorerBaseUrl } from './DistributeStep.js';
 
 // ---- Mock state ----
 
@@ -73,6 +73,10 @@ const mockStorage = {
     getByCampaign: vi.fn().mockResolvedValue([]),
     put: vi.fn().mockResolvedValue(undefined),
   },
+  pipelineConfigs: {
+    get: vi.fn().mockResolvedValue(null),
+    put: vi.fn().mockResolvedValue(undefined),
+  },
 };
 
 vi.mock('../providers/StorageProvider.js', () => ({
@@ -110,6 +114,26 @@ vi.mock('@titrate/sdk', () => ({
     const confirmed = batches.filter((b: { status: string }) => b.status === 'confirmed').length;
     return confirmed * batchSize;
   },
+  parseGwei: (value: string) => {
+    const [whole, decimal = ''] = value.split('.');
+    const padded = decimal.padEnd(9, '0').slice(0, 9);
+    return BigInt(whole) * 1_000_000_000n + BigInt(padded);
+  },
+}));
+
+vi.mock('../providers/InterventionProvider.js', () => ({
+  useIntervention: () => ({
+    state: { isActive: false, context: null, resolve: null },
+    createInterventionHook: () => () => Promise.resolve({ type: 'approve' }),
+    enabledPoints: new Set(['stuck-transaction']),
+    setEnabledPoints: vi.fn(),
+    dismiss: vi.fn(),
+  }),
+}));
+
+vi.mock('../hooks/useLiveFilter.js', () => ({
+  useLiveFilter: () => undefined,
+  composeLiveFilters: () => undefined,
 }));
 
 beforeEach(() => {
@@ -341,7 +365,7 @@ describe('DistributeStep', () => {
     expect(screen.getByText('Not deployed')).toBeInTheDocument();
   });
 
-  it('shows contract status as deployed when address exists', () => {
+  it('shows contract address when deployed', () => {
     campaignOverrides = {
       activeCampaign: {
         ...defaultCampaign.activeCampaign!,
@@ -349,7 +373,7 @@ describe('DistributeStep', () => {
       } as typeof defaultCampaign.activeCampaign,
     };
     render(<DistributeStep />);
-    expect(screen.getByText('Deployed')).toBeInTheDocument();
+    expect(screen.getByText('0x12345678...567890')).toBeInTheDocument();
   });
 
   it('shows approving token spend message during approval phase', async () => {
@@ -1585,5 +1609,104 @@ describe('DistributeStep gas cost display', () => {
       const gasElements = screen.getAllByText(/0\.001 ETH/);
       expect(gasElements.length).toBeGreaterThanOrEqual(1);
     });
+  });
+});
+
+describe('deriveExplorerBaseUrl', () => {
+  it('strips api subdomain and /api path', () => {
+    expect(deriveExplorerBaseUrl('https://api.etherscan.io/api')).toBe('https://etherscan.io');
+  });
+
+  it('strips api subdomain without /api path', () => {
+    expect(deriveExplorerBaseUrl('https://api.basescan.org')).toBe('https://basescan.org');
+  });
+
+  it('handles URL with no api subdomain', () => {
+    expect(deriveExplorerBaseUrl('https://explorer.example.com/api')).toBe('https://explorer.example.com');
+  });
+
+  it('returns null for undefined', () => {
+    expect(deriveExplorerBaseUrl(undefined)).toBeNull();
+  });
+
+  it('returns null for empty string', () => {
+    expect(deriveExplorerBaseUrl('')).toBeNull();
+  });
+
+  it('returns null for invalid URL', () => {
+    expect(deriveExplorerBaseUrl('not-a-url')).toBeNull();
+  });
+});
+
+describe('DistributeStep contract verification display', () => {
+  it('shows contract address as link when explorer URL is configured', () => {
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+    chainOverrides = {
+      chainConfig: {
+        explorerApiUrl: 'https://api.etherscan.io/api',
+      },
+    };
+    render(<DistributeStep />);
+
+    const link = screen.getByRole('link');
+    expect(link).toHaveAttribute(
+      'href',
+      'https://etherscan.io/address/0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
+    );
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+
+  it('shows contract address as plain text when no explorer URL', () => {
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+    render(<DistributeStep />);
+
+    expect(screen.getByText('0xAbCdEf12...CdEf12')).toBeInTheDocument();
+    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  });
+
+  it('renders the GasConfigPanel in ready phase', () => {
+    render(<DistributeStep />);
+    expect(screen.getByText('Advanced Gas Settings')).toBeInTheDocument();
+  });
+
+  it('shows live filter OFF for simple variant', () => {
+    render(<DistributeStep />);
+    expect(screen.getByText('Live filter')).toBeInTheDocument();
+    expect(screen.getByText('OFF')).toBeInTheDocument();
+  });
+
+  it('shows simple variant note about live filter', () => {
+    render(<DistributeStep />);
+    expect(
+      screen.getByText(/requires the Full contract variant/i),
+    ).toBeInTheDocument();
+  });
+
+  it('hides simple variant note for full variant', () => {
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractVariant: 'full',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+    render(<DistributeStep />);
+    expect(
+      screen.queryByText(/requires the Full contract variant/i),
+    ).not.toBeInTheDocument();
+  });
+
+  it('shows live filter row in distribution plan', () => {
+    render(<DistributeStep />);
+    expect(screen.getByText('Live filter')).toBeInTheDocument();
   });
 });

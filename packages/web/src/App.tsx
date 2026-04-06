@@ -7,6 +7,8 @@ import { StorageProvider } from './providers/StorageProvider.js';
 import { CacheProvider } from './providers/CacheProvider.js';
 import { ChainProvider } from './providers/ChainProvider.js';
 import { CampaignProvider, useCampaign } from './providers/CampaignProvider.js';
+import { InterventionProvider } from './providers/InterventionProvider.js';
+import { InterventionModal } from './components/InterventionModal.js';
 import { useWallet } from './providers/WalletProvider.js';
 import { Header } from './components/Header.js';
 import { WalletBadge } from './components/WalletBadge.js';
@@ -63,6 +65,8 @@ export function App() {
         <StorageProvider>
           <CacheProvider>
             <CampaignProvider>
+              <InterventionProvider>
+              <InterventionModal />
               <ChainBridge>
                 <BrowserRouter>
                   <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-blue-600 focus:px-4 focus:py-2 focus:text-white">
@@ -81,6 +85,7 @@ export function App() {
                   </div>
                 </BrowserRouter>
               </ChainBridge>
+              </InterventionProvider>
             </CampaignProvider>
           </CacheProvider>
         </StorageProvider>
