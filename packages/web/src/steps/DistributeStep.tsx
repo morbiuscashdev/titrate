@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useWalletClient } from 'wagmi';
 import { erc20Abi, formatUnits, toFunctionSelector } from 'viem';
 import type { Address, Hex } from 'viem';
@@ -18,6 +18,26 @@ import { useCampaign } from '../providers/CampaignProvider.js';
 import { useChain } from '../providers/ChainProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
 import type { BatchStatusCardProps } from '../components/BatchStatusCard.js';
+
+/**
+ * Clamps a batch size to fit within the block gas limit.
+ *
+ * @param params - Gas parameters for the computation
+ * @returns The effective batch size and whether it was clamped
+ */
+export function clampBatchSizeForGas(params: {
+  readonly batchSize: number;
+  readonly gasPerTransfer?: number;
+  readonly gasLimitBuffer?: number;
+  readonly maxTxGas?: bigint;
+}): { readonly effectiveBatchSize: number; readonly wasClamped: boolean } {
+  const gasPerTransfer = params.gasPerTransfer ?? 28_000;
+  const gasLimitBuffer = params.gasLimitBuffer ?? 1.2;
+  const maxTxGas = params.maxTxGas ?? 16_777_216n;
+  const maxBatch = Math.floor(Number(maxTxGas) / (gasPerTransfer * gasLimitBuffer));
+  const effective = Math.min(params.batchSize, maxBatch);
+  return { effectiveBatchSize: effective, wasClamped: effective < params.batchSize };
+}
 
 /**
  * Returns the TitrateFull function selector for the disperse variant
@@ -90,7 +110,12 @@ export function DistributeStep() {
   const recipientsLoadedRef = useRef(false);
   const savedBatchesLoadedRef = useRef(false);
 
-  const batchSize = activeCampaign?.batchSize ?? 100;
+  const rawBatchSize = activeCampaign?.batchSize ?? 100;
+  const { effectiveBatchSize, wasClamped } = useMemo(
+    () => clampBatchSizeForGas({ batchSize: rawBatchSize }),
+    [rawBatchSize],
+  );
+  const batchSize = effectiveBatchSize;
   const tokenSymbol = activeCampaign?.contractName || 'TOKEN';
   const tokenDecimals = activeCampaign?.tokenDecimals ?? 18;
   const hasContract =
@@ -240,6 +265,24 @@ export function DistributeStep() {
 
     setError(null);
 
+    // Pre-flight: check for pending mempool transactions
+    try {
+      const senderAddress = walletClient.account!.address;
+      const [confirmedNonce, pendingNonce] = await Promise.all([
+        publicClient.getTransactionCount({ address: senderAddress }),
+        publicClient.getTransactionCount({ address: senderAddress, blockTag: 'pending' }),
+      ]);
+      if (pendingNonce > confirmedNonce) {
+        setError(
+          `You have ${pendingNonce - confirmedNonce} pending transaction(s). Wait for them to confirm before distributing.`,
+        );
+        setPhase('ready');
+        return;
+      }
+    } catch {
+      // Non-critical — continue even if nonce check fails
+    }
+
     // Compute total ERC-20 needed for approval
     let totalNeeded = 0n;
     if (activeCampaign.amountMode === 'uniform') {
@@ -343,6 +386,33 @@ export function DistributeStep() {
     );
     setBatches([...savedCards, ...newCards]);
 
+    // Pre-send: save pending batch records BEFORE distribution to prevent
+    // double-sends on crash — prefer under-sending to double-sending
+    if (storage && activeCampaign) {
+      for (const card of newCards) {
+        const startIdx = card.batchIndex * batchSize - resumeOffset;
+        const endIdx = Math.min(startIdx + batchSize, recipientAddresses.length);
+        const batchRecipients = recipientAddresses.slice(
+          startIdx < 0 ? 0 : startIdx,
+          endIdx,
+        );
+
+        await storage.batches.put({
+          id: crypto.randomUUID(),
+          campaignId: activeCampaign.id,
+          batchIndex: card.batchIndex,
+          recipients: batchRecipients,
+          amounts: [],
+          status: 'pending',
+          attempts: [],
+          confirmedTxHash: null,
+          confirmedBlock: null,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        });
+      }
+    }
+
     const onProgress = (event: ProgressEvent) => {
       if (event.type !== 'batch') return;
 
@@ -384,7 +454,7 @@ export function DistributeStep() {
         });
       }
 
-      // Save each batch result to IDB
+      // Update pre-saved pending batch records with final results
       for (const result of batchResults) {
         const stored = batchResultToStored(activeCampaign.id, result);
         await storage.batches.put(stored);
@@ -392,17 +462,22 @@ export function DistributeStep() {
 
       setResults(batchResults);
 
-      // Update batches with final tx hashes
+      // Update batches with final tx hashes and gas cost
       setBatches((prev) =>
         prev.map((batch) => {
           const result = batchResults.find(
             (r) => r.batchIndex === batch.batchIndex,
           );
           if (!result) return batch;
+          const lastAttempt = result.attempts[result.attempts.length - 1];
+          const gasEstimate = lastAttempt
+            ? `${formatUnits(lastAttempt.gasEstimate * lastAttempt.maxFeePerGas, 18)} ETH`
+            : undefined;
           return {
             ...batch,
             status: result.confirmedTxHash ? 'confirmed' : 'failed',
             txHash: result.confirmedTxHash ?? undefined,
+            gasEstimate,
           };
         }),
       );
@@ -433,6 +508,7 @@ export function DistributeStep() {
   const summaryData = (() => {
     const recipientSet = new Set<string>();
     let totalTokensSent = 0n;
+    let totalGasCost = 0n;
     let confirmedCount = 0;
     let failedCount = 0;
 
@@ -445,12 +521,21 @@ export function DistributeStep() {
         for (const amount of result.amounts) {
           totalTokensSent += amount;
         }
+        const lastAttempt = result.attempts[result.attempts.length - 1];
+        if (lastAttempt) {
+          totalGasCost += lastAttempt.gasEstimate * lastAttempt.maxFeePerGas;
+        }
       } else {
         failedCount++;
       }
     }
 
+    const gasDisplay = totalGasCost > 0n
+      ? `${formatUnits(totalGasCost, 18)} ETH`
+      : '--';
+
     return {
+      totalGasEstimate: gasDisplay,
       totalTokensSent: formatUnits(totalTokensSent, tokenDecimals),
       uniqueRecipients: recipientSet.size,
       batchCount: results.length,
@@ -491,7 +576,9 @@ export function DistributeStep() {
                   </div>
                   <div className="flex justify-between gap-2">
                     <span className="text-gray-500 dark:text-gray-400">Batch size</span>
-                    <span className="text-gray-900 dark:text-white">{batchSize}</span>
+                    <span className="text-gray-900 dark:text-white">
+                      {batchSize}{wasClamped ? ` (clamped from ${rawBatchSize})` : ''}
+                    </span>
                   </div>
                   <div className="flex justify-between gap-2">
                     <span className="text-gray-500 dark:text-gray-400">Amount mode</span>
@@ -521,6 +608,12 @@ export function DistributeStep() {
                   </div>
                 </div>
               </div>
+
+              {wasClamped && (
+                <div className="rounded-md bg-yellow-900/20 p-3 text-sm text-yellow-600 dark:text-yellow-400">
+                  Batch size clamped from {rawBatchSize} to {effectiveBatchSize} to fit within gas limit.
+                </div>
+              )}
 
               {isResuming && (
                 <div className="rounded-md bg-yellow-900/20 p-3 text-sm text-yellow-400 ring-1 ring-yellow-900/30">
@@ -594,7 +687,7 @@ export function DistributeStep() {
 
               {phase === 'complete' && (
                 <SpendSummary
-                  totalGasEstimate="--"
+                  totalGasEstimate={summaryData.totalGasEstimate}
                   totalTokensSent={summaryData.totalTokensSent}
                   tokenSymbol={tokenSymbol}
                   uniqueRecipients={summaryData.uniqueRecipients}

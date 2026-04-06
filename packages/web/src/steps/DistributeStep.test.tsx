@@ -1,6 +1,6 @@
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { DistributeStep, toBatchCardStatus, getDisperseSelector, batchResultToStored } from './DistributeStep.js';
+import { DistributeStep, toBatchCardStatus, getDisperseSelector, batchResultToStored, clampBatchSizeForGas } from './DistributeStep.js';
 
 // ---- Mock state ----
 
@@ -53,6 +53,7 @@ vi.mock('../providers/ChainProvider.js', () => ({
     publicClient: {
       waitForTransactionReceipt: vi.fn().mockResolvedValue({ status: 'success' }),
       readContract: vi.fn().mockResolvedValue(0n),
+      getTransactionCount: vi.fn().mockResolvedValue(0),
     },
     explorerBus: null,
     rpcBus: null,
@@ -1313,5 +1314,276 @@ describe('batchResultToStored', () => {
     const stored2 = batchResultToStored('campaign-1', result);
 
     expect(stored1.id).not.toBe(stored2.id);
+  });
+});
+
+describe('clampBatchSizeForGas', () => {
+  it('returns unchanged batch size when it fits within gas limit', () => {
+    const result = clampBatchSizeForGas({ batchSize: 100 });
+    expect(result.effectiveBatchSize).toBe(100);
+    expect(result.wasClamped).toBe(false);
+  });
+
+  it('clamps batch size when it exceeds gas limit', () => {
+    const result = clampBatchSizeForGas({ batchSize: 1000 });
+    // Default: 16_777_216 / (28_000 * 1.2) = 499.3 -> floor = 499
+    expect(result.effectiveBatchSize).toBe(499);
+    expect(result.wasClamped).toBe(true);
+  });
+
+  it('uses custom gasPerTransfer', () => {
+    const result = clampBatchSizeForGas({ batchSize: 100, gasPerTransfer: 50_000 });
+    // 16_777_216 / (50_000 * 1.2) = 279.6 -> floor = 279
+    expect(result.effectiveBatchSize).toBe(100);
+    expect(result.wasClamped).toBe(false);
+  });
+
+  it('uses custom gasLimitBuffer', () => {
+    const result = clampBatchSizeForGas({ batchSize: 1000, gasLimitBuffer: 2.0 });
+    // 16_777_216 / (28_000 * 2.0) = 299.6 -> floor = 299
+    expect(result.effectiveBatchSize).toBe(299);
+    expect(result.wasClamped).toBe(true);
+  });
+
+  it('uses custom maxTxGas', () => {
+    const result = clampBatchSizeForGas({ batchSize: 100, maxTxGas: 1_000_000n });
+    // 1_000_000 / (28_000 * 1.2) = 29.76 -> floor = 29
+    expect(result.effectiveBatchSize).toBe(29);
+    expect(result.wasClamped).toBe(true);
+  });
+
+  it('returns batch size of 1 for very small gas limits', () => {
+    const result = clampBatchSizeForGas({ batchSize: 100, maxTxGas: 40_000n });
+    // 40_000 / (28_000 * 1.2) = 1.19 -> floor = 1
+    expect(result.effectiveBatchSize).toBe(1);
+    expect(result.wasClamped).toBe(true);
+  });
+
+  it('returns 0 for impossibly small gas limits', () => {
+    const result = clampBatchSizeForGas({ batchSize: 100, maxTxGas: 10_000n });
+    // 10_000 / (28_000 * 1.2) = 0.29 -> floor = 0
+    expect(result.effectiveBatchSize).toBe(0);
+    expect(result.wasClamped).toBe(true);
+  });
+
+  it('handles batch size of 1 without clamping', () => {
+    const result = clampBatchSizeForGas({ batchSize: 1 });
+    expect(result.effectiveBatchSize).toBe(1);
+    expect(result.wasClamped).toBe(false);
+  });
+
+  it('handles all custom parameters together', () => {
+    const result = clampBatchSizeForGas({
+      batchSize: 500,
+      gasPerTransfer: 35_000,
+      gasLimitBuffer: 1.5,
+      maxTxGas: 10_000_000n,
+    });
+    // 10_000_000 / (35_000 * 1.5) = 190.47 -> floor = 190
+    expect(result.effectiveBatchSize).toBe(190);
+    expect(result.wasClamped).toBe(true);
+  });
+
+  it('does not clamp when batch size equals max', () => {
+    // 16_777_216 / (28_000 * 1.2) = 499.3 -> 499
+    const result = clampBatchSizeForGas({ batchSize: 499 });
+    expect(result.effectiveBatchSize).toBe(499);
+    expect(result.wasClamped).toBe(false);
+  });
+});
+
+describe('DistributeStep nonce check', () => {
+  it('shows error when there are pending transactions', async () => {
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 1, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+
+    // Mock getTransactionCount to return different confirmed vs pending nonces
+    const mockGetTransactionCount = vi.fn()
+      .mockImplementation(({ blockTag }: { blockTag?: string }) => {
+        if (blockTag === 'pending') return Promise.resolve(5);
+        return Promise.resolve(3);
+      });
+
+    chainOverrides = {
+      publicClient: {
+        waitForTransactionReceipt: vi.fn().mockResolvedValue({ status: 'success' }),
+        readContract: vi.fn().mockResolvedValue(0n),
+        getTransactionCount: mockGetTransactionCount,
+      },
+    };
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText(/2 pending transaction/i)).toBeInTheDocument();
+    });
+  });
+});
+
+describe('DistributeStep gas clamping warning', () => {
+  it('shows clamping warning when batch size exceeds gas limit', () => {
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        batchSize: 1000,
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    expect(screen.getByText(/batch size clamped from 1000 to 499/i)).toBeInTheDocument();
+  });
+
+  it('does not show clamping warning when batch size fits within gas limit', () => {
+    render(<DistributeStep />);
+
+    expect(screen.queryByText(/batch size clamped/i)).not.toBeInTheDocument();
+  });
+
+  it('shows clamped value in batch size row', () => {
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        batchSize: 1000,
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    const matches = screen.getAllByText(/clamped from 1000/);
+    expect(matches.length).toBe(2); // One in batch size row, one in warning
+  });
+});
+
+describe('DistributeStep pre-send recording', () => {
+  it('saves pending batch records before distribution starts', async () => {
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+      { setId: 'set-1', address: '0xRecipient2000000000000000000000000000002', amount: null },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 2, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+    mockDisperseTokensSimple.mockResolvedValue([
+      {
+        batchIndex: 0,
+        recipients: mockAddresses.map((a) => a.address),
+        amounts: [1000n, 1000n],
+        attempts: [],
+        confirmedTxHash: '0xabc123',
+        blockNumber: null,
+      },
+    ]);
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      // Verify pending batch was saved BEFORE distribution
+      // First call should be with status 'pending', subsequent calls update to final status
+      const putCalls = mockStorage.batches.put.mock.calls;
+      expect(putCalls.length).toBeGreaterThanOrEqual(2);
+      expect(putCalls[0][0]).toEqual(
+        expect.objectContaining({
+          campaignId: 'test-1',
+          batchIndex: 0,
+          status: 'pending',
+        }),
+      );
+    });
+  });
+});
+
+describe('DistributeStep gas cost display', () => {
+  it('updates batch cards with gas estimates from batch results', async () => {
+    const mockAddresses = [
+      { setId: 'set-1', address: '0xRecipient1000000000000000000000000000001', amount: null },
+    ];
+
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 1, createdAt: Date.now() },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue(mockAddresses);
+    mockDisperseTokensSimple.mockResolvedValue([
+      {
+        batchIndex: 0,
+        recipients: ['0xRecipient1000000000000000000000000000001'],
+        amounts: [1000n],
+        attempts: [
+          {
+            txHash: '0xabc123',
+            nonce: 0,
+            gasEstimate: 50000n,
+            maxFeePerGas: 20000000000n,
+            maxPriorityFeePerGas: 1000000000n,
+            timestamp: Date.now(),
+            outcome: 'confirmed',
+          },
+        ],
+        confirmedTxHash: '0xabc123',
+        blockNumber: 42n,
+      },
+    ]);
+
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(mockStorage.addresses.getBySet).toHaveBeenCalledWith('set-1');
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+    });
+
+    await waitFor(() => {
+      // Gas: 50000 * 20000000000 = 1_000_000_000_000_000 wei = 0.001 ETH
+      // Appears in BatchStatusCard as "Gas: 0.001 ETH" and in SpendSummary as "0.001 ETH"
+      const gasElements = screen.getAllByText(/0\.001 ETH/);
+      expect(gasElements.length).toBeGreaterThanOrEqual(1);
+    });
   });
 });

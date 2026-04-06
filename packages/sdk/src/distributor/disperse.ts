@@ -25,6 +25,8 @@ function getAbi(variant: 'simple' | 'full'): never {
 const ZERO_BYTES32 =
   '0x0000000000000000000000000000000000000000000000000000000000000000' as Hex;
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address;
+const WAD = 1_000_000_000_000_000_000n;
+const DEFAULT_FEE_BUMP_WAD = 125_000_000_000_000_000n; // 0.125 WAD = 12.5% bump
 
 /**
  * Live filter function applied per-batch before sending.
@@ -47,6 +49,12 @@ export type GasConfig = {
   readonly maxPriorityFee?: bigint;
   /** Stop distribution if cumulative gas cost exceeds this (in wei). Default: no limit. */
   readonly maxTotalGasCost?: bigint;
+  /**
+   * Fee bump additive factor for stuck tx replacement, expressed as a WAD
+   * fraction of the current fee. The replacement fee is `current + current * feeBumpWad / 1e18`.
+   * Default: 125_000_000_000_000_000n (0.125 WAD = 12.5% bump).
+   */
+  readonly feeBumpWad?: bigint;
 };
 
 export type DisperseParams = {
@@ -351,22 +359,39 @@ export async function disperseTokensSimple(
   return results;
 }
 
-async function getPriorityFeeFromHistory(
+/**
+ * Estimates a priority fee using both fee history and mempool signals.
+ * Returns whichever is higher — fee history captures the trend across recent
+ * blocks, while the mempool estimate catches sudden spikes.
+ */
+async function getPriorityFee(
   publicClient: PublicClient,
   speed: GasSpeed,
 ): Promise<bigint> {
   const percentile = PRIORITY_PERCENTILES[speed];
-  const feeHistory = await publicClient.getFeeHistory({
-    blockCount: 10,
-    rewardPercentiles: [percentile],
-  });
+
+  // Fetch both signals in parallel
+  const [feeHistory, mempoolEstimate] = await Promise.all([
+    publicClient.getFeeHistory({
+      blockCount: 10,
+      rewardPercentiles: [percentile],
+    }),
+    publicClient.estimateMaxPriorityFeePerGas(),
+  ]);
+
+  // Average the percentile across recent mined blocks
   const rewards = feeHistory.reward ?? [];
-  if (rewards.length === 0) return 0n;
-  let total = 0n;
-  for (const block of rewards) {
-    total += block[0] ?? 0n;
+  let historyEstimate = 0n;
+  if (rewards.length > 0) {
+    let total = 0n;
+    for (const block of rewards) {
+      total += block[0] ?? 0n;
+    }
+    historyEstimate = total / BigInt(rewards.length);
   }
-  return total / BigInt(rewards.length);
+
+  // Use whichever is higher — history for trend, mempool for spikes
+  return historyEstimate > mempoolEstimate ? historyEstimate : mempoolEstimate;
 }
 
 type ExecuteBatchParams = {
@@ -388,6 +413,17 @@ async function executeBatch(params: ExecuteBatchParams): Promise<BatchAttempt> {
   const prioritySpeed = gasConfig?.priority ?? 'medium';
   const { numerator, denominator } = HEADROOM_MULTIPLIERS[headroom];
 
+  const droppedResult = (overrides: Partial<BatchAttempt> = {}): BatchAttempt => ({
+    txHash: '0x' as Hex,
+    nonce: 0,
+    gasEstimate: 0n,
+    maxFeePerGas: 0n,
+    maxPriorityFeePerGas: 0n,
+    timestamp,
+    outcome: 'dropped',
+    ...overrides,
+  });
+
   try {
     // Estimate gas — let it fail rather than silently falling back
     const gasEstimate = await publicClient.estimateContractGas({
@@ -407,61 +443,121 @@ async function executeBatch(params: ExecuteBatchParams): Promise<BatchAttempt> {
 
     // Drop batch without sending if base fee exceeds the configured cap
     if (gasConfig?.maxBaseFee !== undefined && baseFee > gasConfig.maxBaseFee) {
-      return {
-        txHash: '0x' as Hex,
-        nonce: 0,
-        gasEstimate: gasLimit,
-        maxFeePerGas: 0n,
-        maxPriorityFeePerGas: 0n,
-        timestamp,
-        outcome: 'dropped',
-      };
+      return droppedResult({ gasEstimate: gasLimit });
     }
 
-    // Get priority fee from fee history at the configured percentile
-    let priorityFee = await getPriorityFeeFromHistory(publicClient, prioritySpeed);
+    // Get priority fee using both fee history and mempool signals
+    let priorityFee = await getPriorityFee(publicClient, prioritySpeed);
 
     // Clamp priority fee to cap if set (clamp, not abort)
     if (gasConfig?.maxPriorityFee !== undefined && priorityFee > gasConfig.maxPriorityFee) {
       priorityFee = gasConfig.maxPriorityFee;
     }
 
-    const maxPriorityFeePerGas = priorityFee;
-    const maxFeePerGas = (baseFee * numerator) / denominator + priorityFee;
+    let currentPriorityFee = priorityFee;
+    let currentMaxFee = (baseFee * numerator) / denominator + priorityFee;
 
-    const hash = await walletClient.writeContract({
-      address: contractAddress,
-      abi,
-      functionName,
-      args: args as never,
-      value,
-      gas: gasLimit,
-      maxFeePerGas,
-      maxPriorityFeePerGas,
-      account: walletClient.account!,
-      chain: undefined,
+    // Pin the nonce so replacement txs target the same slot
+    const nonce = await publicClient.getTransactionCount({
+      address: walletClient.account!.address,
+      blockTag: 'pending',
     });
 
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    const MAX_ATTEMPTS = 5;
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      // Check if nonce was already consumed (previous tx confirmed while retrying)
+      const currentNonce = await publicClient.getTransactionCount({
+        address: walletClient.account!.address,
+        blockTag: 'latest',
+      });
+      if (currentNonce > nonce) {
+        return {
+          txHash: '0x' as Hex,
+          nonce,
+          gasEstimate: gasLimit,
+          maxFeePerGas: currentMaxFee,
+          maxPriorityFeePerGas: currentPriorityFee,
+          timestamp,
+          outcome: 'confirmed',
+        };
+      }
 
-    return {
-      txHash: hash,
-      nonce: 0,
-      gasEstimate: gasLimit,
-      maxFeePerGas,
-      maxPriorityFeePerGas,
-      timestamp,
-      outcome: receipt.status === 'success' ? 'confirmed' : 'reverted',
-    };
+      try {
+        const hash = await walletClient.writeContract({
+          address: contractAddress,
+          abi,
+          functionName,
+          args: args as never,
+          value,
+          gas: gasLimit,
+          maxFeePerGas: currentMaxFee,
+          maxPriorityFeePerGas: currentPriorityFee,
+          account: walletClient.account!,
+          chain: undefined,
+          nonce,
+        });
+
+        const receipt = await publicClient.waitForTransactionReceipt({
+          hash,
+          timeout: 60_000,
+        });
+
+        return {
+          txHash: hash,
+          nonce,
+          gasEstimate: gasLimit,
+          maxFeePerGas: currentMaxFee,
+          maxPriorityFeePerGas: currentPriorityFee,
+          timestamp,
+          outcome: receipt.status === 'success' ? 'confirmed' : 'reverted',
+        };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+
+        // Nonce already used — original tx confirmed while we were retrying
+        if (message.includes('nonce too low')) {
+          return {
+            txHash: '0x' as Hex,
+            nonce,
+            gasEstimate: gasLimit,
+            maxFeePerGas: currentMaxFee,
+            maxPriorityFeePerGas: currentPriorityFee,
+            timestamp,
+            outcome: 'confirmed',
+          };
+        }
+
+        // Bump both fees by >= 112% for EIP-1559 replacement
+        const freshBlock = await publicClient.getBlock({ blockTag: 'latest' });
+        const freshBaseFee = freshBlock.baseFeePerGas ?? 0n;
+
+        if (gasConfig?.maxBaseFee !== undefined && freshBaseFee > gasConfig.maxBaseFee) {
+          return droppedResult({ nonce, gasEstimate: gasLimit });
+        }
+
+        const freshPriorityFee = await getPriorityFee(publicClient, prioritySpeed);
+        const bumpWad = gasConfig?.feeBumpWad ?? DEFAULT_FEE_BUMP_WAD;
+        const minPriorityFee = currentPriorityFee + currentPriorityFee * bumpWad / WAD;
+        const minMaxFee = currentMaxFee + currentMaxFee * bumpWad / WAD;
+
+        const bumpedPriorityFee = minPriorityFee > freshPriorityFee
+          ? minPriorityFee
+          : freshPriorityFee;
+
+        // Abort if bumped priority fee exceeds the configured cap
+        if (gasConfig?.maxPriorityFee !== undefined && bumpedPriorityFee > gasConfig.maxPriorityFee) {
+          return droppedResult({ nonce, gasEstimate: gasLimit });
+        }
+
+        const calculatedMaxFee = freshBaseFee * 2n + bumpedPriorityFee;
+        currentMaxFee = calculatedMaxFee > minMaxFee ? calculatedMaxFee : minMaxFee;
+        currentPriorityFee = bumpedPriorityFee;
+      }
+    }
+
+    // Exhausted retries
+    return droppedResult({ nonce, gasEstimate: gasLimit });
   } catch {
-    return {
-      txHash: '0x' as Hex,
-      nonce: 0,
-      gasEstimate: 0n,
-      maxFeePerGas: 0n,
-      maxPriorityFeePerGas: 0n,
-      timestamp,
-      outcome: 'dropped',
-    };
+    return droppedResult();
   }
 }
