@@ -1,5 +1,5 @@
 import type { Address, Hex } from 'viem';
-import { keccak256 } from 'viem';
+import { concat, keccak256, toHex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 
 export type EIP712MessageParams = {
@@ -102,4 +102,56 @@ export function deriveHotWallet(signature: Hex): DerivedWallet {
   const privateKey = keccak256(signature);
   const account = privateKeyToAccount(privateKey);
   return { address: account.address, privateKey };
+}
+
+/**
+ * Derives a wallet at a specific index from an EIP-712 signature.
+ *
+ * Index 0 is backward-compatible with `deriveHotWallet` (plain `keccak256(signature)`).
+ * Higher indices append a 32-byte big-endian index to the signature before hashing:
+ * `keccak256(concat([signature, toHex(index, { size: 32 })]))`.
+ *
+ * @param options.signature - A hex-encoded signature (must be at least 65 bytes)
+ * @param options.index - Zero-based derivation index
+ * @throws {InvalidSignatureError} When signature is empty or too short
+ * @returns The derived wallet address and private key
+ */
+export function deriveWalletAtIndex(options: {
+  readonly signature: Hex;
+  readonly index: number;
+}): DerivedWallet {
+  const { signature, index } = options;
+  validateSignature(signature);
+
+  const privateKey =
+    index === 0
+      ? keccak256(signature)
+      : keccak256(concat([signature, toHex(index, { size: 32 })]));
+
+  const account = privateKeyToAccount(privateKey);
+  return { address: account.address, privateKey };
+}
+
+/**
+ * Derives multiple wallets from a single signature, starting at an optional offset.
+ *
+ * Returns wallets at indices `[offset, offset + count - 1]`. When offset is 0
+ * (the default), the first wallet matches `deriveHotWallet(signature)`.
+ *
+ * @param options.signature - A hex-encoded signature (must be at least 65 bytes)
+ * @param options.count - Number of wallets to derive
+ * @param options.offset - Starting index (defaults to 0)
+ * @throws {InvalidSignatureError} When signature is empty or too short
+ * @returns Array of derived wallets
+ */
+export function deriveMultipleWallets(options: {
+  readonly signature: Hex;
+  readonly count: number;
+  readonly offset?: number;
+}): DerivedWallet[] {
+  const { signature, count, offset = 0 } = options;
+
+  return Array.from({ length: count }, (_, i) =>
+    deriveWalletAtIndex({ signature, index: offset + i }),
+  );
 }
