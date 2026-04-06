@@ -107,6 +107,11 @@ export function DistributeStep() {
   const [recipients, setRecipients] = useState<readonly StoredAddress[]>([]);
   const [results, setResults] = useState<readonly BatchResult[]>([]);
   const [savedBatches, setSavedBatches] = useState<readonly StoredBatch[]>([]);
+  const [throughput, setThroughput] = useState<{
+    readonly addressesPerHour: number;
+    readonly addressesCompleted: number;
+    readonly estimatedRemainingMs: number;
+  } | null>(null);
   const recipientsLoadedRef = useRef(false);
   const savedBatchesLoadedRef = useRef(false);
 
@@ -414,6 +419,15 @@ export function DistributeStep() {
     }
 
     const onProgress = (event: ProgressEvent) => {
+      if (event.type === 'throughput') {
+        setThroughput({
+          addressesPerHour: event.addressesPerHour,
+          addressesCompleted: event.addressesCompleted,
+          estimatedRemainingMs: event.estimatedRemainingMs,
+        });
+        return;
+      }
+
       if (event.type !== 'batch') return;
 
       setBatches((prev) =>
@@ -666,10 +680,19 @@ export function DistributeStep() {
               </div>
             )}
 
-            {/* Distributing state */}
+            {/* Distributing state + throughput */}
             {phase === 'distributing' && (
               <div className="rounded-md bg-blue-900/20 p-3 text-sm text-blue-400 ring-1 ring-blue-900/30">
-                Distribution in progress...
+                <p>Distribution in progress...</p>
+                {throughput && (
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-blue-300">
+                    <span>{throughput.addressesCompleted.toLocaleString()} addresses sent</span>
+                    <span>{throughput.addressesPerHour.toLocaleString()} addr/hr</span>
+                    {throughput.estimatedRemainingMs > 0 && (
+                      <span>~{Math.ceil(throughput.estimatedRemainingMs / 60_000)} min remaining</span>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
