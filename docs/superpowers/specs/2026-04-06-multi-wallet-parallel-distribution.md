@@ -233,6 +233,18 @@ type StoredWalletDerivation = {
 - **User clears perry mode** — delete `StoredWalletDerivation` from IDB, wipe in-memory keys
 - **Partial funding** — distribution gates on all wallets meeting minimum thresholds; underfunded wallets block start
 
+## Security Considerations
+
+Derived private keys exist in JavaScript memory while perry mode is active. This is unavoidable — signing transactions requires access to the key material, and every browser wallet (MetaMask, Rabby, etc.) works the same way.
+
+**Mitigations:**
+
+- **Disposable keys** — derived wallets only hold what the user funds into them. The cold wallet (high-value) stays in the hardware wallet / extension, never exposed to the web app.
+- **Key zeroing** — when clearing perry mode or after sweep-back completes, overwrite private key bytes in the `DerivedWallet` objects before dereferencing (e.g., fill the Hex string with zeros). Prevents the raw key from lingering in the JS heap for GC to eventually collect.
+- **Minimize exposure window** — auto-clear derived keys after sweep completes. Don't hold keys idle between sessions; re-derive from the encrypted signature on next load.
+- **CSP headers** — the web app should enforce strict `Content-Security-Policy` to prevent XSS injection, which is the primary vector for in-memory key exfiltration.
+- **Encrypted-at-rest signature** — the EIP-712 signature (from which all keys derive) is AES-GCM encrypted in IDB. An attacker with IDB access but not the unlock key cannot derive any wallets.
+
 ## Design Decisions
 
 1. **One signature, N wallets** — `keccak256(concat(sig, pad(index)))` derivation. One wallet popup regardless of wallet count. Index 0 backward-compatible with existing perry mode.
