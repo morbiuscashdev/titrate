@@ -65,7 +65,8 @@ export type ProgressEvent =
   | { readonly type: 'scan'; readonly currentBlock: bigint; readonly endBlock: bigint; readonly addressesFound: number }
   | { readonly type: 'filter'; readonly filterName: string; readonly inputCount: number; readonly outputCount: number }
   | { readonly type: 'batch'; readonly batchIndex: number; readonly totalBatches: number; readonly status: BatchStatus }
-  | { readonly type: 'tx'; readonly batchIndex: number; readonly attempt: BatchAttempt };
+  | { readonly type: 'tx'; readonly batchIndex: number; readonly attempt: BatchAttempt }
+  | { readonly type: 'throughput'; readonly addressesCompleted: number; readonly addressesPerHour: number; readonly elapsedMs: number; readonly estimatedRemainingMs: number };
 
 export type ProgressCallback = (event: ProgressEvent) => void;
 

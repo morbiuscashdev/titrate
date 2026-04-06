@@ -72,6 +72,8 @@ export type DisperseParams = {
   readonly onProgress?: ProgressCallback;
   readonly gasConfig?: GasConfig;
   readonly interventionConfig?: InterventionConfig;
+  /** Number of batches to pipeline without waiting for confirmation. Default: 1 (serial). */
+  readonly nonceWindow?: number;
 };
 
 export type DisperseSimpleParams = {
@@ -89,6 +91,8 @@ export type DisperseSimpleParams = {
   readonly onProgress?: ProgressCallback;
   readonly gasConfig?: GasConfig;
   readonly interventionConfig?: InterventionConfig;
+  /** Number of batches to pipeline without waiting for confirmation. Default: 1 (serial). */
+  readonly nonceWindow?: number;
 };
 
 /**
@@ -169,12 +173,87 @@ async function fillBatchWithAmounts(
   return { addresses: batchAddrs, amounts: batchAmounts, newCursor: cursor };
 }
 
+/** A batch that has been submitted but not yet confirmed. */
+type PendingBatch = {
+  readonly batchIndex: number;
+  readonly recipients: readonly Address[];
+  readonly amounts: readonly bigint[];
+  readonly txPromise: Promise<BatchAttempt>;
+};
+
+/**
+ * Resolves a single pending batch — records the result, emits progress/throughput events.
+ * Returns the attempt outcome for flow control.
+ */
+function resolvePendingBatch(
+  pending: PendingBatch,
+  attempt: BatchAttempt,
+  results: BatchResult[],
+  totalBatches: number,
+  onProgress: ProgressCallback | undefined,
+  throughput: { totalCompleted: number; startTime: number; totalRecipients: number },
+): BatchAttempt['outcome'] {
+  results.push({
+    batchIndex: pending.batchIndex,
+    recipients: pending.recipients,
+    amounts: pending.amounts,
+    attempts: [attempt],
+    confirmedTxHash: attempt.outcome === 'confirmed' ? attempt.txHash : null,
+    blockNumber: null,
+  });
+
+  onProgress?.({
+    type: 'batch',
+    batchIndex: pending.batchIndex,
+    totalBatches,
+    status: attempt.outcome === 'confirmed' ? 'confirmed' : 'failed',
+  });
+
+  if (attempt.outcome === 'confirmed') {
+    throughput.totalCompleted += pending.recipients.length;
+    const elapsed = Date.now() - throughput.startTime;
+    const rate = elapsed > 0 ? (throughput.totalCompleted / elapsed) * 3_600_000 : 0;
+    const remaining = rate > 0 ? ((throughput.totalRecipients - throughput.totalCompleted) / rate) * 3_600_000 : 0;
+
+    onProgress?.({
+      type: 'throughput',
+      addressesCompleted: throughput.totalCompleted,
+      addressesPerHour: Math.round(rate),
+      elapsedMs: elapsed,
+      estimatedRemainingMs: Math.round(remaining),
+    });
+  }
+
+  return attempt.outcome;
+}
+
+/**
+ * Drains all remaining pending batches after a failure, recording results without submitting new work.
+ */
+async function drainPending(
+  pending: PendingBatch[],
+  results: BatchResult[],
+  totalBatches: number,
+  onProgress: ProgressCallback | undefined,
+  throughput: { totalCompleted: number; startTime: number; totalRecipients: number },
+): Promise<void> {
+  for (const p of pending) {
+    const a = await p.txPromise;
+    resolvePendingBatch(p, a, results, totalBatches, onProgress, throughput);
+  }
+  pending.length = 0;
+}
+
 /**
  * Disperses variable token amounts to multiple recipients.
  * Streams through the recipient list, applying an optional live filter per-batch.
  * If the filter removes addresses, more are pulled from the source to fill the batch.
  *
- * @param params - Disperse parameters including optional liveFilter
+ * When `nonceWindow > 1`, batches are pipelined: up to `nonceWindow` batches are submitted
+ * before waiting for confirmation. Batch construction remains serial (live filter safety),
+ * but submission is parallelized.
+ *
+ * @param params - Disperse parameters including optional liveFilter and nonceWindow
  * @returns Array of batch results with tx hashes and attempt logs
  */
 export async function disperseTokens(params: DisperseParams): Promise<BatchResult[]> {
@@ -192,70 +271,86 @@ export async function disperseTokens(params: DisperseParams): Promise<BatchResul
     liveFilter,
     onProgress,
     gasConfig,
+    nonceWindow = 1,
   } = params;
 
   const abi = getAbi(variant);
   const isNative = token === ZERO_ADDRESS;
   const results: BatchResult[] = [];
+  const totalBatches = Math.ceil(recipients.length / batchSize);
   let cursor = 0;
   let batchIndex = 0;
   let cumulativeGasCost = 0n;
 
-  while (cursor < recipients.length) {
-    const { addresses: batchRecipients, amounts: batchAmounts, newCursor } =
-      await fillBatchWithAmounts(recipients, amounts, cursor, batchSize, liveFilter);
-    cursor = newCursor;
+  const window = Math.max(1, nonceWindow);
+  const pending: PendingBatch[] = [];
+  const throughput = { totalCompleted: 0, startTime: Date.now(), totalRecipients: recipients.length };
 
-    if (batchRecipients.length === 0) break;
+  // Fetch the starting nonce once for the whole window
+  const startNonce = window > 1
+    ? await publicClient.getTransactionCount({ address: walletClient.account!.address, blockTag: 'pending' })
+    : 0;
 
-    const totalValue = isNative ? batchAmounts.reduce((sum, a) => sum + a, 0n) : 0n;
+  while (cursor < recipients.length || pending.length > 0) {
+    // Fill window: build and submit batches (serial build, parallel submit)
+    while (pending.length < window && cursor < recipients.length) {
+      const { addresses: batchRecipients, amounts: batchAmounts, newCursor } =
+        await fillBatchWithAmounts(recipients, amounts, cursor, batchSize, liveFilter);
+      cursor = newCursor;
 
-    onProgress?.({
-      type: 'batch',
-      batchIndex,
-      totalBatches: Math.ceil(recipients.length / batchSize),
-      status: 'signing',
-    });
+      if (batchRecipients.length === 0) break;
 
-    const args: readonly unknown[] =
-      variant === 'simple'
-        ? [token, batchRecipients, batchAmounts]
-        : [token, from, batchRecipients, batchAmounts, campaignId];
+      const totalValue = isNative ? batchAmounts.reduce((sum, a) => sum + a, 0n) : 0n;
 
-    const attempt = await executeBatch({
-      contractAddress,
-      abi,
-      functionName: 'disperse',
-      args,
-      value: totalValue,
-      walletClient,
-      publicClient,
-      gasConfig,
-    });
+      onProgress?.({
+        type: 'batch',
+        batchIndex,
+        totalBatches,
+        status: 'signing',
+      });
+
+      const args: readonly unknown[] =
+        variant === 'simple'
+          ? [token, batchRecipients, batchAmounts]
+          : [token, from, batchRecipients, batchAmounts, campaignId];
+
+      // Submit without awaiting — nonce pinned explicitly when windowed
+      const txPromise = executeBatch({
+        contractAddress,
+        abi,
+        functionName: 'disperse',
+        args,
+        value: totalValue,
+        walletClient,
+        publicClient,
+        gasConfig,
+        ...(window > 1 ? { nonce: startNonce + batchIndex } : {}),
+      });
+
+      pending.push({ batchIndex, recipients: batchRecipients, amounts: batchAmounts, txPromise });
+      batchIndex++;
+    }
+
+    if (pending.length === 0) break;
+
+    // Wait for oldest pending batch
+    const oldest = pending.shift()!;
+    const attempt = await oldest.txPromise;
 
     if (attempt.outcome === 'confirmed') {
       cumulativeGasCost += attempt.gasEstimate * attempt.maxFeePerGas;
     }
 
-    results.push({
-      batchIndex,
-      recipients: batchRecipients,
-      amounts: batchAmounts,
-      attempts: [attempt],
-      confirmedTxHash: attempt.outcome === 'confirmed' ? attempt.txHash : null,
-      blockNumber: null,
-    });
+    const outcome = resolvePendingBatch(oldest, attempt, results, totalBatches, onProgress, throughput);
 
-    onProgress?.({
-      type: 'batch',
-      batchIndex,
-      totalBatches: Math.ceil(recipients.length / batchSize),
-      status: attempt.outcome === 'confirmed' ? 'confirmed' : 'failed',
-    });
-
-    batchIndex++;
+    // If failed, drain remaining pending without submitting new ones
+    if (outcome !== 'confirmed') {
+      await drainPending(pending, results, totalBatches, onProgress, throughput);
+      break;
+    }
 
     if (gasConfig?.maxTotalGasCost && cumulativeGasCost > gasConfig.maxTotalGasCost) {
+      await drainPending(pending, results, totalBatches, onProgress, throughput);
       break;
     }
   }
@@ -268,7 +363,11 @@ export async function disperseTokens(params: DisperseParams): Promise<BatchResul
  * Streams through the recipient list, applying an optional live filter per-batch.
  * If the filter removes addresses, more are pulled from the source to fill the batch.
  *
- * @param params - Disperse simple parameters including optional liveFilter
+ * When `nonceWindow > 1`, batches are pipelined: up to `nonceWindow` batches are submitted
+ * before waiting for confirmation. Batch construction remains serial (live filter safety),
+ * but submission is parallelized.
+ *
+ * @param params - Disperse simple parameters including optional liveFilter and nonceWindow
  * @returns Array of batch results with tx hashes and attempt logs
  */
 export async function disperseTokensSimple(
@@ -288,70 +387,87 @@ export async function disperseTokensSimple(
     liveFilter,
     onProgress,
     gasConfig,
+    nonceWindow = 1,
   } = params;
 
   const abi = getAbi(variant);
   const isNative = token === ZERO_ADDRESS;
   const results: BatchResult[] = [];
+  const totalBatches = Math.ceil(recipients.length / batchSize);
   let cursor = 0;
   let batchIndex = 0;
   let cumulativeGasCost = 0n;
 
-  while (cursor < recipients.length) {
-    const { addresses: batchRecipients, newCursor } =
-      await fillBatch(recipients, cursor, batchSize, liveFilter);
-    cursor = newCursor;
+  const window = Math.max(1, nonceWindow);
+  const pending: PendingBatch[] = [];
+  const throughput = { totalCompleted: 0, startTime: Date.now(), totalRecipients: recipients.length };
 
-    if (batchRecipients.length === 0) break;
+  // Fetch the starting nonce once for the whole window
+  const startNonce = window > 1
+    ? await publicClient.getTransactionCount({ address: walletClient.account!.address, blockTag: 'pending' })
+    : 0;
 
-    const totalValue = isNative ? amount * BigInt(batchRecipients.length) : 0n;
+  while (cursor < recipients.length || pending.length > 0) {
+    // Fill window: build and submit batches (serial build, parallel submit)
+    while (pending.length < window && cursor < recipients.length) {
+      const { addresses: batchRecipients, newCursor } =
+        await fillBatch(recipients, cursor, batchSize, liveFilter);
+      cursor = newCursor;
 
-    onProgress?.({
-      type: 'batch',
-      batchIndex,
-      totalBatches: Math.ceil(recipients.length / batchSize),
-      status: 'signing',
-    });
+      if (batchRecipients.length === 0) break;
 
-    const args: readonly unknown[] =
-      variant === 'simple'
-        ? [token, batchRecipients, amount]
-        : [token, from, batchRecipients, amount, campaignId];
+      const totalValue = isNative ? amount * BigInt(batchRecipients.length) : 0n;
 
-    const attempt = await executeBatch({
-      contractAddress,
-      abi,
-      functionName: 'disperseSimple',
-      args,
-      value: totalValue,
-      walletClient,
-      publicClient,
-      gasConfig,
-    });
+      onProgress?.({
+        type: 'batch',
+        batchIndex,
+        totalBatches,
+        status: 'signing',
+      });
+
+      const args: readonly unknown[] =
+        variant === 'simple'
+          ? [token, batchRecipients, amount]
+          : [token, from, batchRecipients, amount, campaignId];
+
+      // Submit without awaiting — nonce pinned explicitly when windowed
+      const txPromise = executeBatch({
+        contractAddress,
+        abi,
+        functionName: 'disperseSimple',
+        args,
+        value: totalValue,
+        walletClient,
+        publicClient,
+        gasConfig,
+        ...(window > 1 ? { nonce: startNonce + batchIndex } : {}),
+      });
+
+      const batchAmounts = batchRecipients.map(() => amount);
+      pending.push({ batchIndex, recipients: batchRecipients, amounts: batchAmounts, txPromise });
+      batchIndex++;
+    }
+
+    if (pending.length === 0) break;
+
+    // Wait for oldest pending batch
+    const oldest = pending.shift()!;
+    const attempt = await oldest.txPromise;
 
     if (attempt.outcome === 'confirmed') {
       cumulativeGasCost += attempt.gasEstimate * attempt.maxFeePerGas;
     }
 
-    results.push({
-      batchIndex,
-      recipients: batchRecipients,
-      amounts: batchRecipients.map(() => amount),
-      attempts: [attempt],
-      confirmedTxHash: attempt.outcome === 'confirmed' ? attempt.txHash : null,
-      blockNumber: null,
-    });
+    const outcome = resolvePendingBatch(oldest, attempt, results, totalBatches, onProgress, throughput);
 
-    onProgress?.({
-      type: 'batch',
-      batchIndex,
-      totalBatches: Math.ceil(recipients.length / batchSize),
-      status: attempt.outcome === 'confirmed' ? 'confirmed' : 'failed',
-    });
-
-    batchIndex++;
+    // If failed, drain remaining pending without submitting new ones
+    if (outcome !== 'confirmed') {
+      await drainPending(pending, results, totalBatches, onProgress, throughput);
+      break;
+    }
 
     if (gasConfig?.maxTotalGasCost && cumulativeGasCost > gasConfig.maxTotalGasCost) {
+      await drainPending(pending, results, totalBatches, onProgress, throughput);
       break;
     }
   }
@@ -403,10 +519,12 @@ type ExecuteBatchParams = {
   readonly walletClient: WalletClient;
   readonly publicClient: PublicClient;
   readonly gasConfig?: GasConfig;
+  /** When provided, pin this nonce instead of fetching from the chain. Used by nonce window pipelining. */
+  readonly nonce?: number;
 };
 
 async function executeBatch(params: ExecuteBatchParams): Promise<BatchAttempt> {
-  const { contractAddress, abi, functionName, args, value, walletClient, publicClient, gasConfig } =
+  const { contractAddress, abi, functionName, args, value, walletClient, publicClient, gasConfig, nonce: pinnedNonce } =
     params;
   const timestamp = Date.now();
   const headroom = gasConfig?.headroom ?? 'medium';
@@ -457,8 +575,9 @@ async function executeBatch(params: ExecuteBatchParams): Promise<BatchAttempt> {
     let currentPriorityFee = priorityFee;
     let currentMaxFee = (baseFee * numerator) / denominator + priorityFee;
 
-    // Pin the nonce so replacement txs target the same slot
-    const nonce = await publicClient.getTransactionCount({
+    // Pin the nonce so replacement txs target the same slot.
+    // When a nonce is provided externally (nonce window pipelining), use it directly.
+    const nonce = pinnedNonce ?? await publicClient.getTransactionCount({
       address: walletClient.account!.address,
       blockTag: 'pending',
     });
