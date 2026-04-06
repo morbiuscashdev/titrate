@@ -10,6 +10,9 @@ import {
   getAllowance,
   computeResumeOffset,
   parseGwei,
+  validateBatch,
+  hasErrors,
+  hasWarnings,
 } from '@titrate/sdk';
 import type { BatchResult, GasConfig, InterventionConfig, PipelineConfig, ProgressEvent, StoredAddress, StoredBatch } from '@titrate/sdk';
 import { StepPanel } from '../components/StepPanel.js';
@@ -23,6 +26,7 @@ import { useChain } from '../providers/ChainProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
 import { useIntervention } from '../providers/InterventionProvider.js';
 import { useLiveFilter, composeLiveFilters } from '../hooks/useLiveFilter.js';
+import { usePipelineLiveFilter } from '../hooks/usePipelineLiveFilter.js';
 import type { BatchStatusCardProps } from '../components/BatchStatusCard.js';
 
 /**
@@ -196,10 +200,16 @@ export function DistributeStep() {
     variant: activeCampaign?.contractVariant ?? 'simple',
   });
 
-  // Compose the registry filter with any future pipeline-based filters
+  // Pipeline-based live filter from FiltersStep config
+  const pipelineFilter = usePipelineLiveFilter(
+    pipelineConfig,
+    recipients.map((r) => r.address) as Address[],
+  );
+
+  // Compose registry + pipeline filters into a single live filter chain
   const composedLiveFilter = useMemo(
-    () => composeLiveFilters(registryFilter),
-    [registryFilter],
+    () => composeLiveFilters(registryFilter, pipelineFilter),
+    [registryFilter, pipelineFilter],
   );
 
   const liveFilterStatus: 'on' | 'off' = composedLiveFilter ? 'on' : 'off';
@@ -380,6 +390,38 @@ export function DistributeStep() {
       }
     } catch {
       // Non-critical — continue even if nonce check fails
+    }
+
+    // Pre-distribution validation
+    const validationAmounts = activeCampaign.amountMode === 'uniform'
+      ? recipients.map(() => BigInt(activeCampaign.uniformAmount ?? '0'))
+      : recipients.map((r) => BigInt(r.amount ?? '0'));
+
+    const issues = validateBatch(
+      recipients.map((r) => r.address) as Address[],
+      validationAmounts,
+    );
+
+    if (hasErrors(issues)) {
+      setError(
+        `Validation failed: ${issues.filter((i) => i.severity === 'error').map((i) => i.message).join('; ')}`,
+      );
+      return;
+    }
+
+    if (hasWarnings(issues)) {
+      const interventionHook = createInterventionHook();
+      const decision = await interventionHook({
+        point: 'validation-warning',
+        data: {
+          issues: issues.filter((i) => i.severity === 'warning'),
+          recipientCount: recipients.length,
+        },
+      });
+      if (decision.type === 'abort') {
+        setError('Distribution aborted due to validation warnings.');
+        return;
+      }
     }
 
     // Compute total ERC-20 needed for approval

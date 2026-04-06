@@ -5,7 +5,8 @@ import { useCampaign } from '../providers/CampaignProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
 import { useTokenMetadata } from '../hooks/useTokenMetadata.js';
 import { SUPPORTED_CHAINS, getChainConfig } from '@titrate/sdk';
-import type { Address } from 'viem';
+import { keccak256, toHex } from 'viem';
+import type { Address, Hex } from 'viem';
 import type { StoredCampaign } from '@titrate/sdk';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address;
@@ -17,6 +18,15 @@ const chainOptions = SUPPORTED_CHAINS.map((c) => ({
 }));
 
 type ContractVariant = 'simple' | 'full';
+
+/**
+ * Derive a deterministic campaign identifier from the campaign name.
+ * Returns a keccak256 hash for the 'full' contract variant, null otherwise.
+ */
+export function deriveCampaignId(name: string, variant: 'simple' | 'full'): Hex | null {
+  if (variant !== 'full') return null;
+  return keccak256(toHex(name));
+}
 
 /**
  * Clamp a batch size input value to a minimum of 1.
@@ -114,6 +124,7 @@ export function CampaignStep() {
           contractName: resolvedContractName,
           name: campaignName.trim(),
           batchSize,
+          campaignId: deriveCampaignId(campaignName.trim(), contractVariant),
         };
         await saveCampaign(updated);
       } else {
@@ -132,7 +143,7 @@ export function CampaignStep() {
           amountFormat: 'integer',
           uniformAmount: null,
           batchSize,
-          campaignId: null,
+          campaignId: deriveCampaignId(campaignName.trim(), contractVariant),
           pinnedBlock: null,
         });
       }

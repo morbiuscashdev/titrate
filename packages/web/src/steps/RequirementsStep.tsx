@@ -9,8 +9,10 @@ import { useChain } from '../providers/ChainProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
 import { useNativeBalance } from '../hooks/useNativeBalance.js';
 import { useTokenBalance } from '../hooks/useTokenBalance.js';
+import { useGasEstimate } from '../hooks/useGasEstimate.js';
 import { computeRequirements } from '@titrate/sdk';
 import type { Address } from 'viem';
+import type { GasEstimateParams } from '../hooks/useGasEstimate.js';
 
 /**
  * Count the total addresses across all 'source'-type address sets.
@@ -30,6 +32,21 @@ const DEFAULT_GAS_PER_BATCH = 300_000n;
 
 /** Default batch size when campaign lacks one. */
 const DEFAULT_BATCH_SIZE = 100;
+
+/** Minimal ABI fragment for gas estimation of the disperse contract. */
+const DISPERSE_SIMPLE_ABI = [{
+  type: 'function',
+  name: 'disperseSimple',
+  inputs: [
+    { name: 'token', type: 'address' },
+    { name: 'from', type: 'address' },
+    { name: 'recipients', type: 'address[]' },
+    { name: 'amount', type: 'uint256' },
+    { name: 'campaignId', type: 'bytes32' },
+  ],
+  outputs: [],
+  stateMutability: 'nonpayable',
+}] as const;
 
 /**
  * Sixth campaign step: verify gas and token requirements before distribution.
@@ -67,6 +84,34 @@ export function RequirementsStep() {
 
   const contractAddress = activeCampaign?.contractAddress as Address | null;
 
+  // Build gas estimate params when we have sufficient campaign data
+  const gasEstimateParams = useMemo((): GasEstimateParams | null => {
+    if (!contractAddress) return null;
+    if (!fundingAddress) return null;
+    if (!activeCampaign?.tokenAddress) return null;
+
+    return {
+      address: contractAddress,
+      abi: DISPERSE_SIMPLE_ABI as unknown as GasEstimateParams['abi'],
+      functionName: 'disperseSimple',
+      args: [
+        activeCampaign.tokenAddress,
+        fundingAddress,
+        [fundingAddress], // 1-address sample for estimation
+        BigInt(activeCampaign.uniformAmount ?? '0'),
+        '0x0000000000000000000000000000000000000000000000000000000000000000',
+      ],
+      account: fundingAddress,
+    };
+  }, [contractAddress, fundingAddress, activeCampaign?.tokenAddress, activeCampaign?.uniformAmount]);
+
+  const { data: estimatedGas } = useGasEstimate(gasEstimateParams);
+
+  /** Per-batch gas: live estimate scaled by batch size, or the hardcoded default. */
+  const gasPerBatch = estimatedGas
+    ? estimatedGas * BigInt(activeCampaign?.batchSize ?? DEFAULT_BATCH_SIZE)
+    : DEFAULT_GAS_PER_BATCH;
+
   const { data: allowance } = useQuery({
     queryKey: ['token-allowance', tokenAddress, fundingAddress, contractAddress],
     queryFn: () =>
@@ -94,9 +139,9 @@ export function RequirementsStep() {
       recipientCount,
       batchSize,
       amountPerRecipient,
-      gasPerBatch: DEFAULT_GAS_PER_BATCH,
+      gasPerBatch,
     });
-  }, [activeCampaign]);
+  }, [activeCampaign, recipientCount, gasPerBatch]);
 
   const gasNeededFormatted = requirements
     ? formatUnits(requirements.gasTokenNeeded, 18)
@@ -158,6 +203,10 @@ export function RequirementsStep() {
             batchCount={requirements?.batchCount ?? 0}
             isSufficient={isSufficient}
           />
+
+          <p className="text-xs text-gray-400 dark:text-gray-500">
+            Gas estimate: {estimatedGas ? 'live (per-recipient \u00d7 batch size)' : 'default (300k per batch)'}
+          </p>
 
           {contractAddress && (
             <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800">

@@ -103,6 +103,7 @@ const mockDisperseTokensSimple = vi.fn();
 const mockDisperseTokens = vi.fn();
 const mockApproveOperator = vi.fn();
 const mockGetAllowance = vi.fn();
+const mockValidateBatch = vi.fn().mockReturnValue([]);
 
 vi.mock('@titrate/sdk', () => ({
   deployDistributor: (...args: unknown[]) => mockDeployDistributor(...args),
@@ -114,6 +115,9 @@ vi.mock('@titrate/sdk', () => ({
     const confirmed = batches.filter((b: { status: string }) => b.status === 'confirmed').length;
     return confirmed * batchSize;
   },
+  validateBatch: (...args: unknown[]) => mockValidateBatch(...args),
+  hasErrors: (issues: { severity: string }[]) => issues.some((i: { severity: string }) => i.severity === 'error'),
+  hasWarnings: (issues: { severity: string }[]) => issues.some((i: { severity: string }) => i.severity === 'warning'),
   parseGwei: (value: string) => {
     const [whole, decimal = ''] = value.split('.');
     const padded = decimal.padEnd(9, '0').slice(0, 9);
@@ -148,6 +152,7 @@ beforeEach(() => {
   mockStorage.addresses.getBySet.mockResolvedValue([]);
   mockStorage.batches.getByCampaign.mockResolvedValue([]);
   mockStorage.batches.put.mockResolvedValue(undefined);
+  mockValidateBatch.mockReturnValue([]);
   mockDeployDistributor.mockResolvedValue({
     address: '0xDeployedContractAddress1234567890123456',
     txHash: '0xabc123',
@@ -1608,6 +1613,70 @@ describe('DistributeStep gas cost display', () => {
       // Appears in BatchStatusCard as "Gas: 0.001 ETH" and in SpendSummary as "0.001 ETH"
       const gasElements = screen.getAllByText(/0\.001 ETH/);
       expect(gasElements.length).toBeGreaterThanOrEqual(1);
+    });
+  });
+});
+
+describe('DistributeStep pre-distribution validation', () => {
+  it('blocks distribution when validation returns errors', async () => {
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 2 },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue([
+      { id: '1', address: '0xbadaddress', amount: '1000' },
+      { id: '2', address: '0x1111111111111111111111111111111111111111', amount: '1000' },
+    ]);
+    mockValidateBatch.mockReturnValue([
+      { severity: 'error', row: 0, field: 'address', value: '0xbadaddress', message: 'Invalid address format', code: 'INVALID_LENGTH' },
+    ]);
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /start distribution/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/validation failed/i)).toBeInTheDocument();
+    });
+
+    expect(mockDisperseTokensSimple).not.toHaveBeenCalled();
+  });
+
+  it('allows distribution when validation passes', async () => {
+    campaignOverrides = {
+      activeCampaign: {
+        ...defaultCampaign.activeCampaign!,
+        contractAddress: '0x1234567890123456789012345678901234567890',
+      } as typeof defaultCampaign.activeCampaign,
+    };
+    mockStorage.addressSets.getByCampaign.mockResolvedValue([
+      { id: 'set-1', campaignId: 'test-1', name: 'Source', type: 'source', addressCount: 1 },
+    ]);
+    mockStorage.addresses.getBySet.mockResolvedValue([
+      { id: '1', address: '0x1111111111111111111111111111111111111111', amount: '1000' },
+    ]);
+    mockValidateBatch.mockReturnValue([]);
+    mockDisperseTokensSimple.mockResolvedValue([]);
+
+    render(<DistributeStep />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /start distribution/i })).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
+
+    await waitFor(() => {
+      expect(mockDisperseTokensSimple).toHaveBeenCalled();
     });
   });
 });

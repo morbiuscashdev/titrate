@@ -192,6 +192,16 @@ describe('RequirementsStep', () => {
     render(<RequirementsStep />);
     expect(screen.getByText('Requirements')).toBeInTheDocument();
   });
+
+  it('shows gas estimate source indicator', () => {
+    render(<RequirementsStep />);
+    expect(screen.getByText(/gas estimate/i)).toBeInTheDocument();
+  });
+
+  it('shows default gas estimate label when no live estimate is available', () => {
+    render(<RequirementsStep />);
+    expect(screen.getByText(/default \(300k per batch\)/i)).toBeInTheDocument();
+  });
 });
 
 describe('countSourceAddresses', () => {

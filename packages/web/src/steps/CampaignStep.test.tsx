@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CampaignStep, clampBatchSize } from './CampaignStep.js';
+import { CampaignStep, clampBatchSize, deriveCampaignId } from './CampaignStep.js';
 
 const mockSaveCampaign = vi.fn().mockResolvedValue(undefined);
 const mockCreateCampaign = vi.fn().mockResolvedValue('new-id');
@@ -130,6 +130,7 @@ describe('CampaignStep', () => {
     expect(config.name).toBe('Test Campaign');
     expect(config.contractVariant).toBe('simple');
     expect(config.batchSize).toBe(100);
+    expect(config.campaignId).toBeNull();
   });
 
   it('renders batch size input with default value', () => {
@@ -237,6 +238,7 @@ describe('CampaignStep', () => {
     expect(saved.id).toBe('existing-1');
     expect(saved.name).toBe('Updated Campaign');
     expect(saved.chainId).toBe(1);
+    expect(saved.campaignId).toBeNull();
     expect(mockCreateCampaign).not.toHaveBeenCalled();
     expect(mockSetActiveStep).toHaveBeenCalledWith('addresses');
   });
@@ -300,6 +302,7 @@ describe('CampaignStep', () => {
     expect(config.rpcUrl).toBe('https://rpc.pulsechain.com');
     expect(config.name).toBe('New Drop');
     expect(config.contractVariant).toBe('full');
+    expect(config.campaignId).toMatch(/^0x[0-9a-f]{64}$/);
   });
 
   it('does not save when chainId is null', () => {
@@ -469,6 +472,29 @@ describe('CampaignStep', () => {
     const batchInput = screen.getByDisplayValue('100') as HTMLInputElement;
     fireEvent.change(batchInput, { target: { value: 'abc' } });
     expect(batchInput.value).toBe('1');
+  });
+});
+
+describe('deriveCampaignId', () => {
+  it('returns null for simple variant', () => {
+    expect(deriveCampaignId('My Campaign', 'simple')).toBeNull();
+  });
+
+  it('returns keccak256 hash for full variant', () => {
+    const result = deriveCampaignId('My Campaign', 'full');
+    expect(result).toMatch(/^0x[0-9a-f]{64}$/);
+  });
+
+  it('returns same hash for same name', () => {
+    const a = deriveCampaignId('Test', 'full');
+    const b = deriveCampaignId('Test', 'full');
+    expect(a).toBe(b);
+  });
+
+  it('returns different hash for different names', () => {
+    const a = deriveCampaignId('Alpha', 'full');
+    const b = deriveCampaignId('Beta', 'full');
+    expect(a).not.toBe(b);
   });
 });
 
