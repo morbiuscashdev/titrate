@@ -50,8 +50,8 @@ vi.mock('@titrate/sdk', () => ({
   })),
   deriveMultipleWallets: vi.fn(() => ([
     {
-      address: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef' as const,
-      privateKey: ('0x' + 'ab'.repeat(32)) as const,
+      address: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef' as `0x${string}`,
+      privateKey: ('0x' + 'ab'.repeat(32)) as `0x${string}`,
     },
   ])),
   zeroPrivateKey: vi.fn((wallet: { address: string; privateKey: string }) => ({

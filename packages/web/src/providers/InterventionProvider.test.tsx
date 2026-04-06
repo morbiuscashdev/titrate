@@ -247,8 +247,8 @@ describe('Intervention journal', () => {
       point: 'validation-warning',
       campaignId: 'test-campaign',
       issues: [
-        { code: 'W001', severity: 'warning' as const, message: 'Something', field: 'address', index: 0 },
-        { code: 'W002', severity: 'warning' as const, message: 'Other', field: 'amount', index: 1 },
+        { code: 'W001', severity: 'warning' as const, message: 'Something', field: 'address', row: 0, value: '' },
+        { code: 'W002', severity: 'warning' as const, message: 'Other', field: 'amount', row: 1, value: '' },
       ],
     };
 

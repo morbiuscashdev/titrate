@@ -459,10 +459,9 @@ export function DistributeStep() {
       const interventionHook = createInterventionHook();
       const decision = await interventionHook({
         point: 'validation-warning',
-        data: {
-          issues: issues.filter((i) => i.severity === 'warning'),
-          recipientCount: recipients.length,
-        },
+        campaignId: activeCampaign.id,
+        issues: issues.filter((i) => i.severity === 'warning'),
+        metadata: { recipientCount: recipients.length },
       });
       if (decision.type === 'abort') {
         setError('Distribution aborted due to validation warnings.');
@@ -746,9 +745,11 @@ export function DistributeStep() {
       }
 
       // Update pre-saved pending batch records with final results
-      for (const result of batchResults) {
-        const stored = batchResultToStored(activeCampaign.id, result);
-        await storage.batches.put(stored);
+      if (storage) {
+        for (const result of batchResults) {
+          const stored = batchResultToStored(activeCampaign.id, result);
+          await storage.batches.put(stored);
+        }
       }
 
       setResults(batchResults);

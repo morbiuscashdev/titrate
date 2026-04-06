@@ -20,7 +20,12 @@ const mockChainConfig = {
   trueBlocksBusKey: '',
 };
 
-let mockUseChainValue = {
+let mockUseChainValue: {
+  publicClient: unknown;
+  explorerBus: null;
+  rpcBus: null;
+  chainConfig: typeof mockChainConfig | null;
+} = {
   publicClient: mockPublicClient,
   explorerBus: null,
   rpcBus: null,
