@@ -299,6 +299,7 @@ export async function disperseTokens(params: DisperseParams): Promise<BatchResul
     onProgress,
     gasConfig,
     nonceWindow = 1,
+    revalidation,
   } = params;
 
   const abi = getAbi(variant);
@@ -309,7 +310,11 @@ export async function disperseTokens(params: DisperseParams): Promise<BatchResul
   let batchIndex = 0;
   let cumulativeGasCost = 0n;
 
-  const window = Math.max(1, nonceWindow);
+  // Revalidation and nonce window pipelining are mutually exclusive: revalidation
+  // may replace a pending tx (same nonce), which would invalidate any pipelined
+  // batch whose nonce depends on the current one confirming first.
+  const revalActive = revalidation !== undefined && liveFilter !== undefined;
+  const window = revalActive ? 1 : Math.max(1, nonceWindow);
   const pending: PendingBatch[] = [];
   const throughput = { totalCompleted: 0, startTime: Date.now(), totalRecipients: recipients.length };
 
@@ -341,21 +346,118 @@ export async function disperseTokens(params: DisperseParams): Promise<BatchResul
           ? [token, batchRecipients, batchAmounts]
           : [token, from, batchRecipients, batchAmounts, campaignId];
 
-      // Submit without awaiting — nonce pinned explicitly when windowed
-      const txPromise = executeBatch({
-        contractAddress,
-        abi,
-        functionName: 'disperse',
-        args,
-        value: totalValue,
-        walletClient,
-        publicClient,
-        gasConfig,
-        ...(window > 1 ? { nonce: startNonce + batchIndex } : {}),
-      });
+      if (revalActive) {
+        // Submit without waiting — revalidatePendingBatch takes over monitoring
+        const submitResult = await executeBatch({
+          contractAddress,
+          abi,
+          functionName: 'disperse',
+          args,
+          value: totalValue,
+          walletClient,
+          publicClient,
+          gasConfig,
+          submitOnly: true,
+        });
 
-      pending.push({ batchIndex, recipients: batchRecipients, amounts: batchAmounts, txPromise });
-      batchIndex++;
+        if (submitResult.outcome === 'dropped') {
+          results.push({
+            batchIndex,
+            recipients: batchRecipients,
+            amounts: batchAmounts,
+            attempts: [submitResult],
+            confirmedTxHash: null,
+            blockNumber: null,
+          });
+          onProgress?.({ type: 'batch', batchIndex, totalBatches, status: 'failed' });
+          batchIndex++;
+          break;
+        }
+
+        // Monitor and potentially replace the pending tx
+        const { attempt, finalRecipients, finalAmounts } = await revalidatePendingBatch({
+          contractAddress,
+          abi,
+          functionName: 'disperse',
+          originalRecipients: batchRecipients,
+          originalAmounts: batchAmounts,
+          variant,
+          token,
+          from,
+          campaignId,
+          isSimple: false,
+          nonce: submitResult.nonce,
+          walletClient,
+          publicClient,
+          liveFilter,
+          gasConfig,
+          revalidation,
+          pendingTxHash: submitResult.txHash,
+        });
+
+        results.push({
+          batchIndex,
+          recipients: finalRecipients,
+          amounts: finalAmounts,
+          attempts: [attempt],
+          confirmedTxHash: attempt.outcome === 'confirmed' ? attempt.txHash : null,
+          blockNumber: null,
+        });
+
+        onProgress?.({
+          type: 'batch',
+          batchIndex,
+          totalBatches,
+          status: attempt.outcome === 'confirmed' ? 'confirmed' : 'failed',
+        });
+
+        if (attempt.outcome === 'confirmed') {
+          throughput.totalCompleted += finalRecipients.length;
+          const elapsed = Date.now() - throughput.startTime;
+          const rate = elapsed > 0 ? (throughput.totalCompleted / elapsed) * 3_600_000 : 0;
+          const remaining = rate > 0 ? ((throughput.totalRecipients - throughput.totalCompleted) / rate) * 3_600_000 : 0;
+          onProgress?.({
+            type: 'throughput',
+            addressesCompleted: throughput.totalCompleted,
+            addressesPerHour: Math.round(rate),
+            elapsedMs: elapsed,
+            estimatedRemainingMs: Math.round(remaining),
+          });
+          cumulativeGasCost += attempt.gasEstimate * attempt.maxFeePerGas;
+        } else {
+          batchIndex++;
+          break;
+        }
+
+        if (gasConfig?.maxTotalGasCost && cumulativeGasCost > gasConfig.maxTotalGasCost) {
+          batchIndex++;
+          break;
+        }
+
+        batchIndex++;
+      } else {
+        // Normal path: submit without awaiting — nonce pinned explicitly when windowed
+        const txPromise = executeBatch({
+          contractAddress,
+          abi,
+          functionName: 'disperse',
+          args,
+          value: totalValue,
+          walletClient,
+          publicClient,
+          gasConfig,
+          ...(window > 1 ? { nonce: startNonce + batchIndex } : {}),
+        });
+
+        pending.push({ batchIndex, recipients: batchRecipients, amounts: batchAmounts, txPromise });
+        batchIndex++;
+      }
+    }
+
+    // Revalidation path handles results inline — skip the pending drain logic
+    if (revalActive) {
+      if (cursor >= recipients.length) break;
+      continue;
     }
 
     if (pending.length === 0) break;
@@ -415,6 +517,7 @@ export async function disperseTokensSimple(
     onProgress,
     gasConfig,
     nonceWindow = 1,
+    revalidation,
   } = params;
 
   const abi = getAbi(variant);
@@ -425,7 +528,11 @@ export async function disperseTokensSimple(
   let batchIndex = 0;
   let cumulativeGasCost = 0n;
 
-  const window = Math.max(1, nonceWindow);
+  // Revalidation and nonce window pipelining are mutually exclusive: revalidation
+  // may replace a pending tx (same nonce), which would invalidate any pipelined
+  // batch whose nonce depends on the current one confirming first.
+  const revalActive = revalidation !== undefined && liveFilter !== undefined;
+  const window = revalActive ? 1 : Math.max(1, nonceWindow);
   const pending: PendingBatch[] = [];
   const throughput = { totalCompleted: 0, startTime: Date.now(), totalRecipients: recipients.length };
 
@@ -457,22 +564,122 @@ export async function disperseTokensSimple(
           ? [token, batchRecipients, amount]
           : [token, from, batchRecipients, amount, campaignId];
 
-      // Submit without awaiting — nonce pinned explicitly when windowed
-      const txPromise = executeBatch({
-        contractAddress,
-        abi,
-        functionName: 'disperseSimple',
-        args,
-        value: totalValue,
-        walletClient,
-        publicClient,
-        gasConfig,
-        ...(window > 1 ? { nonce: startNonce + batchIndex } : {}),
-      });
+      if (revalActive) {
+        // Submit without waiting — revalidatePendingBatch takes over monitoring
+        const submitResult = await executeBatch({
+          contractAddress,
+          abi,
+          functionName: 'disperseSimple',
+          args,
+          value: totalValue,
+          walletClient,
+          publicClient,
+          gasConfig,
+          submitOnly: true,
+        });
 
-      const batchAmounts = batchRecipients.map(() => amount);
-      pending.push({ batchIndex, recipients: batchRecipients, amounts: batchAmounts, txPromise });
-      batchIndex++;
+        const batchAmounts = batchRecipients.map(() => amount);
+
+        if (submitResult.outcome === 'dropped') {
+          results.push({
+            batchIndex,
+            recipients: batchRecipients,
+            amounts: batchAmounts,
+            attempts: [submitResult],
+            confirmedTxHash: null,
+            blockNumber: null,
+          });
+          onProgress?.({ type: 'batch', batchIndex, totalBatches, status: 'failed' });
+          batchIndex++;
+          break;
+        }
+
+        // Monitor and potentially replace the pending tx
+        const { attempt, finalRecipients, finalAmounts } = await revalidatePendingBatch({
+          contractAddress,
+          abi,
+          functionName: 'disperseSimple',
+          originalRecipients: batchRecipients,
+          originalAmounts: batchAmounts,
+          variant,
+          token,
+          from,
+          campaignId,
+          isSimple: true,
+          amount,
+          nonce: submitResult.nonce,
+          walletClient,
+          publicClient,
+          liveFilter,
+          gasConfig,
+          revalidation,
+          pendingTxHash: submitResult.txHash,
+        });
+
+        results.push({
+          batchIndex,
+          recipients: finalRecipients,
+          amounts: finalAmounts,
+          attempts: [attempt],
+          confirmedTxHash: attempt.outcome === 'confirmed' ? attempt.txHash : null,
+          blockNumber: null,
+        });
+
+        onProgress?.({
+          type: 'batch',
+          batchIndex,
+          totalBatches,
+          status: attempt.outcome === 'confirmed' ? 'confirmed' : 'failed',
+        });
+
+        if (attempt.outcome === 'confirmed') {
+          throughput.totalCompleted += finalRecipients.length;
+          const elapsed = Date.now() - throughput.startTime;
+          const rate = elapsed > 0 ? (throughput.totalCompleted / elapsed) * 3_600_000 : 0;
+          const remaining = rate > 0 ? ((throughput.totalRecipients - throughput.totalCompleted) / rate) * 3_600_000 : 0;
+          onProgress?.({
+            type: 'throughput',
+            addressesCompleted: throughput.totalCompleted,
+            addressesPerHour: Math.round(rate),
+            elapsedMs: elapsed,
+            estimatedRemainingMs: Math.round(remaining),
+          });
+          cumulativeGasCost += attempt.gasEstimate * attempt.maxFeePerGas;
+        } else {
+          batchIndex++;
+          break;
+        }
+
+        if (gasConfig?.maxTotalGasCost && cumulativeGasCost > gasConfig.maxTotalGasCost) {
+          batchIndex++;
+          break;
+        }
+
+        batchIndex++;
+      } else {
+        // Normal path: submit without awaiting — nonce pinned explicitly when windowed
+        const txPromise = executeBatch({
+          contractAddress,
+          abi,
+          functionName: 'disperseSimple',
+          args,
+          value: totalValue,
+          walletClient,
+          publicClient,
+          gasConfig,
+          ...(window > 1 ? { nonce: startNonce + batchIndex } : {}),
+        });
+
+        const batchAmounts = batchRecipients.map(() => amount);
+        pending.push({ batchIndex, recipients: batchRecipients, amounts: batchAmounts, txPromise });
+        batchIndex++;
+      }
+    }
+
+    // Revalidation path handles results inline — skip the pending drain logic
+    if (revalActive) {
+      if (cursor >= recipients.length) break;
+      continue;
     }
 
     if (pending.length === 0) break;
@@ -548,10 +755,16 @@ type ExecuteBatchParams = {
   readonly gasConfig?: GasConfig;
   /** When provided, pin this nonce instead of fetching from the chain. Used by nonce window pipelining. */
   readonly nonce?: number;
+  /**
+   * When true, submit the tx and return immediately with outcome 'confirmed'
+   * but without waiting for the receipt. The caller is responsible for monitoring
+   * confirmation (e.g. via revalidatePendingBatch).
+   */
+  readonly submitOnly?: boolean;
 };
 
 async function executeBatch(params: ExecuteBatchParams): Promise<BatchAttempt> {
-  const { contractAddress, abi, functionName, args, value, walletClient, publicClient, gasConfig, nonce: pinnedNonce } =
+  const { contractAddress, abi, functionName, args, value, walletClient, publicClient, gasConfig, nonce: pinnedNonce, submitOnly } =
     params;
   const timestamp = Date.now();
   const headroom = gasConfig?.headroom ?? 'medium';
@@ -642,6 +855,20 @@ async function executeBatch(params: ExecuteBatchParams): Promise<BatchAttempt> {
           chain: undefined,
           nonce,
         });
+
+        // Submit-only mode: return the hash immediately without waiting for confirmation.
+        // The caller (revalidatePendingBatch) takes over monitoring from here.
+        if (submitOnly) {
+          return {
+            txHash: hash,
+            nonce,
+            gasEstimate: gasLimit,
+            maxFeePerGas: currentMaxFee,
+            maxPriorityFeePerGas: currentPriorityFee,
+            timestamp,
+            outcome: 'confirmed',
+          };
+        }
 
         const receipt = await publicClient.waitForTransactionReceipt({
           hash,
