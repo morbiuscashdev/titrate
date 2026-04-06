@@ -16,6 +16,7 @@ const EMPTY_FORM: ChainFormState = {
   rpcUrl: '',
   explorerApiUrl: '',
   explorerApiKey: '',
+  trueBlocksUrl: '',
 };
 
 type ChainFormState = {
@@ -25,6 +26,7 @@ type ChainFormState = {
   readonly rpcUrl: string;
   readonly explorerApiUrl: string;
   readonly explorerApiKey: string;
+  readonly trueBlocksUrl: string;
 };
 
 /** Derive a bus key (hostname) from a URL, returning empty string on failure. */
@@ -82,6 +84,7 @@ export function SettingsPage() {
       rpcUrl: preset.rpcUrls[0] ?? '',
       explorerApiUrl: preset.explorerApiUrl ?? '',
       explorerApiKey: '',
+      trueBlocksUrl: '',
     });
   }, []);
 
@@ -112,8 +115,8 @@ export function SettingsPage() {
       explorerApiUrl: form.explorerApiUrl.trim(),
       explorerApiKey: form.explorerApiKey.trim(),
       explorerBusKey: deriveBusKey(form.explorerApiUrl.trim()),
-      trueBlocksUrl: '',
-      trueBlocksBusKey: '',
+      trueBlocksUrl: form.trueBlocksUrl.trim(),
+      trueBlocksBusKey: deriveBusKey(form.trueBlocksUrl.trim()),
     };
 
     await storage.chainConfigs.put(config);
@@ -242,6 +245,23 @@ export function SettingsPage() {
             </div>
           </div>
 
+          <div className="mb-6">
+            <label htmlFor="trueblocks-url" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">
+              TrueBlocks URL <span className="text-gray-500">(optional)</span>
+            </label>
+            <input
+              id="trueblocks-url"
+              type="text"
+              value={form.trueBlocksUrl}
+              onChange={(e) => updateField('trueBlocksUrl', e.target.value)}
+              placeholder="http://localhost:8080"
+              className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
+              TrueBlocks API endpoint for balance history and address scanning.
+            </p>
+          </div>
+
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -308,6 +328,16 @@ export function SettingsPage() {
                         <span className="font-mono text-gray-600 dark:text-gray-300">{config.explorerApiKey}</span>
                       ) : (
                         <EncryptedField ciphertext={config.explorerApiKey} onUnlock={requestUnlock} />
+                      )}
+                    </div>
+                  )}
+                  {config.trueBlocksUrl && (
+                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 min-w-0">
+                      <span className="flex-shrink-0">TrueBlocks:</span>
+                      {isUnlocked ? (
+                        <span className="font-mono text-gray-600 dark:text-gray-300 truncate">{config.trueBlocksUrl}</span>
+                      ) : (
+                        <EncryptedField ciphertext={config.trueBlocksUrl} onUnlock={requestUnlock} />
                       )}
                     </div>
                   )}

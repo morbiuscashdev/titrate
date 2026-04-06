@@ -1,10 +1,12 @@
 import { useState, useCallback, useRef } from 'react';
 import { StepPanel } from '../components/StepPanel.js';
+import { SetOperationsPanel } from '../components/SetOperationsPanel.js';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
-import { parseCSV } from '@titrate/sdk';
+import { useChain } from '../providers/ChainProvider.js';
+import { parseCSV, createPipeline } from '@titrate/sdk';
 import type { Address } from 'viem';
-import type { CSVRow } from '@titrate/sdk';
+import type { CSVRow, SourceType } from '@titrate/sdk';
 
 const ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
 
@@ -30,6 +32,7 @@ function parseManualAddresses(text: string): readonly CSVRow[] {
 export function AddressesStep() {
   const { activeCampaign, setActiveStep, refreshActiveCampaign } = useCampaign();
   const { storage } = useStorage();
+  const { publicClient, chainConfig } = useChain();
 
   const [addresses, setAddresses] = useState<readonly CSVRow[]>([]);
   const [hasAmounts, setHasAmounts] = useState(false);
@@ -38,6 +41,15 @@ export function AddressesStep() {
   const [parseError, setParseError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
+
+  const [showOnChain, setShowOnChain] = useState(false);
+  const [sourceType, setSourceType] = useState<'block-scan' | 'explorer-scan'>('block-scan');
+  const [sourceParams, setSourceParams] = useState<Record<string, string>>({});
+  const [collectState, setCollectState] = useState<{
+    readonly status: 'idle' | 'collecting' | 'done' | 'error';
+    readonly collectedCount: number;
+    readonly errorMessage: string | null;
+  }>({ status: 'idle', collectedCount: 0, errorMessage: null });
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -111,6 +123,56 @@ export function AddressesStep() {
     setFileName(null);
     setParseError(null);
   }, [manualText]);
+
+  const handleCollect = useCallback(async () => {
+    if (!publicClient) return;
+
+    setCollectState({ status: 'collecting', collectedCount: 0, errorMessage: null });
+
+    try {
+      const pipeline = createPipeline();
+
+      const params: Record<string, unknown> = { ...sourceParams };
+      if (sourceType === 'explorer-scan' && chainConfig) {
+        params.explorerApiUrl = chainConfig.explorerApiUrl;
+        params.apiKey = chainConfig.explorerApiKey;
+        params.tokenAddress = params.contractAddress;
+        delete params.contractAddress;
+      }
+
+      pipeline.addSource(sourceType as SourceType, params);
+
+      const collected: Address[] = [];
+      for await (const batch of pipeline.execute(publicClient)) {
+        collected.push(...batch);
+        setCollectState((prev) => ({
+          ...prev,
+          collectedCount: collected.length,
+        }));
+      }
+
+      if (collected.length === 0) {
+        setCollectState({ status: 'error', collectedCount: 0, errorMessage: 'No addresses found.' });
+        return;
+      }
+
+      const newRows = collected.map((addr) => ({ address: addr, amount: null }));
+      setAddresses((prev) => {
+        const existing = new Set(prev.map((r) => r.address.toLowerCase()));
+        const unique = newRows.filter((r) => !existing.has(r.address.toLowerCase()));
+        return [...prev, ...unique];
+      });
+      setHasAmounts(false);
+      setFileName(null);
+      setCollectState({ status: 'done', collectedCount: collected.length, errorMessage: null });
+    } catch (err: unknown) {
+      setCollectState({
+        status: 'error',
+        collectedCount: 0,
+        errorMessage: err instanceof Error ? err.message : 'Collection failed',
+      });
+    }
+  }, [publicClient, sourceType, sourceParams, chainConfig]);
 
   const handleContinue = useCallback(async () => {
     if (!storage || !activeCampaign || addresses.length === 0) {
@@ -201,6 +263,140 @@ export function AddressesStep() {
           </button>
         </div>
 
+        {/* On-Chain Collection */}
+        <div>
+          <button
+            type="button"
+            onClick={() => setShowOnChain(!showOnChain)}
+            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+          >
+            {showOnChain ? 'Hide on-chain collection' : 'Collect from chain'}
+          </button>
+          {showOnChain && (
+            <div className="mt-3 rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800 space-y-4">
+              {/* Source type selector */}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setSourceType('block-scan'); setSourceParams({}); }}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition-colors ${
+                    sourceType === 'block-scan'
+                      ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30'
+                      : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-700'
+                  }`}
+                >
+                  Block Scan
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setSourceType('explorer-scan'); setSourceParams({}); }}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition-colors ${
+                    sourceType === 'explorer-scan'
+                      ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30'
+                      : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-700'
+                  }`}
+                >
+                  Explorer Scan
+                </button>
+              </div>
+
+              {/* Block scan params */}
+              {sourceType === 'block-scan' && (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">Start Block</label>
+                      <input
+                        type="text"
+                        value={sourceParams.startBlock ?? ''}
+                        onChange={(e) => setSourceParams((p) => ({ ...p, startBlock: e.target.value }))}
+                        placeholder="0"
+                        className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">End Block</label>
+                      <input
+                        type="text"
+                        value={sourceParams.endBlock ?? ''}
+                        onChange={(e) => setSourceParams((p) => ({ ...p, endBlock: e.target.value }))}
+                        placeholder="latest"
+                        className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Explorer scan params */}
+              {sourceType === 'explorer-scan' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">Contract Address</label>
+                    <input
+                      type="text"
+                      value={sourceParams.contractAddress ?? ''}
+                      onChange={(e) => setSourceParams((p) => ({ ...p, contractAddress: e.target.value }))}
+                      placeholder="0x..."
+                      className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">Start Block</label>
+                      <input
+                        type="text"
+                        value={sourceParams.startBlock ?? ''}
+                        onChange={(e) => setSourceParams((p) => ({ ...p, startBlock: e.target.value }))}
+                        placeholder="0"
+                        className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">End Block</label>
+                      <input
+                        type="text"
+                        value={sourceParams.endBlock ?? ''}
+                        onChange={(e) => setSourceParams((p) => ({ ...p, endBlock: e.target.value }))}
+                        placeholder="latest"
+                        className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Collect button + status */}
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={handleCollect}
+                  disabled={collectState.status === 'collecting' || !publicClient}
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                >
+                  {collectState.status === 'collecting' ? 'Collecting...' : 'Collect Addresses'}
+                </button>
+                {collectState.status === 'collecting' && (
+                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                    {collectState.collectedCount.toLocaleString()} found...
+                  </span>
+                )}
+                {collectState.status === 'done' && (
+                  <span className="text-sm text-green-600 dark:text-green-400">
+                    {collectState.collectedCount.toLocaleString()} addresses collected
+                  </span>
+                )}
+              </div>
+              {collectState.status === 'error' && (
+                <p className="text-sm text-red-400">{collectState.errorMessage}</p>
+              )}
+              {!publicClient && (
+                <p className="text-xs text-gray-400 dark:text-gray-500">Connect to a chain to use on-chain collection.</p>
+              )}
+            </div>
+          )}
+        </div>
+
         {/* Parse Error */}
         {parseError && (
           <p className="text-sm text-red-400">{parseError}</p>
@@ -233,6 +429,9 @@ export function AddressesStep() {
             </div>
           </div>
         )}
+
+        {/* Set Operations */}
+        <SetOperationsPanel />
 
         {/* Continue */}
         <button

@@ -1,6 +1,6 @@
 # Plan: Web App SDK Gap Closure
 
-- **Status**: IN_PROGRESS
+- **Status**: COMPLETE
 - **Created**: 2026-04-06
 - **Source**: Gap analysis — SDK features not yet exposed in web app
 
@@ -107,7 +107,7 @@ Complete the post-deployment and during-distribution workflow.
 
 ---
 
-## Phase 4: Address Collection Sources + Set Operations — Planned: no
+## Phase 4: Address Collection Sources + Set Operations — Planned: yes (complete)
 
 This is the biggest new UI surface — a wizard step or sub-panel for collecting addresses from on-chain sources rather than just CSV/paste.
 
@@ -124,7 +124,7 @@ This is the biggest new UI surface — a wizard step or sub-panel for collecting
 
 ---
 
-## Phase 5: Multi-Wallet Distribution + Integrations — Planned: no
+## Phase 5: TrueBlocks Integration + Integrations — Planned: yes (partial)
 
 Advanced features for power users.
 
@@ -166,6 +166,7 @@ Advanced features for power users.
 ## Post-Completion Log
 
 ### Deferred Scope
+- **Multi-wallet distribution (disperseParallel)**: Requires multiple concurrent wallet connections via wagmi, per-wallet progress UI, and wallet assignment strategy. Complex UX — deserves its own plan.
 - **increaseOperatorAllowance (top-up vs replace)**: Low priority, simple variant doesn't need it
 - **Memory monitor wiring**: Low priority, cosmetic
 - **token-recipients filter startBlock/endBlock**: Missing params in PipelineStepEditor, not blocking

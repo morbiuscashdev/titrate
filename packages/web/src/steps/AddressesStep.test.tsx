@@ -1,10 +1,31 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AddressesStep } from './AddressesStep.js';
 
 const mockSetActiveStep = vi.fn();
 const mockPutAddressSet = vi.fn().mockResolvedValue(undefined);
 const mockPutBatch = vi.fn().mockResolvedValue(undefined);
+
+const mockPublicClient = { type: 'publicClient' } as unknown;
+const mockChainConfig = {
+  id: 'chain-1',
+  chainId: 1,
+  name: 'Mainnet',
+  rpcUrl: 'https://rpc.example.com',
+  rpcBusKey: 'rpc-1',
+  explorerApiUrl: 'https://api.etherscan.io/api',
+  explorerApiKey: 'test-key',
+  explorerBusKey: 'explorer-1',
+  trueBlocksUrl: '',
+  trueBlocksBusKey: '',
+};
+
+let mockUseChainValue = {
+  publicClient: mockPublicClient,
+  explorerBus: null,
+  rpcBus: null,
+  chainConfig: mockChainConfig,
+};
 
 vi.mock('../providers/CampaignProvider.js', () => ({
   useCampaign: () => ({
@@ -45,14 +66,20 @@ vi.mock('../providers/CampaignProvider.js', () => ({
 vi.mock('../providers/StorageProvider.js', () => ({
   useStorage: () => ({
     storage: {
-      addressSets: { put: mockPutAddressSet },
-      addresses: { putBatch: mockPutBatch },
+      addressSets: { put: mockPutAddressSet, getByCampaign: vi.fn().mockResolvedValue([]) },
+      addresses: { putBatch: mockPutBatch, getBySet: vi.fn().mockResolvedValue([]) },
     },
     isUnlocked: true,
   }),
 }));
 
+vi.mock('../providers/ChainProvider.js', () => ({
+  useChain: () => mockUseChainValue,
+}));
+
 let parseCSVShouldThrow = false;
+const mockAddSource = vi.fn();
+const mockExecute = vi.fn();
 
 vi.mock('@titrate/sdk', () => ({
   parseCSV: (content: string) => {
@@ -68,6 +95,16 @@ vi.mock('@titrate/sdk', () => ({
       });
     return { rows, hasAmounts: lines[0]?.includes(',') ?? false };
   },
+  createPipeline: () => {
+    const pipeline = {
+      addSource: (...args: unknown[]) => {
+        mockAddSource(...args);
+        return pipeline;
+      },
+      execute: (...args: unknown[]) => mockExecute(...args),
+    };
+    return pipeline;
+  },
 }));
 
 // Stable UUID for deterministic tests
@@ -82,6 +119,12 @@ describe('AddressesStep', () => {
     vi.clearAllMocks();
     uuidCounter = 0;
     parseCSVShouldThrow = false;
+    mockUseChainValue = {
+      publicClient: mockPublicClient,
+      explorerBus: null,
+      rpcBus: null,
+      chainConfig: mockChainConfig,
+    };
   });
 
   it('renders step panel with title', () => {
@@ -472,5 +515,188 @@ describe('AddressesStep', () => {
     const dropZone = screen.getByRole('button', { name: /Drop a CSV/i });
     fireEvent.drop(dropZone, { dataTransfer: { files: [] } });
     expect(screen.queryByText(/addresses loaded/)).not.toBeInTheDocument();
+  });
+
+  // --- On-Chain Collection Tests ---
+
+  it('shows on-chain collection toggle', () => {
+    render(<AddressesStep />);
+    expect(screen.getByText('Collect from chain')).toBeInTheDocument();
+  });
+
+  it('shows block scan params when on-chain collection is expanded', () => {
+    render(<AddressesStep />);
+    fireEvent.click(screen.getByText('Collect from chain'));
+    expect(screen.getByText('Block Scan')).toBeInTheDocument();
+    expect(screen.getByText('Explorer Scan')).toBeInTheDocument();
+    expect(screen.getByText('Start Block')).toBeInTheDocument();
+    expect(screen.getByText('End Block')).toBeInTheDocument();
+  });
+
+  it('shows explorer scan params with contract address field', () => {
+    render(<AddressesStep />);
+    fireEvent.click(screen.getByText('Collect from chain'));
+    fireEvent.click(screen.getByText('Explorer Scan'));
+    expect(screen.getByText('Contract Address')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('0x...')).toBeInTheDocument();
+  });
+
+  it('toggles back to hide text when expanded', () => {
+    render(<AddressesStep />);
+    fireEvent.click(screen.getByText('Collect from chain'));
+    expect(screen.getByText('Hide on-chain collection')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Hide on-chain collection'));
+    expect(screen.getByText('Collect from chain')).toBeInTheDocument();
+  });
+
+  it('resets source params when switching source type', () => {
+    render(<AddressesStep />);
+    fireEvent.click(screen.getByText('Collect from chain'));
+
+    // Switch to explorer-scan and enter a contract address
+    fireEvent.click(screen.getByText('Explorer Scan'));
+    const contractInput = screen.getByPlaceholderText('0x...');
+    fireEvent.change(contractInput, { target: { value: '0xabc' } });
+    expect(contractInput).toHaveValue('0xabc');
+
+    // Switch back to block-scan — params should be reset
+    fireEvent.click(screen.getByText('Block Scan'));
+    expect(screen.queryByPlaceholderText('0x...')).not.toBeInTheDocument();
+  });
+
+  it('collects addresses from pipeline and merges with existing', async () => {
+    const addr1 = '0x1111111111111111111111111111111111111111';
+    const addr2 = '0x2222222222222222222222222222222222222222';
+
+    mockExecute.mockImplementation(async function* () {
+      yield [addr1, addr2];
+    });
+
+    render(<AddressesStep />);
+    fireEvent.click(screen.getByText('Collect from chain'));
+    fireEvent.click(screen.getByText('Collect Addresses'));
+
+    await waitFor(() => {
+      expect(screen.getByText('2 addresses collected')).toBeInTheDocument();
+    });
+
+    expect(screen.getByText('2 addresses loaded')).toBeInTheDocument();
+    expect(screen.getByText(addr1)).toBeInTheDocument();
+    expect(screen.getByText(addr2)).toBeInTheDocument();
+  });
+
+  it('deduplicates collected addresses against existing ones', async () => {
+    const existingAddr = '0x1234567890abcdef1234567890abcdef12345678';
+    const newAddr = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+    mockExecute.mockImplementation(async function* () {
+      yield [existingAddr, newAddr];
+    });
+
+    render(<AddressesStep />);
+
+    // First: load an address manually
+    const textarea = screen.getByPlaceholderText(/Paste addresses/);
+    fireEvent.change(textarea, { target: { value: existingAddr } });
+    fireEvent.click(screen.getByText('Parse Addresses'));
+    expect(screen.getByText('1 addresses loaded')).toBeInTheDocument();
+
+    // Then: collect from chain (includes the same address + a new one)
+    fireEvent.click(screen.getByText('Collect from chain'));
+    fireEvent.click(screen.getByText('Collect Addresses'));
+
+    await waitFor(() => {
+      expect(screen.getByText('2 addresses collected')).toBeInTheDocument();
+    });
+
+    // Should have 2 total (deduped), not 3
+    expect(screen.getByText('2 addresses loaded')).toBeInTheDocument();
+  });
+
+  it('shows error when collection fails', async () => {
+    mockExecute.mockImplementation(async function* () {
+      throw new Error('RPC connection failed');
+    });
+
+    render(<AddressesStep />);
+    fireEvent.click(screen.getByText('Collect from chain'));
+    fireEvent.click(screen.getByText('Collect Addresses'));
+
+    await waitFor(() => {
+      expect(screen.getByText('RPC connection failed')).toBeInTheDocument();
+    });
+  });
+
+  it('shows error when pipeline yields no addresses', async () => {
+    mockExecute.mockImplementation(async function* () {
+      // yields nothing
+    });
+
+    render(<AddressesStep />);
+    fireEvent.click(screen.getByText('Collect from chain'));
+    fireEvent.click(screen.getByText('Collect Addresses'));
+
+    await waitFor(() => {
+      expect(screen.getByText('No addresses found.')).toBeInTheDocument();
+    });
+  });
+
+  it('disables collect button when no publicClient', () => {
+    mockUseChainValue = {
+      publicClient: null as unknown,
+      explorerBus: null,
+      rpcBus: null,
+      chainConfig: null,
+    };
+
+    render(<AddressesStep />);
+    fireEvent.click(screen.getByText('Collect from chain'));
+
+    const collectButton = screen.getByText('Collect Addresses');
+    expect(collectButton).toBeDisabled();
+    expect(screen.getByText('Connect to a chain to use on-chain collection.')).toBeInTheDocument();
+  });
+
+  it('shows generic error when non-Error is thrown', async () => {
+    mockExecute.mockImplementation(async function* () {
+      throw 'string error';
+    });
+
+    render(<AddressesStep />);
+    fireEvent.click(screen.getByText('Collect from chain'));
+    fireEvent.click(screen.getByText('Collect Addresses'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Collection failed')).toBeInTheDocument();
+    });
+  });
+
+  it('passes explorer config from chain config for explorer-scan', async () => {
+    const addr = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
+
+    mockExecute.mockImplementation(async function* () {
+      yield [addr];
+    });
+
+    render(<AddressesStep />);
+    fireEvent.click(screen.getByText('Collect from chain'));
+    fireEvent.click(screen.getByText('Explorer Scan'));
+
+    const contractInput = screen.getByPlaceholderText('0x...');
+    fireEvent.change(contractInput, { target: { value: '0xtoken' } });
+
+    fireEvent.click(screen.getByText('Collect Addresses'));
+
+    await waitFor(() => {
+      expect(screen.getByText('1 addresses collected')).toBeInTheDocument();
+    });
+
+    expect(mockAddSource).toHaveBeenCalledWith('explorer-scan', expect.objectContaining({
+      explorerApiUrl: 'https://api.etherscan.io/api',
+      apiKey: 'test-key',
+      tokenAddress: '0xtoken',
+    }));
+    // contractAddress should be removed
+    expect(mockAddSource.mock.calls[0][1]).not.toHaveProperty('contractAddress');
   });
 });
