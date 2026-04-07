@@ -257,7 +257,7 @@ export function AddressesStep() {
             type="button"
             onClick={handleManualParse}
             disabled={!manualText.trim()}
-            className="mt-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+            className="mt-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
           >
             Parse Addresses
           </button>
@@ -268,18 +268,18 @@ export function AddressesStep() {
           <button
             type="button"
             onClick={() => setShowOnChain(!showOnChain)}
-            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 rounded"
           >
             {showOnChain ? 'Hide on-chain collection' : 'Collect from chain'}
           </button>
           {showOnChain && (
             <div className="mt-3 rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800 space-y-4">
               {/* Source type selector */}
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => { setSourceType('block-scan'); setSourceParams({}); }}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition-colors ${
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 ${
                     sourceType === 'block-scan'
                       ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30'
                       : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-700'
@@ -290,7 +290,7 @@ export function AddressesStep() {
                 <button
                   type="button"
                   onClick={() => { setSourceType('explorer-scan'); setSourceParams({}); }}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition-colors ${
+                  className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 ${
                     sourceType === 'explorer-scan'
                       ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30'
                       : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-700'
@@ -372,7 +372,7 @@ export function AddressesStep() {
                   type="button"
                   onClick={handleCollect}
                   disabled={collectState.status === 'collecting' || !publicClient}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
                 >
                   {collectState.status === 'collecting' ? 'Collecting...' : 'Collect Addresses'}
                 </button>
@@ -438,7 +438,7 @@ export function AddressesStep() {
           type="button"
           onClick={handleContinue}
           disabled={addresses.length === 0 || isSaving}
-          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
         >
           {isSaving ? 'Saving...' : 'Save & Continue'}
         </button>

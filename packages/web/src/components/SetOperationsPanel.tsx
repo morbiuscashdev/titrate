@@ -119,13 +119,14 @@ export function SetOperationsPanel() {
     <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800 space-y-4">
       <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Set Operations</h3>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         {/* Set A */}
         <div>
           <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">Set A</label>
           <select
             value={setA ?? ''}
             onChange={(e) => setSetA(e.target.value || null)}
+            aria-label="Select address set A"
             className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none"
           >
             <option value="">Select...</option>
@@ -143,6 +144,7 @@ export function SetOperationsPanel() {
           <select
             value={setB ?? ''}
             onChange={(e) => setSetB(e.target.value || null)}
+            aria-label="Select address set B"
             className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none"
           >
             <option value="">Select...</option>
@@ -162,7 +164,7 @@ export function SetOperationsPanel() {
             key={op}
             type="button"
             onClick={() => setOperation(op)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition-colors ${
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 ${
               operation === op
                 ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30'
                 : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-700'
@@ -179,7 +181,7 @@ export function SetOperationsPanel() {
           type="button"
           onClick={handleCompute}
           disabled={!setA || !setB || result.status === 'computing'}
-          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
         >
           {result.status === 'computing' ? 'Computing...' : 'Apply'}
         </button>

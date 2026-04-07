@@ -212,7 +212,7 @@ export function WalletStep() {
                   type="button"
                   onClick={handleDerive}
                   disabled={isDeriving || !activeCampaign}
-                  className="bg-purple-700 hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 text-sm font-medium"
+                  className="bg-purple-700 hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
                 >
                   {isDeriving ? 'Deriving...' : 'Derive Hot Wallets'}
                 </button>
@@ -235,12 +235,13 @@ export function WalletStep() {
                     coldAddress: perryMode.coldAddress,
                   }}
                 />
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button
                     type="button"
                     onClick={() => handleFundGas(perryMode.wallets[0].address)}
                     disabled={!coldWalletClient}
-                    className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label="Fund gas for Wallet 0"
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 rounded"
                   >
                     Fund Gas
                   </button>
@@ -248,7 +249,8 @@ export function WalletStep() {
                     type="button"
                     onClick={() => handleFundTokens(perryMode.wallets[0].address)}
                     disabled={!coldWalletClient}
-                    className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                    aria-label="Fund tokens for Wallet 0"
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 rounded"
                   >
                     Fund Tokens
                   </button>
@@ -259,7 +261,7 @@ export function WalletStep() {
                 <button
                   type="button"
                   onClick={handleClear}
-                  className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm"
+                  className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
                 >
                   Clear Perry Mode
                 </button>
@@ -285,12 +287,13 @@ export function WalletStep() {
                       <span className="font-mono text-xs text-gray-500 dark:text-gray-400">
                         {wallet.address}
                       </span>
-                      <div className="flex gap-2 mt-2">
+                      <div className="flex flex-wrap gap-2 mt-2">
                         <button
                           type="button"
                           onClick={() => handleFundGas(wallet.address)}
                           disabled={!coldWalletClient}
-                          className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                          aria-label={`Fund gas for Wallet ${perryMode.offset + index}`}
+                          className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 rounded"
                         >
                           Fund Gas
                         </button>
@@ -298,7 +301,8 @@ export function WalletStep() {
                           type="button"
                           onClick={() => handleFundTokens(wallet.address)}
                           disabled={!coldWalletClient}
-                          className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                          aria-label={`Fund tokens for Wallet ${perryMode.offset + index}`}
+                          className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 rounded"
                         >
                           Fund Tokens
                         </button>
@@ -309,7 +313,7 @@ export function WalletStep() {
                 <button
                   type="button"
                   onClick={handleClear}
-                  className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm"
+                  className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
                 >
                   Clear Perry Mode
                 </button>
@@ -320,7 +324,7 @@ export function WalletStep() {
           <button
             type="button"
             onClick={handleContinue}
-            className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 text-sm font-medium"
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
           >
             Continue
           </button>

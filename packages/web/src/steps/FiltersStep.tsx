@@ -185,7 +185,7 @@ export function FiltersStep() {
                   <button
                     type="button"
                     onClick={() => handleRemoveFilter(filter.id)}
-                    className="text-xs text-gray-400 dark:text-gray-500 hover:text-red-400 transition-colors"
+                    className="text-xs text-gray-400 dark:text-gray-500 hover:text-red-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 rounded"
                   >
                     Remove
                   </button>
@@ -206,7 +206,7 @@ export function FiltersStep() {
         <button
           type="button"
           onClick={handleAddFilter}
-          className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+          className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
         >
           + Add Filter
         </button>
@@ -242,12 +242,12 @@ export function FiltersStep() {
                 type="button"
                 onClick={handlePreview}
                 disabled={previewState.status === 'running'}
-                className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 disabled:opacity-50 text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 disabled:opacity-50 text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
               >
                 {previewState.status === 'running' ? 'Running...' : 'Preview Filters'}
               </button>
               {previewState.status === 'done' && (
-                <span className="text-sm text-gray-600 dark:text-gray-300">
+                <span role="status" className="text-sm text-gray-600 dark:text-gray-300">
                   <span className="font-medium text-green-600 dark:text-green-400">{previewState.survivingCount.toLocaleString()}</span>
                   {' '}of{' '}
                   <span className="font-medium">{previewState.totalCount.toLocaleString()}</span>
@@ -285,7 +285,7 @@ export function FiltersStep() {
             <button
               type="button"
               onClick={handleSkip}
-              className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+              className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
             >
               Skip Filters
             </button>
@@ -294,7 +294,7 @@ export function FiltersStep() {
               type="button"
               onClick={handleContinue}
               disabled={isSaving}
-              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
             >
               {isSaving ? 'Saving...' : 'Save & Continue'}
             </button>

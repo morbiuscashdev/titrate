@@ -979,7 +979,7 @@ export function DistributeStep() {
                         type="button"
                         onClick={handleVerify}
                         disabled={verifyState.status === 'verifying'}
-                        className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 disabled:opacity-50 transition-colors"
+                        className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 rounded"
                       >
                         {verifyState.status === 'verifying' ? 'Verifying...' : 'Verify on Explorer'}
                       </button>
@@ -1137,26 +1137,29 @@ export function DistributeStep() {
                       value={sweepAddress}
                       onChange={(e) => setSweepAddress(e.target.value)}
                       placeholder="0x..."
-                      className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none font-mono"
+                      aria-label="Sweep destination address"
+                      className="w-full min-w-0 rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none font-mono"
                     />
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-wrap items-center gap-3">
                     <button
                       type="button"
                       onClick={handleSweep}
                       disabled={!sweepAddress || sweepState.status === 'sweeping'}
-                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
+                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
                     >
                       {sweepState.status === 'sweeping'
                         ? `Sweeping ${sweepState.progress}/${derivedWalletClients.length}...`
                         : 'Sweep All to Address'}
                     </button>
-                    {sweepState.status === 'done' && (
-                      <span className="text-sm text-green-600 dark:text-green-400">Sweep complete</span>
-                    )}
-                    {sweepState.status === 'error' && (
-                      <span className="text-sm text-red-400">{sweepState.errorMessage}</span>
-                    )}
+                    <span aria-live="polite">
+                      {sweepState.status === 'done' && (
+                        <span className="text-sm text-green-600 dark:text-green-400">Sweep complete</span>
+                      )}
+                      {sweepState.status === 'error' && (
+                        <span className="text-sm text-red-400">{sweepState.errorMessage}</span>
+                      )}
+                    </span>
                   </div>
                 </div>
               )}
