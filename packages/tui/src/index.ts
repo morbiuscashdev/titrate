@@ -4,7 +4,9 @@ import { registerCollect } from './commands/collect.js';
 import { registerDeploy } from './commands/deploy.js';
 import { registerDeriveWallet } from './commands/derive-wallet.js';
 import { registerDistribute } from './commands/distribute.js';
+import { registerFilterPreview } from './commands/filter-preview.js';
 import { registerRun } from './commands/run.js';
+import { registerSetOperations } from './commands/set-operations.js';
 import { runWizard } from './interactive/wizard.js';
 
 const program = new Command();
@@ -26,7 +28,9 @@ registerCollect(program);
 registerDeploy(program);
 registerDeriveWallet(program);
 registerDistribute(program);
+registerFilterPreview(program);
 registerRun(program);
+registerSetOperations(program);
 
 // Explicit `wizard` alias so it can also be invoked as `titrate wizard`
 program
