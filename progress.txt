@@ -189,8 +189,53 @@ C (component library) ✅ → B (distribution MVP) ✅ → A (full app) → Z (a
 - Web: 393 tests (98% coverage)
 - Total: ~918 tests
 
+### SDK-to-Web Gap Closure (complete — 2026-04-06)
+All 15 gaps between SDK and web app closed:
+- Phase 1: campaignId derivation, live gas estimation, pre-distribution validation, pipeline filter composition
+- Phase 2: Filter preview in FiltersStep (on-demand pipeline execution with surviving count)
+- Phase 3: Contract verification, intervention journal, spot checks in batch-preview modal
+- Phase 4: On-chain address sources (block-scan, explorer-scan), set operations panel
+- Phase 5: TrueBlocks URL field in SettingsPage
+
+### Multi-Wallet Parallel Distribution (complete — 2026-04-06)
+- SDK: deriveWalletAtIndex, deriveMultipleWallets (with offset), suggestWalletCount, zeroPrivateKey
+- Web: WalletProvider multi-wallet state, WalletStep derivation UI (count/offset/funding)
+- DistributeStep: disperseParallel dispatch, per-wallet ERC-20 approvals, sweep-back to user-specified address
+- Encrypted signature persistence via IDB appSettings, highWaterMark tracking
+- Spec: docs/superpowers/specs/2026-04-06-multi-wallet-parallel-distribution.md
+
+### Production Hardening (complete — 2026-04-06)
+- CSP meta tag restricting scripts, connections, fonts
+- React ErrorBoundary wrapping route content
+- TypeScript compilation errors fixed (6 issues)
+
+### Performance (complete — 2026-04-06)
+- Route-level code splitting via React.lazy (HomePage 11KB, SettingsPage 12KB, CampaignPage 139KB)
+- Vendor chunk reorganization (react 48KB, viem 294KB, wagmi 54KB)
+
+### TUI Feature Parity (complete — 2026-04-06)
+- `set-ops` command: union/intersect/difference/symmetricDifference on CSV files
+- `filter-preview` command: dry-run filters with per-filter survival counts
+
+### Responsive + Accessibility (complete — 2026-04-06)
+- Mobile layout fixes: flex-wrap on button rows, responsive grids, min-w-0 on inputs
+- ARIA labels on all new interactive elements (fund buttons, set selectors, sweep input)
+- focus-visible ring styles on all new buttons
+- aria-live regions on sweep progress and filter preview
+
+## Test Counts
+- Contracts: 49 tests
+- SDK: 464 tests (20 new wallet tests)
+- TUI: 39 tests (6 new set-operations tests)
+- storage-fs: 13 tests
+- storage-idb: 36 tests
+- Web: 587 tests
+- Total: ~1,188 tests
+
 ## Next Steps
-1. E2E smoke test with real wallet + testnet
-2. Landing page or onboarding flow for new users
-3. Accessibility audit (keyboard nav, screen reader)
-4. Light theme (add dark: prefix variants to all components)
+1. Connect remote and push / create PR
+2. Automated Playwright E2E test suite for CI
+3. Visual polish pass in browser (new UI surfaces not designer-reviewed)
+4. Auto-funding flow (one-click fund all derived wallets with calculated amounts)
+5. TUI interactive wizard integration for set-ops and filter-preview
+6. Landing page or onboarding flow for new users

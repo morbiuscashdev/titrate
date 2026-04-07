@@ -6,6 +6,20 @@ import { join } from 'node:path';
 
 const PRIVATE_KEY = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
 const RPC_URL = 'http://127.0.0.1:8545';
+
+const anvilUp = await (async () => {
+  try {
+    const res = await fetch(RPC_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_chainId', params: [], id: 1 }),
+      signal: AbortSignal.timeout(1000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+})();
 const ANVIL_ADDR_1 = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
 const ANVIL_ADDR_2 = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC';
 const ZERO_TOKEN = '0x0000000000000000000000000000000000000000';
@@ -30,7 +44,7 @@ describe('titrate CLI e2e', () => {
     expect(output).toContain('run');
   });
 
-  describe('deploy', () => {
+  describe.runIf(anvilUp)('deploy', () => {
     it('deploys a simple contract and returns valid JSON with an address', () => {
       const raw = runCli([
         'deploy',
@@ -71,7 +85,7 @@ describe('titrate CLI e2e', () => {
     });
   });
 
-  describe('deploy + distribute', () => {
+  describe.runIf(anvilUp)('deploy + distribute', () => {
     it('distributes 0.001 ETH to two Anvil addresses', () => {
       // Step 1: deploy
       const deployRaw = runCli([

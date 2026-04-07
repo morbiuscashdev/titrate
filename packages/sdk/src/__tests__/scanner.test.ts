@@ -3,10 +3,13 @@ import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { parseEther, type Address } from 'viem';
 import {
   createAnvilContext,
+  anvilAvailable,
   mineBlocks,
   fundAddress,
   type AnvilContext,
 } from './helpers/anvil.js';
+
+const anvilUp = await anvilAvailable;
 import { deployMockERC20, deploySimpleERC20, MOCK_ERC20_ABI_TYPED } from './helpers/mock-erc20.js';
 import {
   scanBlocks,
@@ -144,7 +147,7 @@ describe('titrate-range', () => {
 // properties.ts — Anvil integration tests
 // ---------------------------------------------------------------------------
 
-describe('getAddressProperties (anvil)', () => {
+describe.runIf(anvilUp)('getAddressProperties (anvil)', () => {
   let ctx: AnvilContext;
   let contractAddress: Address;
 
@@ -240,7 +243,7 @@ describe('getAddressProperties (anvil)', () => {
 // logs.ts — scanTransferEvents
 // ---------------------------------------------------------------------------
 
-describe('scanTransferEvents (anvil)', () => {
+describe.runIf(anvilUp)('scanTransferEvents (anvil)', () => {
   let ctx: AnvilContext;
   let tokenAddress: Address;
   let setupStartBlock: bigint;
@@ -365,7 +368,7 @@ describe('scanTransferEvents (anvil)', () => {
 // scanBlocks — existing tests kept + new coverage for blocks.ts
 // ---------------------------------------------------------------------------
 
-describe('scanner (anvil)', () => {
+describe.runIf(anvilUp)('scanner (anvil)', () => {
   let ctx: AnvilContext;
 
   beforeAll(async () => {

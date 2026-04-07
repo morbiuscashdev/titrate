@@ -9,7 +9,9 @@ import {
   filterByExcludeRecipients,
   createFilter,
 } from '../pipeline/filters.js';
-import { createAnvilContext, fundAddress, type AnvilContext } from './helpers/anvil.js';
+import { createAnvilContext, anvilAvailable, fundAddress, type AnvilContext } from './helpers/anvil.js';
+
+const anvilUp = await anvilAvailable;
 import { deployMockERC20, deploySimpleERC20, MOCK_ERC20_ABI_TYPED } from './helpers/mock-erc20.js';
 
 // ---------------------------------------------------------------------------
@@ -476,7 +478,7 @@ describe('filter pure helpers', () => {
 // On-chain pipeline tests (Anvil)
 // ---------------------------------------------------------------------------
 
-describe('pipeline (anvil)', () => {
+describe.runIf(anvilUp)('pipeline (anvil)', () => {
   let ctx: AnvilContext;
   let contractAddress: Address;
 

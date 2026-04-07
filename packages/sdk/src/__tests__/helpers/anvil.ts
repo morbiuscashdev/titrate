@@ -16,6 +16,27 @@ import { foundry } from 'viem/chains';
 const ANVIL_PRIVATE_KEY =
   '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as const;
 
+const DEFAULT_RPC = 'http://127.0.0.1:8545';
+
+/**
+ * Probes Anvil RPC once at import time. Await this in test files and pass
+ * the result to `describe.runIf(anvilUp)` so Anvil-dependent blocks are
+ * skipped cleanly when no local node is running.
+ */
+export const anvilAvailable: Promise<boolean> = (async () => {
+  try {
+    const res = await fetch(DEFAULT_RPC, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_chainId', params: [], id: 1 }),
+      signal: AbortSignal.timeout(1000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+})();
+
 export type AnvilContext = {
   readonly rpcUrl: string;
   readonly publicClient: PublicClient;

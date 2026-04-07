@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { parseEther, type Address, type Hex } from 'viem';
-import { createAnvilContext, type AnvilContext } from './helpers/anvil.js';
+import { createAnvilContext, anvilAvailable, type AnvilContext } from './helpers/anvil.js';
+
+const anvilUp = await anvilAvailable;
 import { deployMockERC20, MOCK_ERC20_ABI_TYPED } from './helpers/mock-erc20.js';
 import {
   deployDistributor,
@@ -49,7 +51,7 @@ describe('deployDistributor — no contract address in receipt', () => {
   });
 });
 
-describe('deployDistributor (anvil)', () => {
+describe.runIf(anvilUp)('deployDistributor (anvil)', () => {
   let ctx: AnvilContext;
 
   beforeAll(() => {
@@ -260,7 +262,7 @@ describe('verifyContract', () => {
 // disperse with native token
 // ---------------------------------------------------------------------------
 
-describe('disperse (anvil)', () => {
+describe.runIf(anvilUp)('disperse (anvil)', () => {
   let ctx: AnvilContext;
   let simpleContract: Address;
 
@@ -389,7 +391,7 @@ describe('disperse (anvil)', () => {
 // disperseTokens with ERC-20
 // ---------------------------------------------------------------------------
 
-describe('disperseTokens with ERC-20 (anvil)', () => {
+describe.runIf(anvilUp)('disperseTokens with ERC-20 (anvil)', () => {
   let ctx: AnvilContext;
   let simpleContract: Address;
   let tokenAddress: Address;
@@ -545,7 +547,7 @@ describe('disperseTokens with ERC-20 (anvil)', () => {
 // allowance
 // ---------------------------------------------------------------------------
 
-describe('allowance (anvil)', () => {
+describe.runIf(anvilUp)('allowance (anvil)', () => {
   let ctx: AnvilContext;
   let fullContract: Address;
   // disperseSimple selector: keccak256("disperseSimple(address,address[],uint256)")[:4]
@@ -610,7 +612,7 @@ describe('allowance (anvil)', () => {
 // checkRecipients
 // ---------------------------------------------------------------------------
 
-describe('checkRecipients (anvil)', () => {
+describe.runIf(anvilUp)('checkRecipients (anvil)', () => {
   let ctx: AnvilContext;
   let fullContract: Address;
 
@@ -648,7 +650,7 @@ describe('checkRecipients (anvil)', () => {
 // disperseTokens / disperseTokensSimple with full variant (covers lines 8, 84, 113, 161-190)
 // ---------------------------------------------------------------------------
 
-describe('disperse with full variant (anvil)', () => {
+describe.runIf(anvilUp)('disperse with full variant (anvil)', () => {
   let ctx: AnvilContext;
   let fullContract: Address;
   let tokenAddress: Address;
