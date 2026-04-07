@@ -21,10 +21,9 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: {
-          // Split heavy wallet connector libs into separate chunks
           'vendor-react': ['react', 'react-dom', 'react-router'],
-          'vendor-wallet': ['wagmi', 'viem', '@tanstack/react-query'],
-          'vendor-reown': ['@reown/appkit', '@reown/appkit-adapter-wagmi', '@reown/appkit/react'],
+          'vendor-viem': ['viem'],
+          'vendor-wagmi': ['wagmi', '@tanstack/react-query'],
         },
       },
     },

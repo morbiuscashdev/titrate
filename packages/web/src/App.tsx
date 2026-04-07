@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { ThemeProvider } from './providers/ThemeProvider.js';
@@ -12,11 +13,12 @@ import { InterventionModal } from './components/InterventionModal.js';
 import { useWallet } from './providers/WalletProvider.js';
 import { Header } from './components/Header.js';
 import { WalletBadge } from './components/WalletBadge.js';
-import { HomePage } from './pages/HomePage.js';
-import { CampaignPage } from './pages/CampaignPage.js';
-import { SettingsPage } from './pages/SettingsPage.js';
 import type { ReactNode } from 'react';
 import type { StoredChainConfig } from '@titrate/sdk';
+
+const HomePage = lazy(() => import('./pages/HomePage.js').then(m => ({ default: m.HomePage })));
+const CampaignPage = lazy(() => import('./pages/CampaignPage.js').then(m => ({ default: m.CampaignPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage.js').then(m => ({ default: m.SettingsPage })));
 
 /** Bridges CampaignProvider → ChainProvider by deriving chain config from the active campaign. */
 function ChainBridge({ children }: { readonly children: ReactNode }) {
@@ -76,12 +78,14 @@ export function App() {
                     <HeaderWalletBadge />
                   </Header>
                   <div id="main-content">
+                  <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><p className="text-sm text-gray-400">Loading...</p></div>}>
                   <Routes>
                     <Route path="/" element={<HomePage />} />
                     <Route path="/campaign/:id" element={<CampaignPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
+                  </Suspense>
                   </div>
                 </BrowserRouter>
               </ChainBridge>
