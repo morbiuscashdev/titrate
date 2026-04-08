@@ -1,11 +1,36 @@
 import { render, screen, act, renderHook } from '@testing-library/react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   InterventionProvider,
   useIntervention,
+  serializeJournal,
+  deserializeJournal,
 } from './InterventionProvider.js';
 import type { ReactNode } from 'react';
 import type { InterventionContext, InterventionAction } from '@titrate/sdk';
+
+const mockAppSettings = {
+  get: vi.fn().mockResolvedValue(null),
+  put: vi.fn().mockResolvedValue(undefined),
+  delete: vi.fn().mockResolvedValue(undefined),
+};
+
+vi.mock('./StorageProvider.js', () => ({
+  useStorage: () => ({
+    storage: {
+      appSettings: mockAppSettings,
+      campaigns: {},
+      addressSets: {},
+      addresses: {},
+      batches: {},
+      wallets: {},
+      pipelineConfigs: {},
+      chainConfigs: {},
+    },
+    isUnlocked: false,
+    unlock: vi.fn(),
+  }),
+}));
 
 const wrapper = ({ children }: { children: ReactNode }) => (
   <InterventionProvider>{children}</InterventionProvider>
@@ -346,6 +371,40 @@ describe('Intervention journal', () => {
     expect(result.current.journal).toEqual([]);
   });
 
+  it('persists journal entries to IDB via appSettings', async () => {
+    const { result } = renderHook(() => useIntervention(), { wrapper });
+
+    let hook: ReturnType<typeof result.current.createInterventionHook>;
+    act(() => {
+      hook = result.current.createInterventionHook();
+    });
+
+    const context: InterventionContext = {
+      point: 'stuck-transaction',
+      campaignId: 'test-campaign',
+      txHash: '0xabc',
+    };
+
+    const promise = hook!(context);
+    await act(async () => { await new Promise((r) => setTimeout(r, 0)); });
+
+    act(() => {
+      result.current.dismiss({ type: 'abort' });
+    });
+    await promise;
+
+    // Wait for useEffect to fire
+    await act(async () => { await new Promise((r) => setTimeout(r, 50)); });
+
+    expect(mockAppSettings.put).toHaveBeenCalledWith(
+      'intervention-journal',
+      expect.any(String),
+    );
+    const persisted = JSON.parse(mockAppSettings.put.mock.calls.at(-1)![1]);
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0].action).toBe('abort');
+  });
+
   it('does not record journal entry for auto-approved interventions', async () => {
     const { result } = renderHook(() => useIntervention(), { wrapper });
 
@@ -363,5 +422,29 @@ describe('Intervention journal', () => {
     const action = await hook!(context);
     expect(action).toEqual({ type: 'approve' });
     expect(result.current.journal).toEqual([]);
+  });
+});
+
+describe('serializeJournal / deserializeJournal', () => {
+  it('round-trips entries through JSON', () => {
+    const entries = [
+      { timestamp: 1000, campaignId: 'c1', point: 'stuck-transaction' as const, action: 'abort' as const, issueCount: 0 },
+      { timestamp: 2000, campaignId: 'c1', point: 'batch-preview' as const, action: 'approve' as const, issueCount: 3 },
+    ];
+    const raw = serializeJournal(entries);
+    const result = deserializeJournal(raw);
+    expect(result).toEqual(entries);
+  });
+
+  it('returns empty array for null input', () => {
+    expect(deserializeJournal(null)).toEqual([]);
+  });
+
+  it('returns empty array for invalid JSON', () => {
+    expect(deserializeJournal('not json')).toEqual([]);
+  });
+
+  it('returns empty array for non-array JSON', () => {
+    expect(deserializeJournal('{"key":"value"}')).toEqual([]);
   });
 });

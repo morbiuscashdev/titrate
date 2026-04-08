@@ -60,6 +60,8 @@ export function CampaignStep() {
   const [explorerApiUrl, setExplorerApiUrl] = useState('');
   const [explorerApiKey, setExplorerApiKey] = useState('');
   const [rateLimitGroup, setRateLimitGroup] = useState('');
+  const [manualSymbol, setManualSymbol] = useState('');
+  const [manualDecimals, setManualDecimals] = useState('18');
 
   // Determine whether the entered token address is valid hex for probing
   const normalizedTokenAddress: Address | null =
@@ -107,9 +109,12 @@ export function CampaignStep() {
     setIsSaving(true);
     try {
       const resolvedTokenAddress = normalizedTokenAddress ?? ZERO_ADDRESS;
-      const resolvedDecimals = tokenMetadata?.decimals ?? 18;
+      const resolvedDecimals = tokenMetadata?.decimals
+        ?? (probeError ? Number(manualDecimals) || 18 : 18);
 
-      const resolvedContractName = tokenMetadata?.symbol ?? activeCampaign?.contractName ?? '';
+      const resolvedContractName = tokenMetadata?.symbol
+        ?? (probeError && manualSymbol.trim() ? manualSymbol.trim() : '')
+        ?? activeCampaign?.contractName ?? '';
 
       let campaignId: string | null = activeCampaign?.id ?? null;
 
@@ -177,7 +182,8 @@ export function CampaignStep() {
       setIsSaving(false);
     }
   }, [
-    chainId, rpcUrl, normalizedTokenAddress, tokenMetadata, contractVariant,
+    chainId, rpcUrl, normalizedTokenAddress, tokenMetadata, probeError,
+    manualSymbol, manualDecimals, contractVariant,
     campaignName, batchSize, activeCampaign, saveCampaign, createCampaign, setActiveStep,
     storage, explorerApiUrl, explorerApiKey, rateLimitGroup, customChainName,
   ]);
@@ -332,7 +338,34 @@ export function CampaignStep() {
             </div>
           )}
           {normalizedTokenAddress && !isProbing && probeError && (
-            <p className="mt-2 text-sm text-red-400">Failed to probe token. Check the address and chain.</p>
+            <div className="mt-2 space-y-3">
+              <p className="text-sm text-red-400">Failed to probe token. Enter details manually:</p>
+              <div className="flex flex-wrap gap-3">
+                <div className="flex-1 min-w-[120px]">
+                  <label htmlFor="manual-symbol" className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">Symbol</label>
+                  <input
+                    id="manual-symbol"
+                    type="text"
+                    value={manualSymbol}
+                    onChange={(e) => setManualSymbol(e.target.value)}
+                    placeholder="e.g. USDC"
+                    className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+                <div className="w-24">
+                  <label htmlFor="manual-decimals" className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">Decimals</label>
+                  <input
+                    id="manual-decimals"
+                    type="number"
+                    value={manualDecimals}
+                    onChange={(e) => setManualDecimals(e.target.value)}
+                    min={0}
+                    max={36}
+                    className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+            </div>
           )}
           {normalizedTokenAddress && !isProbing && tokenMetadata === null && !probeError && (
             <p className="mt-2 text-sm text-yellow-400">Not a valid ERC-20 token at this address.</p>

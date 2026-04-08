@@ -49,10 +49,14 @@ describe('PipelineStepEditor', () => {
     expect(screen.getByDisplayValue('100')).toBeInTheDocument();
   });
 
-  it('renders token address field for token-recipients filter', () => {
-    render(<PipelineStepEditor stepType="filter" filterType="token-recipients" params={{ tokenAddress: '0xabc' }} />);
+  it('renders token address and block range fields for token-recipients filter', () => {
+    render(<PipelineStepEditor stepType="filter" filterType="token-recipients" params={{ tokenAddress: '0xabc', startBlock: '100', endBlock: '200' }} />);
     expect(screen.getByText('Token address')).toBeInTheDocument();
     expect(screen.getByDisplayValue('0xabc')).toBeInTheDocument();
+    expect(screen.getByText('Start block')).toBeInTheDocument();
+    expect(screen.getByText('End block')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('100')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('200')).toBeInTheDocument();
   });
 
   it('renders exclusion CSV field for csv-exclusion filter', () => {

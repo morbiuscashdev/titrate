@@ -7,6 +7,20 @@ import {
 } from '../providers/InterventionProvider.js';
 import type { InterventionContext, InterventionAction } from '@titrate/sdk';
 
+vi.mock('../providers/StorageProvider.js', () => ({
+  useStorage: () => ({
+    storage: {
+      appSettings: {
+        get: vi.fn().mockResolvedValue(null),
+        put: vi.fn().mockResolvedValue(undefined),
+        delete: vi.fn().mockResolvedValue(undefined),
+      },
+    },
+    isUnlocked: false,
+    unlock: vi.fn(),
+  }),
+}));
+
 vi.mock('@titrate/sdk', async () => {
   const actual = await vi.importActual<Record<string, unknown>>('@titrate/sdk');
   return {
@@ -261,7 +275,7 @@ describe('InterventionModal', () => {
     expect(screen.queryByText('Approve')).not.toBeInTheDocument();
   });
 
-  it('shows batch-result content with tx hash', async () => {
+  it('shows batch-result content with tx hash explorer link', async () => {
     renderWithProvider();
 
     act(() => {
@@ -279,8 +293,36 @@ describe('InterventionModal', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('Batch Result')).toBeInTheDocument();
     expect(screen.getByText(/Batch #1 confirmed/)).toBeInTheDocument();
+
+    // Tx hash should be a clickable explorer link
+    const txLink = screen.getByRole('link');
+    expect(txLink).toHaveAttribute(
+      'href',
+      'https://etherscan.io/tx/0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+    );
+
     expect(screen.getByText('Continue')).toBeInTheDocument();
     expect(screen.getByText('Pause')).toBeInTheDocument();
+  });
+
+  it('shows stuck-transaction tx hash as explorer link', async () => {
+    renderWithProvider();
+
+    act(() => {
+      screen.getByTestId('trigger-stuck').click();
+    });
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+
+    const txLink = screen.getByRole('link');
+    expect(txLink).toHaveAttribute(
+      'href',
+      'https://etherscan.io/tx/0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+    );
   });
 
   it('Approve button resolves action and closes modal', async () => {

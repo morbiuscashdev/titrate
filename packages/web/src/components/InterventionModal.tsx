@@ -34,6 +34,25 @@ function truncateHash(hash: string): string {
   return `${hash.slice(0, 6)}...${hash.slice(-4)}`;
 }
 
+/** Derive the base explorer URL from context metadata. */
+function getExplorerBaseUrl(context: InterventionContext): string {
+  return (context.metadata?.explorerBaseUrl as string) ?? 'https://etherscan.io';
+}
+
+/** Render a tx hash as a clickable explorer link. */
+function TxHashLink({ hash, explorerBaseUrl }: { readonly hash: string; readonly explorerBaseUrl: string }) {
+  return (
+    <a
+      href={`${explorerBaseUrl}/tx/${hash}`}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="rounded bg-gray-100 px-1 py-0.5 text-xs font-mono text-blue-600 dark:bg-gray-800 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
+    >
+      {truncateHash(hash)}
+    </a>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Point-specific content renderers
 // ---------------------------------------------------------------------------
@@ -97,10 +116,7 @@ function BatchResultContent({ context }: { readonly context: InterventionContext
       <p>Batch #{context.batchIndex ?? 0} confirmed.</p>
       {context.txHash && (
         <p>
-          TX:{' '}
-          <code className="rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-gray-800">
-            {truncateHash(context.txHash)}
-          </code>
+          TX: <TxHashLink hash={context.txHash} explorerBaseUrl={getExplorerBaseUrl(context)} />
         </p>
       )}
     </div>
@@ -113,9 +129,7 @@ function StuckTransactionContent({ context }: { readonly context: InterventionCo
       <p>
         Transaction{' '}
         {context.txHash ? (
-          <code className="rounded bg-gray-100 px-1 py-0.5 text-xs dark:bg-gray-800">
-            {truncateHash(context.txHash)}
-          </code>
+          <TxHashLink hash={context.txHash} explorerBaseUrl={getExplorerBaseUrl(context)} />
         ) : (
           ''
         )}{' '}

@@ -179,6 +179,41 @@ describe('CampaignStep', () => {
       target: { value: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' },
     });
     expect(screen.getByText(/failed to probe token/i)).toBeInTheDocument();
+    // Manual fallback inputs should appear
+    expect(screen.getByLabelText('Symbol')).toBeInTheDocument();
+    expect(screen.getByLabelText('Decimals')).toBeInTheDocument();
+  });
+
+  it('uses manual symbol and decimals when probe fails', async () => {
+    tokenMetadataMock = { data: undefined, isLoading: false, error: new Error('RPC error') };
+    render(<CampaignStep />);
+
+    // Select chain
+    fireEvent.click(screen.getByText('Ethereum'));
+
+    // Enter token address
+    fireEvent.change(screen.getByPlaceholderText('0x...'), {
+      target: { value: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48' },
+    });
+
+    // Fill manual fallback fields
+    fireEvent.change(screen.getByLabelText('Symbol'), { target: { value: 'USDC' } });
+    fireEvent.change(screen.getByLabelText('Decimals'), { target: { value: '6' } });
+
+    // Enter campaign name and save
+    fireEvent.change(screen.getByPlaceholderText('My Airdrop Campaign'), {
+      target: { value: 'Manual Token Test' },
+    });
+    fireEvent.click(screen.getByText('Save & Continue'));
+
+    await vi.waitFor(() => {
+      expect(mockCreateCampaign).toHaveBeenCalledWith(
+        expect.objectContaining({
+          contractName: 'USDC',
+          tokenDecimals: 6,
+        }),
+      );
+    });
   });
 
   it('switches contract variant between Simple and Full', () => {

@@ -3,6 +3,8 @@ import {
   useContext,
   useState,
   useCallback,
+  useEffect,
+  useRef,
   useMemo,
   type ReactNode,
 } from 'react';
@@ -13,6 +15,7 @@ import type {
   InterventionHook,
   InterventionEntry,
 } from '@titrate/sdk';
+import { useStorage } from './StorageProvider.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -49,6 +52,24 @@ const INITIAL_STATE: InterventionState = {
   resolve: null,
 };
 
+const JOURNAL_STORAGE_KEY = 'intervention-journal';
+
+/** Serialize journal entries for appSettings storage. */
+export function serializeJournal(entries: readonly InterventionEntry[]): string {
+  return JSON.stringify(entries);
+}
+
+/** Deserialize journal entries from appSettings storage. */
+export function deserializeJournal(raw: string | null): InterventionEntry[] {
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Context
 // ---------------------------------------------------------------------------
@@ -76,6 +97,25 @@ export function InterventionProvider({ children }: InterventionProviderProps) {
   const [enabledPoints, setEnabledPoints] =
     useState<ReadonlySet<InterventionPoint>>(DEFAULT_ENABLED_POINTS);
   const [journal, setJournal] = useState<readonly InterventionEntry[]>([]);
+  const { storage } = useStorage();
+  const journalLoaded = useRef(false);
+
+  // Load journal from IDB on mount
+  useEffect(() => {
+    if (!storage || journalLoaded.current) return;
+    journalLoaded.current = true;
+    storage.appSettings.get(JOURNAL_STORAGE_KEY).then((raw) => {
+      const entries = deserializeJournal(raw);
+      if (entries.length > 0) setJournal(entries);
+    }).catch(() => { /* storage may not be unlocked yet */ });
+  }, [storage]);
+
+  // Persist journal to IDB whenever it changes
+  useEffect(() => {
+    if (!storage || !journalLoaded.current) return;
+    storage.appSettings.put(JOURNAL_STORAGE_KEY, serializeJournal(journal))
+      .catch(() => { /* best-effort persistence */ });
+  }, [storage, journal]);
 
   const dismiss = useCallback((action: InterventionAction) => {
     setState((prev) => {

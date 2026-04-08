@@ -56,7 +56,15 @@ function FilterParams({ filterType, params, onParamsChange }: { filterType: stri
       </div>
     );
   }
-  if (filterType === 'token-recipients') return <ParamField label="Token address" value={params.tokenAddress ?? ''} onChange={(v) => update('tokenAddress', v)} />;
+  if (filterType === 'token-recipients') {
+    return (
+      <div className="space-y-3">
+        <ParamField label="Token address" value={params.tokenAddress ?? ''} onChange={(v) => update('tokenAddress', v)} />
+        <ParamField label="Start block" value={params.startBlock ?? ''} onChange={(v) => update('startBlock', v)} />
+        <ParamField label="End block" value={params.endBlock ?? ''} onChange={(v) => update('endBlock', v)} />
+      </div>
+    );
+  }
   if (filterType === 'csv-exclusion') return <ParamField label="Exclusion CSV" value={params.fileName ?? ''} onChange={(v) => update('fileName', v)} />;
   return <p className="text-xs text-gray-400 dark:text-gray-500">No additional configuration needed.</p>;
 }
