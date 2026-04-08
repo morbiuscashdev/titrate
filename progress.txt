@@ -232,10 +232,37 @@ All 15 gaps between SDK and web app closed:
 - Web: 587 tests
 - Total: ~1,188 tests
 
-## Next Steps
-1. Connect remote and push / create PR
-2. Automated Playwright E2E test suite for CI
-3. Visual polish pass in browser (new UI surfaces not designer-reviewed)
-4. Auto-funding flow (one-click fund all derived wallets with calculated amounts)
-5. TUI interactive wizard integration for set-ops and filter-preview
-6. Landing page or onboarding flow for new users
+### Anvil Test Skip (complete — 2026-04-07)
+- SDK + TUI Anvil-dependent tests now skip cleanly via describe.runIf(anvilUp)
+- anvilAvailable: eager singleton probe at import time, cached across test files
+- 0 failures without Anvil; all tests run normally when Anvil is up
+
+## Updated Test Counts (2026-04-08)
+- Contracts: 49 tests
+- SDK: 444 pass, 51 skipped (Anvil + TrueBlocks)
+- TUI: 39 pass, 2 skipped (Anvil)
+- storage-fs: 13 tests
+- storage-idb: 36 tests
+- Web: 587 tests
+- Total: ~1,168 tests, 0 failures
+
+## TUI ↔ Web Parity Work — Ranked Plan
+
+### Fix Now (small, high-impact safety/correctness)
+1. Persist intervention journal to IDB in web (currently in-memory, lost on refresh)
+2. Manual symbol/decimals fallback in CampaignStep when probeToken fails
+3. Add startBlock/endBlock fields to token-recipients filter in PipelineStepEditor
+4. Render explorer links in InterventionModal spot check
+
+### Fix Soon (medium effort, functional gaps)
+5. Date-string input for block-scan source in AddressesStep (resolveBlockRef)
+6. Filter-preview count display in FiltersStep (per-stage survival counts)
+7. Add --fee-bump, --nonce-window, --revalidation flags to TUI distribute command
+8. Amounts conflict detection in web AmountsStep (decimal values in integer mode)
+
+### Build Next (larger features)
+9. Campaign auto-resume detection (badge on campaign cards)
+10. Multi-wallet support in TUI (derive-wallet count/offset, distribute --wallets)
+11. Post-distribution sweep command for TUI
+12. Operator method selector in web WalletStep (advanced panel)
+13. Gas config parity: TUI --fee-bump, --nonce-window, --revalidation
