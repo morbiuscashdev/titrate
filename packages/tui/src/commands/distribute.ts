@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { Command } from 'commander';
 import type { Address, Hex } from 'viem';
 import { disperseTokens, disperseTokensSimple, parseCSV, serializeBatchResults, parseGwei } from '@titrate/sdk';
-import type { BatchResult, GasConfig, GasSpeed } from '@titrate/sdk';
+import type { BatchResult, GasConfig, GasSpeed, RevalidationConfig } from '@titrate/sdk';
 import { createRpcClient } from '../utils/rpc.js';
 import { createSignerClient, resolvePrivateKey } from '../utils/wallet.js';
 import { createProgressRenderer } from '../progress/renderer.js';
@@ -35,6 +35,10 @@ export function registerDistribute(program: Command): void {
     .option('--max-base-fee --maxBaseFee <gwei>', 'Abort batch if base fee exceeds this (in gwei, e.g. "50" or "2.5")')
     .option('--max-priority-fee --maxPriorityFee <gwei>', 'Clamp priority fee to this max (in gwei, e.g. "2" or "1.5")')
     .option('--max-total-gas-cost --maxTotalGasCost <wei>', 'Stop distribution if cumulative gas cost exceeds this (in wei)')
+    .option('--fee-bump --feeBump <percent>', 'Fee bump percentage for stuck tx replacement (default: 12.5)')
+    .option('--nonce-window --nonceWindow <count>', 'Number of batches to pipeline before waiting (1-10, default: 1)', parseInt)
+    .option('--revalidation', 'Enable block-by-block revalidation of pending batches (requires live filter)')
+    .option('--revalidation-threshold --revalidationThreshold <count>', 'Invalidation threshold for revalidation (default: 2)', parseInt)
     .action(async (opts: {
       contract: string;
       token: string;
@@ -53,6 +57,10 @@ export function registerDistribute(program: Command): void {
       maxBaseFee?: string;
       maxPriorityFee?: string;
       maxTotalGasCost?: string;
+      feeBump?: string;
+      nonceWindow?: number;
+      revalidation?: boolean;
+      revalidationThreshold?: number;
     }) => {
       const privateKey = resolvePrivateKey(opts.privateKey);
       const publicClient = createRpcClient(opts.rpc, opts.chainId);
@@ -75,7 +83,16 @@ export function registerDistribute(program: Command): void {
         ...(opts.maxBaseFee !== undefined && { maxBaseFee: parseGwei(opts.maxBaseFee) }),
         ...(opts.maxPriorityFee !== undefined && { maxPriorityFee: parseGwei(opts.maxPriorityFee) }),
         ...(opts.maxTotalGasCost !== undefined && { maxTotalGasCost: BigInt(opts.maxTotalGasCost) }),
+        ...(opts.feeBump !== undefined && {
+          feeBumpWad: BigInt(Math.round(parseFloat(opts.feeBump) * 1e16)) * 100n,
+        }),
       };
+
+      const nonceWindow = opts.nonceWindow ? Math.max(1, Math.min(10, opts.nonceWindow)) : undefined;
+
+      const revalidation: RevalidationConfig | undefined = opts.revalidation
+        ? { invalidThreshold: opts.revalidationThreshold ?? 2 }
+        : undefined;
 
       let results: BatchResult[];
 
@@ -95,6 +112,8 @@ export function registerDistribute(program: Command): void {
           batchSize,
           onProgress,
           gasConfig,
+          ...(nonceWindow !== undefined && { nonceWindow }),
+          ...(revalidation !== undefined && { revalidation }),
         });
       } else {
         // Variable mode: amounts come from CSV second column
@@ -112,6 +131,8 @@ export function registerDistribute(program: Command): void {
           batchSize,
           onProgress,
           gasConfig,
+          ...(nonceWindow !== undefined && { nonceWindow }),
+          ...(revalidation !== undefined && { revalidation }),
         });
       }
 

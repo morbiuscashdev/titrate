@@ -50,12 +50,19 @@ export function FiltersStep() {
   const [recipients, setRecipients] = useState<readonly Address[]>([]);
   const [recipientCount, setRecipientCount] = useState(0);
 
+  type FilterStageResult = {
+    readonly filterType: string;
+    readonly inputCount: number;
+    readonly outputCount: number;
+  };
+
   const [previewState, setPreviewState] = useState<{
     readonly status: 'idle' | 'running' | 'done' | 'error';
     readonly survivingCount: number;
     readonly totalCount: number;
     readonly errorMessage: string | null;
-  }>({ status: 'idle', survivingCount: 0, totalCount: 0, errorMessage: null });
+    readonly stages: readonly FilterStageResult[];
+  }>({ status: 'idle', survivingCount: 0, totalCount: 0, errorMessage: null, stages: [] });
 
   /** Load recipient addresses from IDB when the campaign is active. */
   useEffect(() => {
@@ -75,7 +82,7 @@ export function FiltersStep() {
 
   /** Reset preview whenever filters or recipient count change. */
   useEffect(() => {
-    setPreviewState({ status: 'idle', survivingCount: 0, totalCount: recipientCount, errorMessage: null });
+    setPreviewState({ status: 'idle', survivingCount: 0, totalCount: recipientCount, errorMessage: null, stages: [] });
   }, [filters, recipientCount]);
 
   const handleAddFilter = useCallback(() => {
@@ -108,32 +115,40 @@ export function FiltersStep() {
   const handlePreview = useCallback(async () => {
     if (filters.length === 0 || recipients.length === 0) return;
 
-    setPreviewState({ status: 'running', survivingCount: 0, totalCount: recipients.length, errorMessage: null });
+    setPreviewState({ status: 'running', survivingCount: 0, totalCount: recipients.length, errorMessage: null, stages: [] });
 
     try {
-      const steps = filters.map((f) => ({
-        type: 'filter' as const,
-        filterType: f.filterType,
-        params: f.params as Record<string, unknown>,
-      }));
+      const stages: FilterStageResult[] = [];
+      let currentAddresses: Address[] = [...recipients];
 
-      const pipeline = createPipeline({
-        steps: [
-          { type: 'source' as const, sourceType: 'csv' as const, params: { addresses: recipients } as Record<string, unknown> },
-          ...steps,
-        ],
-      });
+      for (const filter of filters) {
+        const inputCount = currentAddresses.length;
+        const pipeline = createPipeline({
+          steps: [
+            { type: 'source' as const, sourceType: 'csv' as const, params: { addresses: currentAddresses } as Record<string, unknown> },
+            { type: 'filter' as const, filterType: filter.filterType, params: filter.params as Record<string, unknown> },
+          ],
+        });
 
-      const surviving: Address[] = [];
-      for await (const batch of pipeline.execute(publicClient ?? undefined)) {
-        surviving.push(...batch);
+        const surviving: Address[] = [];
+        for await (const batch of pipeline.execute(publicClient ?? undefined)) {
+          surviving.push(...batch);
+        }
+
+        stages.push({
+          filterType: filter.filterType,
+          inputCount,
+          outputCount: surviving.length,
+        });
+        currentAddresses = surviving;
       }
 
       setPreviewState({
         status: 'done',
-        survivingCount: surviving.length,
+        survivingCount: currentAddresses.length,
         totalCount: recipients.length,
         errorMessage: null,
+        stages,
       });
     } catch (err: unknown) {
       setPreviewState({
@@ -141,6 +156,7 @@ export function FiltersStep() {
         survivingCount: 0,
         totalCount: recipients.length,
         errorMessage: err instanceof Error ? err.message : 'Filter preview failed',
+        stages: [],
       });
     }
   }, [filters, recipients, publicClient]);
@@ -255,6 +271,27 @@ export function FiltersStep() {
                 </span>
               )}
             </div>
+            {previewState.status === 'done' && previewState.stages.length > 0 && (
+              <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-3 ring-1 ring-gray-200 dark:ring-gray-800">
+                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Per-filter breakdown</p>
+                <div className="space-y-1">
+                  {previewState.stages.map((stage, i) => {
+                    const removed = stage.inputCount - stage.outputCount;
+                    return (
+                      <div key={i} className="flex items-center justify-between text-xs">
+                        <span className="text-gray-600 dark:text-gray-300">{getFilterLabel(stage.filterType)}</span>
+                        <span className="text-gray-500 dark:text-gray-400">
+                          {stage.inputCount.toLocaleString()} → {stage.outputCount.toLocaleString()}
+                          {removed > 0 && (
+                            <span className="text-red-400 ml-1">(-{removed.toLocaleString()})</span>
+                          )}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
             {previewState.status === 'running' && (
               <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
                 <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">

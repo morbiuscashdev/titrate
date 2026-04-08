@@ -4,7 +4,7 @@ import { SetOperationsPanel } from '../components/SetOperationsPanel.js';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
 import { useChain } from '../providers/ChainProvider.js';
-import { parseCSV, createPipeline } from '@titrate/sdk';
+import { parseCSV, createPipeline, resolveBlockRef } from '@titrate/sdk';
 import type { Address } from 'viem';
 import type { CSVRow, SourceType } from '@titrate/sdk';
 
@@ -133,6 +133,14 @@ export function AddressesStep() {
       const pipeline = createPipeline();
 
       const params: Record<string, unknown> = { ...sourceParams };
+
+      // Resolve date-string block refs (YYYY-MM-DD → block number)
+      if (params.startBlock && typeof params.startBlock === 'string' && params.startBlock.trim()) {
+        params.startBlock = String(await resolveBlockRef(params.startBlock as string, publicClient));
+      }
+      if (params.endBlock && typeof params.endBlock === 'string' && params.endBlock.trim()) {
+        params.endBlock = String(await resolveBlockRef(params.endBlock as string, publicClient));
+      }
       if (sourceType === 'explorer-scan' && chainConfig) {
         params.explorerApiUrl = chainConfig.explorerApiUrl;
         params.apiKey = chainConfig.explorerApiKey;
@@ -310,7 +318,7 @@ export function AddressesStep() {
                         type="text"
                         value={sourceParams.startBlock ?? ''}
                         onChange={(e) => setSourceParams((p) => ({ ...p, startBlock: e.target.value }))}
-                        placeholder="0"
+                        placeholder="0 or 2024-01-15"
                         className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none"
                       />
                     </div>
@@ -320,11 +328,12 @@ export function AddressesStep() {
                         type="text"
                         value={sourceParams.endBlock ?? ''}
                         onChange={(e) => setSourceParams((p) => ({ ...p, endBlock: e.target.value }))}
-                        placeholder="latest"
+                        placeholder="latest or 2024-06-01"
                         className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none"
                       />
                     </div>
                   </div>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">Accepts block numbers or dates (YYYY-MM-DD).</p>
                 </div>
               )}
 

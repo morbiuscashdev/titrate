@@ -1,6 +1,29 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AmountsStep, canSubmitAmounts } from './AmountsStep.js';
+import { AmountsStep, canSubmitAmounts, detectFormatConflict } from './AmountsStep.js';
+
+const mockAddressSets = {
+  getByCampaign: vi.fn().mockResolvedValue([]),
+};
+const mockAddresses = {
+  getBySet: vi.fn().mockResolvedValue([]),
+};
+
+vi.mock('../providers/StorageProvider.js', () => ({
+  useStorage: () => ({
+    storage: {
+      addressSets: mockAddressSets,
+      addresses: mockAddresses,
+    },
+    isUnlocked: false,
+    unlock: vi.fn(),
+  }),
+}));
+
+vi.mock('@titrate/sdk', () => ({
+  detectAmountFormat: (values: string[]) =>
+    values.some((v: string) => v.includes('.')) ? 'decimal' : 'integer',
+}));
 
 const mockSaveCampaign = vi.fn().mockResolvedValue(undefined);
 const mockSetActiveStep = vi.fn();
@@ -232,5 +255,25 @@ describe('canSubmitAmounts', () => {
 
   it('returns true for uniform mode with non-empty amount', () => {
     expect(canSubmitAmounts('uniform', '1000')).toBe(true);
+  });
+});
+
+describe('detectFormatConflict', () => {
+  it('returns null for empty amounts', () => {
+    expect(detectFormatConflict([], 'integer')).toBeNull();
+  });
+
+  it('returns null when format matches detected', () => {
+    expect(detectFormatConflict(['100', '200'], 'integer')).toBeNull();
+  });
+
+  it('returns warning when integer mode has decimal values', () => {
+    const result = detectFormatConflict(['100.5', '200.3'], 'integer');
+    expect(result).toContain('decimal');
+    expect(result).toContain('truncated');
+  });
+
+  it('returns null for decimal mode with decimal values', () => {
+    expect(detectFormatConflict(['100.5', '200.3'], 'decimal')).toBeNull();
   });
 });
