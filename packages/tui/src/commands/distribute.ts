@@ -1,8 +1,11 @@
 import { readFile } from 'node:fs/promises';
 import { Command } from 'commander';
 import type { Address, Hex } from 'viem';
-import { disperseTokens, disperseTokensSimple, parseCSV, serializeBatchResults, parseGwei } from '@titrate/sdk';
+import { disperseTokens, disperseTokensSimple, disperseParallel, parseCSV, serializeBatchResults, parseGwei, createEIP712Message, deriveMultipleWallets } from '@titrate/sdk';
 import type { BatchResult, GasConfig, GasSpeed, RevalidationConfig } from '@titrate/sdk';
+import { privateKeyToAccount } from 'viem/accounts';
+import { createWalletClient, http } from 'viem';
+import type { WalletClient } from 'viem';
 import { createRpcClient } from '../utils/rpc.js';
 import { createSignerClient, resolvePrivateKey } from '../utils/wallet.js';
 import { createProgressRenderer } from '../progress/renderer.js';
@@ -39,6 +42,9 @@ export function registerDistribute(program: Command): void {
     .option('--nonce-window --nonceWindow <count>', 'Number of batches to pipeline before waiting (1-10, default: 1)', parseInt)
     .option('--revalidation', 'Enable block-by-block revalidation of pending batches (requires live filter)')
     .option('--revalidation-threshold --revalidationThreshold <count>', 'Invalidation threshold for revalidation (default: 2)', parseInt)
+    .option('--wallets <count>', 'Number of derived hot wallets for parallel distribution', parseInt)
+    .option('--wallet-offset --walletOffset <number>', 'Starting index offset for wallet derivation (default: 0)', parseInt)
+    .option('--campaign-name --campaignName <name>', 'Campaign name for EIP-712 wallet derivation')
     .action(async (opts: {
       contract: string;
       token: string;
@@ -61,6 +67,9 @@ export function registerDistribute(program: Command): void {
       nonceWindow?: number;
       revalidation?: boolean;
       revalidationThreshold?: number;
+      wallets?: number;
+      walletOffset?: number;
+      campaignName?: string;
     }) => {
       const privateKey = resolvePrivateKey(opts.privateKey);
       const publicClient = createRpcClient(opts.rpc, opts.chainId);
@@ -94,6 +103,63 @@ export function registerDistribute(program: Command): void {
         ? { invalidThreshold: opts.revalidationThreshold ?? 2 }
         : undefined;
 
+      // ── Multi-wallet parallel path ──────────────────────────────────
+      if (opts.wallets && opts.wallets > 1) {
+        if (!opts.campaignName) {
+          throw new Error('--campaign-name is required when using --wallets');
+        }
+
+        const account = privateKeyToAccount(privateKey);
+        const typedData = createEIP712Message({
+          funder: account.address,
+          name: opts.campaignName,
+          version: 1,
+        });
+        const signature = await account.signTypedData({
+          domain: typedData.domain,
+          types: typedData.types,
+          primaryType: typedData.primaryType,
+          message: typedData.message,
+        });
+
+        const walletOffset = opts.walletOffset ?? 0;
+        const derived = deriveMultipleWallets({
+          signature: signature as Hex,
+          count: opts.wallets,
+          offset: walletOffset,
+        });
+
+        const walletClients: WalletClient[] = derived.map((w) =>
+          createWalletClient({
+            account: privateKeyToAccount(w.privateKey as Hex),
+            transport: http(opts.rpc),
+          }),
+        );
+
+        const parallelResults = await disperseParallel({
+          contractAddress,
+          variant: opts.variant,
+          token: tokenAddress,
+          recipients,
+          ...(opts.amount ? { amount: BigInt(opts.amount) } : { amounts: parsed.rows.map((r) => BigInt(r.amount ?? '0')) }),
+          walletClients,
+          publicClient,
+          batchSize,
+          onProgress,
+          gasConfig,
+          ...(nonceWindow !== undefined && { nonceWindow }),
+        });
+
+        const serialized = parallelResults.map((pr) => ({
+          walletIndex: pr.walletIndex,
+          walletAddress: pr.walletAddress,
+          results: serializeBatchResults([...pr.results]),
+        }));
+        console.log(JSON.stringify(serialized, null, 2));
+        return;
+      }
+
+      // ── Single-wallet path ────────────────────────────────────────
       let results: BatchResult[];
 
       if (opts.amount) {

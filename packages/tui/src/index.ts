@@ -7,6 +7,7 @@ import { registerDistribute } from './commands/distribute.js';
 import { registerFilterPreview } from './commands/filter-preview.js';
 import { registerRun } from './commands/run.js';
 import { registerSetOperations } from './commands/set-operations.js';
+import { registerSweep } from './commands/sweep.js';
 import { runWizard } from './interactive/wizard.js';
 
 const program = new Command();
@@ -31,6 +32,7 @@ registerDistribute(program);
 registerFilterPreview(program);
 registerRun(program);
 registerSetOperations(program);
+registerSweep(program);
 
 // Explicit `wizard` alias so it can also be invoked as `titrate wizard`
 program

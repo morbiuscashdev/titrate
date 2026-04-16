@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import type { Address, Hex } from 'viem';
-import { createEIP712Message, deriveHotWallet } from '@titrate/sdk';
+import { createEIP712Message, deriveHotWallet, deriveMultipleWallets } from '@titrate/sdk';
 import { resolvePrivateKey } from '../utils/wallet.js';
 import { privateKeyToAccount } from 'viem/accounts';
 
@@ -18,11 +18,15 @@ export function registerDeriveWallet(program: Command): void {
     .requiredOption('--name <name>', 'Campaign name')
     .option('--version <number>', 'Campaign version', '1')
     .option('--cold-key --coldKey <key>', 'Cold wallet private key (or set TITRATE_PRIVATE_KEY)')
+    .option('--count <number>', 'Number of wallets to derive (default: 1)', parseInt)
+    .option('--offset <number>', 'Starting index offset for derivation (default: 0)', parseInt)
     .action(async (opts: {
       funder: string;
       name: string;
       version: string;
       coldKey?: string;
+      count?: number;
+      offset?: number;
     }) => {
       const coldKey = resolvePrivateKey(opts.coldKey);
       const account = privateKeyToAccount(coldKey);
@@ -40,17 +44,18 @@ export function registerDeriveWallet(program: Command): void {
         message: typedData.message,
       });
 
-      const derived = deriveHotWallet(signature as Hex);
+      const count = opts.count ?? 1;
+      const offset = opts.offset ?? 0;
 
-      console.log(
-        JSON.stringify(
-          {
-            hotAddress: derived.address,
-            privateKey: derived.privateKey,
-          },
-          null,
-          2,
-        ),
-      );
+      if (count <= 1 && offset === 0) {
+        const derived = deriveHotWallet(signature as Hex);
+        console.log(JSON.stringify({ hotAddress: derived.address, privateKey: derived.privateKey }, null, 2));
+      } else {
+        const wallets = deriveMultipleWallets({ signature: signature as Hex, count, offset });
+        console.log(JSON.stringify(
+          wallets.map((w, i) => ({ index: offset + i, hotAddress: w.address, privateKey: w.privateKey })),
+          null, 2,
+        ));
+      }
     });
 }
