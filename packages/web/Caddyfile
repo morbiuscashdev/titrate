@@ -1,0 +1,33 @@
+:{$PORT} {
+	root * /srv
+	file_server
+
+	# SPA fallback — all unmatched paths serve index.html
+	try_files {path} /index.html
+
+	# Security headers
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-Server
+	}
+
+	# Hashed assets — immutable, long cache
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+
+	# PWA icons — cache but revalidate
+	@icons path /pwa-*.png /icon.svg
+	header @icons Cache-Control "public, max-age=86400"
+
+	# Service worker and manifest — always revalidate
+	@sw path /sw.js /workbox-*.js /manifest.webmanifest
+	header @sw Cache-Control "no-cache"
+
+	# index.html — always revalidate
+	@html path /
+	header @html Cache-Control "no-cache"
+}
