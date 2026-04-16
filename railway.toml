@@ -1,0 +1,6 @@
+[build]
+dockerfilePath = "packages/web/Dockerfile"
+
+[deploy]
+healthcheckPath = "/"
+healthcheckTimeout = 10
