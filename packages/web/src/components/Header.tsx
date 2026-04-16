@@ -18,7 +18,9 @@ export type HeaderProps = {
 export function Header({ children }: HeaderProps) {
   return (
     <header className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-4 py-3">
-      <a href="/" className="text-lg font-semibold text-gray-900 dark:text-white hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-md">
+      <a href="/" className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-md">
+        <img src="/icon-light.svg" alt="" className="h-6 w-6 dark:hidden" />
+        <img src="/icon.svg" alt="" className="h-6 w-6 hidden dark:block" />
         Titrate
       </a>
       <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
