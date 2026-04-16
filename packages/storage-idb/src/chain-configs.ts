@@ -1,5 +1,5 @@
-import type { IDBPDatabase } from 'idb';
 import type { ChainConfigStore, StoredChainConfig } from '@titrate/sdk';
+import type { TitrateDB } from './db.js';
 
 const STORE = 'chainConfigs';
 
@@ -7,10 +7,10 @@ const STORE = 'chainConfigs';
  * Creates a ChainConfigStore backed by the 'chainConfigs' object store in IDB.
  * Keyed by `id`; `getByChainId` does a full-scan filter on the numeric chainId.
  *
- * @param db - Open IDBPDatabase handle
+ * @param db - Open TitrateDB handle
  * @returns ChainConfigStore implementation
  */
-export function createChainConfigStore(db: IDBPDatabase): ChainConfigStore {
+export function createChainConfigStore(db: TitrateDB): ChainConfigStore {
   async function get(id: string): Promise<StoredChainConfig | null> {
     return (await db.get(STORE, id)) ?? null;
   }
