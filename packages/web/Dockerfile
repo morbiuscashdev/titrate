@@ -4,6 +4,9 @@ WORKDIR /app
 # Enable corepack for Yarn version pinning
 RUN corepack enable
 
+# Ensure devDependencies are installed (needed for vite, tsc, etc.)
+ENV NODE_ENV=development
+
 # Copy workspace root files and ALL workspace package.json files
 # (Yarn resolves the full workspace graph — missing packages modify the lockfile)
 COPY package.json yarn.lock .yarnrc.yml ./
