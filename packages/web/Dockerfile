@@ -27,11 +27,11 @@ COPY packages/web packages/web
 COPY tsconfig.base.json ./
 
 # Build SDK and storage-idb first (web depends on them)
-RUN yarn workspace @titrate/sdk build && \
-    yarn workspace @titrate/storage-idb build
+RUN cd packages/sdk && yarn run build
+RUN cd packages/storage-idb && yarn run build
 
 # Build web app
-RUN yarn workspace @titrate/web build
+RUN cd packages/web && yarn run build
 
 # Serve with Caddy
 FROM caddy:2-alpine
