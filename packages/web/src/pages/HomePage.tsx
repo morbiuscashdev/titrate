@@ -11,14 +11,15 @@ import { useStorage } from '../providers/StorageProvider.js';
 import { getChainConfig } from '@titrate/sdk';
 
 /** Derive a display status from campaign data and batch progress. */
-function deriveCampaignStatus(
+export function deriveCampaignStatus(
   campaign: { readonly chainId: number; readonly tokenAddress: string },
-  stats?: { completedBatches: number; totalBatches: number },
-): 'draft' | 'ready' | 'distributing' | 'complete' {
+  stats?: { completedBatches: number; totalBatches: number; failedBatches: number },
+): 'draft' | 'ready' | 'distributing' | 'complete' | 'resumable' {
   const ZERO = '0x0000000000000000000000000000000000000000';
   if (campaign.chainId === 0 || campaign.tokenAddress === ZERO) return 'draft';
   if (!stats || stats.totalBatches === 0) return 'ready';
   if (stats.completedBatches >= stats.totalBatches) return 'complete';
+  if (stats.failedBatches > 0 || stats.completedBatches > 0) return 'resumable';
   return 'distributing';
 }
 
@@ -59,11 +60,11 @@ export function HomePage() {
     : campaigns.filter((c) => !c.archived);
 
   // Load address counts and batch progress per campaign
-  const [campaignStats, setCampaignStats] = useState<Record<string, { addresses: number; completedBatches: number; totalBatches: number }>>({});
+  const [campaignStats, setCampaignStats] = useState<Record<string, { addresses: number; completedBatches: number; totalBatches: number; failedBatches: number }>>({});
   useEffect(() => {
     if (!storage || campaigns.length === 0) return;
     void (async () => {
-      const stats: Record<string, { addresses: number; completedBatches: number; totalBatches: number }> = {};
+      const stats: Record<string, { addresses: number; completedBatches: number; totalBatches: number; failedBatches: number }> = {};
       for (const campaign of campaigns) {
         const sets = await storage.addressSets.getByCampaign(campaign.id);
         const addresses = sets
@@ -74,6 +75,7 @@ export function HomePage() {
           addresses,
           completedBatches: batches.filter((b) => b.status === 'confirmed').length,
           totalBatches: batches.length,
+          failedBatches: batches.filter((b) => b.status === 'failed').length,
         };
       }
       setCampaignStats(stats);

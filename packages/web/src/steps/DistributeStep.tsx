@@ -59,11 +59,19 @@ export function clampBatchSizeForGas(params: {
  * @param amountMode - 'uniform' uses disperseSimple, 'variable' uses disperse
  * @returns The 4-byte function selector as a Hex string
  */
-export function getDisperseSelector(amountMode: 'uniform' | 'variable'): Hex {
-  if (amountMode === 'uniform') {
-    return toFunctionSelector('disperseSimple(address,address,address[],uint256,bytes32)');
+export type DisperseSelectorOption = 'auto' | 'disperse' | 'disperseSimple' | 'disperseCall';
+
+const DISPERSE_SELECTOR = toFunctionSelector('disperse(address,address,address[],uint256[],bytes32)');
+const DISPERSE_SIMPLE_SELECTOR = toFunctionSelector('disperseSimple(address,address,address[],uint256,bytes32)');
+const DISPERSE_CALL_SELECTOR = toFunctionSelector('disperseCall(address,address,address[],uint256[],bytes32,bytes)');
+
+export function getDisperseSelector(amountMode: 'uniform' | 'variable', override?: DisperseSelectorOption): Hex {
+  if (override && override !== 'auto') {
+    if (override === 'disperseSimple') return DISPERSE_SIMPLE_SELECTOR;
+    if (override === 'disperseCall') return DISPERSE_CALL_SELECTOR;
+    return DISPERSE_SELECTOR;
   }
-  return toFunctionSelector('disperse(address,address,address[],uint256[],bytes32)');
+  return amountMode === 'uniform' ? DISPERSE_SIMPLE_SELECTOR : DISPERSE_SELECTOR;
 }
 
 /** Distribution workflow phase. */
@@ -181,6 +189,7 @@ export function DistributeStep() {
     readonly estimatedRemainingMs: number;
   } | null>(null);
   const [pipelineConfig, setPipelineConfig] = useState<PipelineConfig | null>(null);
+  const [selectorOverride, setSelectorOverride] = useState<DisperseSelectorOption>('auto');
   const [sweepAddress, setSweepAddress] = useState<string>('');
   const [sweepState, setSweepState] = useState<{
     readonly status: 'idle' | 'sweeping' | 'done' | 'error';
@@ -509,7 +518,7 @@ export function DistributeStep() {
                 await publicClient.waitForTransactionReceipt({ hash: approveHash });
               }
             } else {
-              const selector = getDisperseSelector(activeCampaign.amountMode);
+              const selector = getDisperseSelector(activeCampaign.amountMode, selectorOverride);
               const currentAllowance = await getAllowance({
                 contractAddress,
                 owner: client.account!.address,
@@ -552,7 +561,7 @@ export function DistributeStep() {
           }
         } else {
           // Full variant: selector-scoped approve on the Titrate contract
-          const selector = getDisperseSelector(activeCampaign.amountMode);
+          const selector = getDisperseSelector(activeCampaign.amountMode, selectorOverride);
 
           const currentAllowance = await getAllowance({
             contractAddress,
@@ -1023,6 +1032,31 @@ export function DistributeStep() {
               <GasConfigPanel config={gasConfig} onChange={setGasConfig} />
 
               <InterventionControls enabledPoints={enabledPoints} onChange={setEnabledPoints} />
+
+              {activeCampaign.contractVariant === 'full' && (
+                <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800 space-y-2">
+                  <label className="text-sm font-medium text-gray-600 dark:text-gray-300 block">Operator Method Selector</label>
+                  <div className="flex flex-wrap gap-2">
+                    {(['auto', 'disperseSimple', 'disperse', 'disperseCall'] as const).map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setSelectorOverride(opt)}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
+                          selectorOverride === opt
+                            ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30'
+                            : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-700'
+                        }`}
+                      >
+                        {opt === 'auto' ? `Auto (${activeCampaign.amountMode === 'uniform' ? 'disperseSimple' : 'disperse'})` : opt}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    Controls which function the hot wallet is approved to call on the TitrateFull contract.
+                  </p>
+                </div>
+              )}
 
               {wasClamped && (
                 <div className="rounded-md bg-yellow-900/20 p-3 text-sm text-yellow-600 dark:text-yellow-400">

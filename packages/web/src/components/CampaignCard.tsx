@@ -6,7 +6,7 @@ export type CampaignCardProps = {
   readonly tokenSymbol: string;
   readonly addressCount: number;
   readonly batchProgress: { readonly completed: number; readonly total: number };
-  readonly status: 'draft' | 'ready' | 'distributing' | 'complete';
+  readonly status: 'draft' | 'ready' | 'distributing' | 'complete' | 'resumable';
   readonly onClick?: () => void;
 };
 
@@ -14,6 +14,7 @@ const statusMap: Record<CampaignCardProps['status'], 'pending' | 'active' | 'com
   draft: 'pending',
   ready: 'active',
   distributing: 'active',
+  resumable: 'error',
   complete: 'complete',
 };
 
