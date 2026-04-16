@@ -10,13 +10,15 @@ import { ChainProvider } from './providers/ChainProvider.js';
 import { CampaignProvider, useCampaign } from './providers/CampaignProvider.js';
 import { InterventionProvider } from './providers/InterventionProvider.js';
 import { InterventionModal } from './components/InterventionModal.js';
+import { ReloadPrompt } from './components/ReloadPrompt.js';
 import { useWallet } from './providers/WalletProvider.js';
 import { Header } from './components/Header.js';
 import { WalletBadge } from './components/WalletBadge.js';
 import type { ReactNode } from 'react';
 import type { StoredChainConfig } from '@titrate/sdk';
 
-const HomePage = lazy(() => import('./pages/HomePage.js').then(m => ({ default: m.HomePage })));
+const LandingPage = lazy(() => import('./pages/LandingPage.js').then(m => ({ default: m.LandingPage })));
+const DashboardPage = lazy(() => import('./pages/HomePage.js').then(m => ({ default: m.HomePage })));
 const CampaignPage = lazy(() => import('./pages/CampaignPage.js').then(m => ({ default: m.CampaignPage })));
 const SettingsPage = lazy(() => import('./pages/SettingsPage.js').then(m => ({ default: m.SettingsPage })));
 
@@ -69,6 +71,7 @@ export function App() {
             <CampaignProvider>
               <InterventionProvider>
               <InterventionModal />
+              <ReloadPrompt />
               <ChainBridge>
                 <BrowserRouter>
                   <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-blue-600 focus:px-4 focus:py-2 focus:text-white">
@@ -80,7 +83,8 @@ export function App() {
                   <div id="main-content">
                   <Suspense fallback={<div className="flex items-center justify-center min-h-[50vh]"><p className="text-sm text-gray-400">Loading...</p></div>}>
                   <Routes>
-                    <Route path="/" element={<HomePage />} />
+                    <Route path="/" element={<LandingPage />} />
+                    <Route path="/dashboard" element={<DashboardPage />} />
                     <Route path="/campaign/:id" element={<CampaignPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                     <Route path="*" element={<Navigate to="/" replace />} />
