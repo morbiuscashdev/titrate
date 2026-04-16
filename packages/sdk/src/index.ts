@@ -12,13 +12,14 @@ export type {
   ProgressCallback,
   CSVRow,
   AmountFormat,
+  ChainCategory,
   ChainConfig,
   CallData,
   ContractArtifact,
 } from './types.js';
 
 // Chains
-export { SUPPORTED_CHAINS, getChainConfig, getExplorerApiUrl } from './chains/index.js';
+export { SUPPORTED_CHAINS, getChains, getChainConfig, getExplorerApiUrl } from './chains/index.js';
 
 // CSV
 export { parseCSV, detectAmountFormat, validateAddresses, deduplicateAddresses, flagConflicts } from './csv/index.js';

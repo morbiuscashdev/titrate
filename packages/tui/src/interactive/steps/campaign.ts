@@ -1,7 +1,8 @@
 import { text, select, isCancel } from '@clack/prompts';
 import type { PublicClient } from 'viem';
 import type { Storage } from '@titrate/sdk';
-import { SUPPORTED_CHAINS, probeToken } from '@titrate/sdk';
+import { getChains, probeToken } from '@titrate/sdk';
+import type { ChainCategory } from '@titrate/sdk';
 import { createRpcClient } from '../../utils/rpc.js';
 
 /** The result of Step 1: Campaign Setup. */
@@ -68,25 +69,24 @@ export async function campaignStep(
     // Storage not initialized yet — that's fine, proceed normally
   }
 
-  // --- Chain selection ---
-  const chainOptions = [
-    ...SUPPORTED_CHAINS.map((c) => ({
-      value: String(c.chainId),
-      label: `${c.name} (${c.chainId})`,
-    })),
+  // --- Chain category ---
+  const categoryOptions: { value: ChainCategory | 'custom'; label: string }[] = [
+    { value: 'mainnet', label: 'Mainnets' },
+    { value: 'testnet', label: 'Testnets' },
+    ...(getChains('devnet').length > 0 ? [{ value: 'devnet' as const, label: 'Devnets' }] : []),
     { value: 'custom', label: 'Custom RPC' },
   ];
 
-  const chainSelection = await select({
-    message: 'Select chain',
-    options: chainOptions,
+  const categorySelection = await select({
+    message: 'Chain type',
+    options: categoryOptions,
   });
-  if (isCancel(chainSelection)) return chainSelection;
+  if (isCancel(categorySelection)) return categorySelection;
 
   let chainId: number;
   let rpcUrl: string;
 
-  if (chainSelection === 'custom') {
+  if (categorySelection === 'custom') {
     const customRpc = await text({
       message: 'RPC URL',
       placeholder: 'https://my-rpc.example.com',
@@ -114,8 +114,20 @@ export async function campaignStep(
     rpcUrl = customRpc as string;
     chainId = Number(customChainId as string);
   } else {
+    const chains = getChains(categorySelection);
+    const chainOptions = chains.map((c) => ({
+      value: String(c.chainId),
+      label: `${c.name} (${c.chainId})`,
+    }));
+
+    const chainSelection = await select({
+      message: 'Select chain',
+      options: chainOptions,
+    });
+    if (isCancel(chainSelection)) return chainSelection;
+
     chainId = Number(chainSelection);
-    const chain = SUPPORTED_CHAINS.find((c) => c.chainId === chainId)!;
+    const chain = chains.find((c) => c.chainId === chainId)!;
     rpcUrl = chain.rpcUrls[0];
   }
 
@@ -141,7 +153,7 @@ export async function campaignStep(
   const tokenVal = (tokenInput as string).trim().toLowerCase();
 
   if (tokenVal === NATIVE_SENTINEL) {
-    const chain = SUPPORTED_CHAINS.find((c) => c.chainId === chainId);
+    const chain = getChains().find((c) => c.chainId === chainId);
     tokenAddress = '0x0000000000000000000000000000000000000000';
     tokenSymbol = chain?.nativeSymbol ?? 'ETH';
     tokenDecimals = chain?.nativeDecimals ?? 18;

@@ -5,7 +5,7 @@ import { useUnlockStorage } from '../hooks/useUnlockStorage.js';
 import { EncryptedField } from '../components/EncryptedField.js';
 import { ChainSelector } from '../components/ChainSelector.js';
 import { Skeleton } from '../components/Skeleton.js';
-import { SUPPORTED_CHAINS } from '@titrate/sdk';
+import { getChains } from '@titrate/sdk';
 import type { StoredChainConfig, StoredCampaign } from '@titrate/sdk';
 
 /** Empty form state for the chain config form. */
@@ -74,7 +74,7 @@ export function SettingsPage() {
   );
 
   const handlePresetSelect = useCallback((chainId: number) => {
-    const preset = SUPPORTED_CHAINS.find((c) => c.chainId === chainId);
+    const preset = getChains().find((c) => c.chainId === chainId);
     if (!preset) return;
 
     setForm({
@@ -167,7 +167,7 @@ export function SettingsPage() {
           <div className="mb-4">
             <label className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Chain Preset</label>
             <ChainSelector
-              chains={SUPPORTED_CHAINS}
+              chains={getChains()}
               selectedChainId={form.selectedChainId}
               onSelect={handlePresetSelect}
             />

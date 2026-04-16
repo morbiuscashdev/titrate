@@ -77,9 +77,12 @@ export type CSVRow = {
 
 export type AmountFormat = 'integer' | 'decimal';
 
+export type ChainCategory = 'mainnet' | 'testnet' | 'devnet';
+
 export type ChainConfig = {
   readonly chainId: number;
   readonly name: string;
+  readonly category: ChainCategory;
   readonly rpcUrls: readonly string[];
   readonly explorerUrl: string;
   readonly explorerApiUrl: string;

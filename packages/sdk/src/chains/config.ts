@@ -1,9 +1,11 @@
 import type { ChainConfig } from '../types.js';
 
 export const SUPPORTED_CHAINS: readonly ChainConfig[] = [
+  // ── Mainnets ──────────────────────────────────────────────
   {
     chainId: 1,
     name: 'Ethereum',
+    category: 'mainnet',
     rpcUrls: ['https://eth.llamarpc.com', 'https://rpc.ankr.com/eth'],
     explorerUrl: 'https://etherscan.io',
     explorerApiUrl: 'https://api.etherscan.io/api',
@@ -13,6 +15,7 @@ export const SUPPORTED_CHAINS: readonly ChainConfig[] = [
   {
     chainId: 369,
     name: 'PulseChain',
+    category: 'mainnet',
     rpcUrls: ['https://rpc.pulsechain.com', 'https://pulsechain-rpc.publicnode.com'],
     explorerUrl: 'https://scan.pulsechain.com',
     explorerApiUrl: 'https://api.scan.pulsechain.com/api',
@@ -22,6 +25,7 @@ export const SUPPORTED_CHAINS: readonly ChainConfig[] = [
   {
     chainId: 8453,
     name: 'Base',
+    category: 'mainnet',
     rpcUrls: ['https://mainnet.base.org', 'https://base.llamarpc.com'],
     explorerUrl: 'https://basescan.org',
     explorerApiUrl: 'https://api.basescan.org/api',
@@ -31,9 +35,52 @@ export const SUPPORTED_CHAINS: readonly ChainConfig[] = [
   {
     chainId: 42161,
     name: 'Arbitrum One',
+    category: 'mainnet',
     rpcUrls: ['https://arb1.arbitrum.io/rpc', 'https://arbitrum.llamarpc.com'],
     explorerUrl: 'https://arbiscan.io',
     explorerApiUrl: 'https://api.arbiscan.io/api',
+    nativeSymbol: 'ETH',
+    nativeDecimals: 18,
+  },
+
+  // ── Testnets ──────────────────────────────────────────────
+  {
+    chainId: 11155111,
+    name: 'Sepolia',
+    category: 'testnet',
+    rpcUrls: ['https://rpc.sepolia.org', 'https://sepolia.drpc.org'],
+    explorerUrl: 'https://sepolia.etherscan.io',
+    explorerApiUrl: 'https://api-sepolia.etherscan.io/api',
+    nativeSymbol: 'ETH',
+    nativeDecimals: 18,
+  },
+  {
+    chainId: 943,
+    name: 'PulseChain Testnet v4',
+    category: 'testnet',
+    rpcUrls: ['https://rpc.v4.testnet.pulsechain.com', 'https://pulsechain-testnet-rpc.publicnode.com'],
+    explorerUrl: 'https://scan.v4.testnet.pulsechain.com',
+    explorerApiUrl: 'https://api.scan.v4.testnet.pulsechain.com/api',
+    nativeSymbol: 'tPLS',
+    nativeDecimals: 18,
+  },
+  {
+    chainId: 84532,
+    name: 'Base Sepolia',
+    category: 'testnet',
+    rpcUrls: ['https://sepolia.base.org'],
+    explorerUrl: 'https://sepolia.basescan.org',
+    explorerApiUrl: 'https://api-sepolia.basescan.org/api',
+    nativeSymbol: 'ETH',
+    nativeDecimals: 18,
+  },
+  {
+    chainId: 421614,
+    name: 'Arbitrum Sepolia',
+    category: 'testnet',
+    rpcUrls: ['https://sepolia-rollup.arbitrum.io/rpc'],
+    explorerUrl: 'https://sepolia.arbiscan.io',
+    explorerApiUrl: 'https://api-sepolia.arbiscan.io/api',
     nativeSymbol: 'ETH',
     nativeDecimals: 18,
   },

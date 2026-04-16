@@ -4,7 +4,8 @@ import { ChainSelector } from '../components/ChainSelector.js';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
 import { useTokenMetadata } from '../hooks/useTokenMetadata.js';
-import { SUPPORTED_CHAINS, getChainConfig } from '@titrate/sdk';
+import { getChains, getChainConfig } from '@titrate/sdk';
+import type { ChainCategory } from '@titrate/sdk';
 import { keccak256, toHex } from 'viem';
 import type { Address, Hex } from 'viem';
 import type { StoredCampaign } from '@titrate/sdk';
@@ -12,10 +13,11 @@ import type { StoredCampaign } from '@titrate/sdk';
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address;
 const ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
 
-const chainOptions = SUPPORTED_CHAINS.map((c) => ({
-  chainId: c.chainId,
-  name: c.name,
-}));
+const CHAIN_CATEGORIES: readonly { readonly value: ChainCategory; readonly label: string; readonly key: string }[] = [
+  { value: 'mainnet', label: 'Mainnets', key: 'm' },
+  { value: 'testnet', label: 'Testnets', key: 't' },
+  { value: 'devnet', label: 'Devnets', key: 'd' },
+] as const;
 
 type ContractVariant = 'simple' | 'full';
 
@@ -54,6 +56,7 @@ export function CampaignStep() {
   const [campaignName, setCampaignName] = useState('');
   const [batchSize, setBatchSize] = useState(100);
   const [isSaving, setIsSaving] = useState(false);
+  const [chainCategory, setChainCategory] = useState<ChainCategory>('mainnet');
   const [isCustomChain, setIsCustomChain] = useState(false);
   const [customChainName, setCustomChainName] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -196,8 +199,28 @@ export function CampaignStep() {
         {/* Chain Selection */}
         <div>
           <label className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Chain</label>
+          <div className="flex gap-1 mb-3">
+            {CHAIN_CATEGORIES.map((cat) => {
+              const count = getChains(cat.value).length;
+              if (count === 0) return null;
+              return (
+                <button
+                  key={cat.value}
+                  type="button"
+                  onClick={() => setChainCategory(cat.value)}
+                  className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
+                    chainCategory === cat.value
+                      ? 'bg-blue-500/10 text-blue-400'
+                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              );
+            })}
+          </div>
           <ChainSelector
-            chains={chainOptions}
+            chains={getChains(chainCategory).map((c) => ({ chainId: c.chainId, name: c.name }))}
             selectedChainId={isCustomChain ? null : chainId}
             onSelect={handleChainSelect}
           />

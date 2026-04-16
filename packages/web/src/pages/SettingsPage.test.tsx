@@ -37,12 +37,16 @@ vi.mock('../providers/CampaignProvider.js', () => ({
   }),
 }));
 
-vi.mock('@titrate/sdk', () => ({
-  SUPPORTED_CHAINS: [
-    { chainId: 1, name: 'Ethereum', rpcUrls: ['https://eth.llamarpc.com'], explorerApiUrl: 'https://api.etherscan.io/api' },
-    { chainId: 369, name: 'PulseChain', rpcUrls: ['https://rpc.pulsechain.com'] },
-  ],
-}));
+vi.mock('@titrate/sdk', () => {
+  const chains = [
+    { chainId: 1, name: 'Ethereum', category: 'mainnet', rpcUrls: ['https://eth.llamarpc.com'], explorerApiUrl: 'https://api.etherscan.io/api' },
+    { chainId: 369, name: 'PulseChain', category: 'mainnet', rpcUrls: ['https://rpc.pulsechain.com'] },
+  ];
+  return {
+    SUPPORTED_CHAINS: chains,
+    getChains: (category?: string) => category ? chains.filter((c: { category: string }) => c.category === category) : chains,
+  };
+});
 
 import { SettingsPage } from './SettingsPage.js';
 

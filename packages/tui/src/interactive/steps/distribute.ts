@@ -125,8 +125,8 @@ export async function distributeStep(
   const totalAmount = amounts.totalAmount;
 
   // Find chain name for display
-  const { SUPPORTED_CHAINS } = await import('@titrate/sdk');
-  const chain = SUPPORTED_CHAINS.find((c) => c.chainId === chainId);
+  const { getChainConfig } = await import('@titrate/sdk');
+  const chain = getChainConfig(chainId);
   const chainName = chain?.name ?? `Chain ${chainId}`;
 
   // Determine campaign ID — use existing if resuming, otherwise derive from name

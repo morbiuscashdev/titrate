@@ -41,19 +41,17 @@ vi.mock('../hooks/useTokenMetadata.js', () => ({
   useTokenMetadata: () => tokenMetadataMock,
 }));
 
-vi.mock('@titrate/sdk', () => ({
-  SUPPORTED_CHAINS: [
-    { chainId: 1, name: 'Ethereum', rpcUrls: ['https://eth.llamarpc.com'] },
-    { chainId: 369, name: 'PulseChain', rpcUrls: ['https://rpc.pulsechain.com'] },
-  ],
-  getChainConfig: (chainId: number) => {
-    const chains: Record<number, { chainId: number; rpcUrls: string[] }> = {
-      1: { chainId: 1, rpcUrls: ['https://eth.llamarpc.com'] },
-      369: { chainId: 369, rpcUrls: ['https://rpc.pulsechain.com'] },
-    };
-    return chains[chainId] ?? null;
-  },
-}));
+vi.mock('@titrate/sdk', () => {
+  const chains = [
+    { chainId: 1, name: 'Ethereum', category: 'mainnet', rpcUrls: ['https://eth.llamarpc.com'] },
+    { chainId: 369, name: 'PulseChain', category: 'mainnet', rpcUrls: ['https://rpc.pulsechain.com'] },
+  ];
+  return {
+    SUPPORTED_CHAINS: chains,
+    getChains: (category?: string) => category ? chains.filter((c: { category: string }) => c.category === category) : chains,
+    getChainConfig: (chainId: number) => chains.find((c: { chainId: number }) => c.chainId === chainId) ?? null,
+  };
+});
 
 describe('CampaignStep', () => {
   beforeEach(() => {
