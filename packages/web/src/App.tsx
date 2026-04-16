@@ -12,6 +12,7 @@ import { InterventionProvider } from './providers/InterventionProvider.js';
 import { InterventionModal } from './components/InterventionModal.js';
 import { ReloadPrompt } from './components/ReloadPrompt.js';
 import { useWallet } from './providers/WalletProvider.js';
+import { useAppKit } from '@reown/appkit/react';
 import { Header } from './components/Header.js';
 import { WalletBadge } from './components/WalletBadge.js';
 import type { ReactNode } from 'react';
@@ -47,9 +48,18 @@ function ChainBridge({ children }: { readonly children: ReactNode }) {
 /** Renders wallet connection UI in the header. */
 function HeaderWalletBadge() {
   const { isConnected, address, chainId } = useWallet();
+  const { open } = useAppKit();
 
   if (!isConnected || !address) {
-    return <appkit-button size="sm" />;
+    return (
+      <button
+        type="button"
+        onClick={() => open()}
+        className="rounded-lg bg-blue-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
+      >
+        Connect
+      </button>
+    );
   }
 
   return (

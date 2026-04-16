@@ -1,8 +1,8 @@
 FROM node:22-slim AS build
 WORKDIR /app
 
-# Enable corepack for Yarn version pinning
-RUN corepack enable
+# Enable corepack and pre-fetch Yarn so install doesn't need network for the binary
+RUN corepack enable && corepack prepare yarn@4.14.0 --activate
 
 # Ensure devDependencies are installed (needed for vite, tsc, etc.)
 ENV NODE_ENV=development
@@ -19,6 +19,9 @@ COPY packages/web/package.json packages/web/
 
 # Install all dependencies (frozen lockfile)
 RUN yarn install --immutable
+
+# Add hoisted binaries to PATH (vite, tsc, etc. live in root node_modules/.bin)
+ENV PATH="/app/node_modules/.bin:$PATH"
 
 # Copy source
 COPY packages/sdk packages/sdk
