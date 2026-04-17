@@ -56,6 +56,9 @@ export type {
   StoredBatch,
   StoredWallet,
   StoredChainConfig,
+  WalletRecord,
+  BatchRecord,
+  SweepRecord,
 } from './storage/index.js';
 
 // Utils
