@@ -54,6 +54,10 @@ if (anvilReady) {
       wallets: { mode: 'imported', count: 0 },
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      startBlock: null,
+      endBlock: null,
+      autoStart: false,
+      control: { scan: 'running', filter: 'running', distribute: 'running' },
     };
     await storage.manifest.write(manifest);
 
@@ -101,7 +105,7 @@ if (anvilReady) {
 
     // 5. Write + read cursor (BigInt round-trip)
     await storage.cursor.write({
-      scan: { lastBlock: 42n, endBlock: null, addressCount: 10 },
+      scan: { lastBlock: 42n, addressCount: 10 },
       filter: { watermark: 10, qualifiedCount: 3 },
       distribute: { watermark: 0, confirmedCount: 0 },
     });
@@ -148,6 +152,10 @@ test('full campaign lifecycle (no-anvil) — smoke test without RPC', async () =
     wallets: { mode: 'imported', count: 0 },
     createdAt: Date.now(),
     updatedAt: Date.now(),
+    startBlock: null,
+    endBlock: null,
+    autoStart: false,
+    control: { scan: 'running', filter: 'running', distribute: 'running' },
   };
   await storage.manifest.write(manifest);
   const back = await storage.manifest.read();

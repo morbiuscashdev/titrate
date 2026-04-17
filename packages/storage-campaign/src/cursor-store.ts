@@ -7,6 +7,8 @@ export type CursorStore = {
   readonly update: (patch: Partial<PipelineCursor>) => Promise<void>;
 };
 
+// On-disk shape for Phase 2+ writes. scan.endBlock moved to the manifest
+// in Phase 2 Task 2; CursorOnDiskLegacy handles files written before that.
 type CursorOnDiskNew = {
   readonly scan: {
     readonly lastBlock: string;
@@ -16,6 +18,8 @@ type CursorOnDiskNew = {
   readonly distribute: { readonly watermark: number; readonly confirmedCount: number };
 };
 
+// Legacy Phase 1 shape. fromDisk() reads this but ignores scan.endBlock,
+// completing the forward migration on first read.
 type CursorOnDiskLegacy = {
   readonly scan: {
     readonly lastBlock: string;
