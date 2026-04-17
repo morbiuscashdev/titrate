@@ -1,6 +1,6 @@
 import { readFile, writeFile, readdir, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { BatchStore, StoredBatch } from '@titrate/sdk';
+import type { BatchAttemptOutcome, BatchStore, StoredBatch } from '@titrate/sdk';
 import type { Address, Hex } from 'viem';
 
 type SerializedBatchAttempt = {
@@ -10,7 +10,7 @@ type SerializedBatchAttempt = {
   readonly maxFeePerGas: string;
   readonly maxPriorityFeePerGas: string;
   readonly timestamp: number;
-  readonly outcome: 'confirmed' | 'replaced' | 'reverted' | 'dropped';
+  readonly outcome: BatchAttemptOutcome;
 };
 
 type SerializedBatch = Omit<StoredBatch, 'confirmedBlock' | 'amounts' | 'recipients' | 'attempts'> & {

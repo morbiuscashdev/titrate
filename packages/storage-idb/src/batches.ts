@@ -1,5 +1,5 @@
 import type { Address, Hex } from 'viem';
-import type { BatchStore, StoredBatch } from '@titrate/sdk';
+import type { BatchAttemptOutcome, BatchStore, StoredBatch } from '@titrate/sdk';
 import type { TitrateDB } from './db.js';
 
 type SerializedBatchAttempt = {
@@ -9,7 +9,7 @@ type SerializedBatchAttempt = {
   readonly maxFeePerGas: string;
   readonly maxPriorityFeePerGas: string;
   readonly timestamp: number;
-  readonly outcome: 'confirmed' | 'replaced' | 'reverted' | 'dropped';
+  readonly outcome: BatchAttemptOutcome;
 };
 
 type SerializedBatch = Omit<StoredBatch, 'confirmedBlock' | 'amounts' | 'recipients' | 'attempts'> & {
