@@ -153,7 +153,6 @@ export type CampaignManifest = CampaignConfig & {
 export type PipelineCursor = {
   readonly scan: {
     readonly lastBlock: bigint;
-    readonly endBlock: bigint | null;
     readonly addressCount: number;
   };
   readonly filter: {

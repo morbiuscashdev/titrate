@@ -74,12 +74,12 @@ describe('CampaignManifest', () => {
 describe('PipelineCursor', () => {
   it('tracks watermarks for all three stages', () => {
     const cursor: PipelineCursor = {
-      scan: { lastBlock: 18_000_000n, endBlock: null, addressCount: 0 },
+      scan: { lastBlock: 18_000_000n, addressCount: 0 },
       filter: { watermark: 0, qualifiedCount: 0 },
       distribute: { watermark: 0, confirmedCount: 0 },
     };
-    expect(cursor.scan.endBlock).toBeNull();
     expect(typeof cursor.scan.lastBlock).toBe('bigint');
+    expect(cursor.scan.addressCount).toBe(0);
   });
 });
 
@@ -104,5 +104,12 @@ describe('CampaignManifest (Phase 2)', () => {
     expectTypeOf<CampaignManifest['endBlock']>().toEqualTypeOf<bigint | null>();
     expectTypeOf<CampaignManifest['autoStart']>().toEqualTypeOf<boolean>();
     expectTypeOf<CampaignManifest['control']>().toEqualTypeOf<StageControl>();
+  });
+});
+
+describe('PipelineCursor (no endBlock)', () => {
+  it('scan section has only lastBlock and addressCount', () => {
+    type ScanKeys = keyof PipelineCursor['scan'];
+    expectTypeOf<ScanKeys>().toEqualTypeOf<'lastBlock' | 'addressCount'>();
   });
 });
