@@ -61,6 +61,10 @@ describe('CampaignManifest', () => {
       wallets: { mode: 'imported', count: 0 },
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      startBlock: null,
+      endBlock: null,
+      autoStart: false,
+      control: { scan: 'running', filter: 'running', distribute: 'running' },
     };
     expect(manifest.status).toBe('configuring');
     expect(manifest.wallets.mode).toBe('imported');
@@ -96,7 +100,9 @@ describe('StageControl', () => {
 
 describe('CampaignManifest (Phase 2)', () => {
   it('requires startBlock / endBlock / autoStart / control fields', () => {
-    type Keys = keyof CampaignManifest;
-    expectTypeOf<Keys>().toMatchTypeOf<'startBlock' | 'endBlock' | 'autoStart' | 'control' | Keys>();
+    expectTypeOf<CampaignManifest>().toHaveProperty('startBlock');
+    expectTypeOf<CampaignManifest>().toHaveProperty('endBlock');
+    expectTypeOf<CampaignManifest>().toHaveProperty('autoStart');
+    expectTypeOf<CampaignManifest>().toHaveProperty('control');
   });
 });
