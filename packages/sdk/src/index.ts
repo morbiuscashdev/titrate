@@ -253,5 +253,8 @@ export type { CacheKey, CacheEntry, CacheStore, CacheConfig, Cache, MemoryCache 
 // Signers
 export * from './signers/index.js';
 
+// Pipeline loops
+export * from './pipeline/loops/index.js';
+
 // Batch attempt transform helpers
 export { batchAttemptToRecord, batchAttemptFromRecord } from './utils/batch-attempt.js';
