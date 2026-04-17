@@ -127,6 +127,8 @@ export interface Storage {
     append(campaignId: string, entry: LoopErrorEntry): Promise<void>;
     readAll(campaignId: string): Promise<readonly LoopErrorEntry[]>;
   };
+  readonly acquireLock?: (campaignId: string) => Promise<{ release: () => Promise<void> } | null>;
+  readonly releaseLock?: (campaignId: string) => Promise<void>;
 }
 
 export type EncryptedKeyEnvelope = {

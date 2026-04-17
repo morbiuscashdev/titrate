@@ -8,6 +8,7 @@ import { createChainConfigStore } from './chain-configs.js';
 import { createAppSettingsStore } from './app-settings.js';
 import { createPipelineHistoryStore } from './pipeline-history.js';
 import { createErrorsStore } from './errors.js';
+import { acquireIDBLock } from './lock.js';
 
 export { createIDBCacheStore } from './cache-store.js';
 
@@ -31,5 +32,9 @@ export async function createIDBStorage(dbName?: string): Promise<Storage> {
     appSettings: createAppSettingsStore(db),
     pipelineHistory: createPipelineHistoryStore(db),
     errors: createErrorsStore(db),
+    acquireLock: (campaignId: string) => acquireIDBLock(campaignId),
+    releaseLock: async () => {
+      // No-op; release is handled by the handle returned from acquireLock.
+    },
   };
 }
