@@ -127,3 +127,93 @@ describe('full pipeline integration (in-memory)', () => {
     expect(disperseMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('reconciliation on restart', () => {
+  it('classifies planted broadcast batches and invokes intervention hook for non-confirmed', async () => {
+    const filtered = createMemoryAddresses();
+    const batches = createMemoryBatches();
+    const cursor = createMemoryCursor({
+      scan: { lastBlock: 100n, addressCount: 0 },
+      filter: { watermark: 0, qualifiedCount: 0 },
+      distribute: { watermark: 2, confirmedCount: 0 },
+    });
+    const errors = createMemoryErrors();
+
+    await batches.append([
+      {
+        batchIndex: 0,
+        recipients: ['0xr0'] as readonly Address[],
+        amounts: ['1'],
+        status: 'broadcast',
+        attempts: [{
+          txHash: '0xaaaa' as Hex, nonce: 0,
+          maxFeePerGas: '0', maxPriorityFeePerGas: '0',
+          broadcastAt: 0, outcome: 'pending', confirmedBlock: null,
+        }],
+        confirmedTxHash: null, confirmedBlock: null, createdAt: 0,
+      },
+      {
+        batchIndex: 1,
+        recipients: ['0xr1'] as readonly Address[],
+        amounts: ['1'],
+        status: 'broadcast',
+        attempts: [{
+          txHash: '0xbbbb' as Hex, nonce: 1,
+          maxFeePerGas: '0', maxPriorityFeePerGas: '0',
+          broadcastAt: 0, outcome: 'pending', confirmedBlock: null,
+        }],
+        confirmedTxHash: null, confirmedBlock: null, createdAt: 0,
+      },
+    ]);
+
+    const bus = createEventBus();
+    const control = createControlSignal(DEFAULT_STAGE_CONTROL);
+    const interventions: string[] = [];
+    let reconcileDone = false;
+
+    bus.on('reconciliation-complete', () => { reconcileDone = true; });
+
+    const client = {
+      getTransactionReceipt: vi.fn()
+        .mockResolvedValueOnce({ status: 'success', blockNumber: 150n })
+        .mockResolvedValueOnce(null),
+      getTransaction: vi.fn().mockResolvedValue(null),
+      getTransactionCount: vi.fn().mockResolvedValue(5),
+    } as unknown as PublicClient;
+
+    const distributor = createDistributorLoop({
+      publicClient: client,
+      storage: { filtered, batches, cursor, errors },
+      walletPool: [W1],
+      manifest: manifest({ batchSize: 10 }),
+      bus, control,
+      scannerCompleted: () => true,
+      filterCompleted: () => true,
+      disperse: async () => {
+        throw new Error('unreachable — no new batches expected');
+      },
+      interventionHook: async (ctx) => {
+        interventions.push(ctx.point);
+        return { type: 'skip' };
+      },
+      getBalances: async () => new Map([[W1, 10n ** 18n]]),
+    });
+
+    await distributor.start();
+    // Wait for reconciliation to finish; the distributor's steady-state may
+    // not reach 'completed' in this pathological restart scenario, so we
+    // stop it explicitly once reconciliation has fired.
+    await new Promise<void>((resolve) => {
+      if (reconcileDone) return resolve();
+      bus.on('reconciliation-complete', () => resolve());
+    });
+    await distributor.stop();
+
+    expect(reconcileDone).toBe(true);
+    expect(interventions).toEqual(['reconcile-dropped']);
+    const updated = await batches.readAll();
+    const latestByIndex = new Map<number, typeof updated[number]>();
+    for (const r of updated) latestByIndex.set(r.batchIndex, r);
+    expect(latestByIndex.get(0)!.status).toBe('confirmed');
+  });
+});
