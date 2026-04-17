@@ -24,6 +24,13 @@ export type {
 
 // Chains
 export { SUPPORTED_CHAINS, getChains, getChainConfig, getExplorerApiUrl } from './chains/index.js';
+export {
+  PROVIDERS,
+  getProvider,
+  resolveRpcUrl,
+  splitTemplate,
+} from './chains/providers.js';
+export type { ProviderId, RpcProvider, ProviderKeys } from './chains/providers.js';
 
 // CSV
 export { parseCSV, detectAmountFormat, validateAddresses, deduplicateAddresses, flagConflicts } from './csv/index.js';
