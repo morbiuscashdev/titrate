@@ -102,6 +102,20 @@ export type ContractArtifact = {
   readonly bytecode: Hex;
 };
 
+export type StageStatus = 'running' | 'paused';
+
+export type StageControl = {
+  readonly scan: StageStatus;
+  readonly filter: StageStatus;
+  readonly distribute: StageStatus;
+};
+
+export const DEFAULT_STAGE_CONTROL: StageControl = {
+  scan: 'running',
+  filter: 'running',
+  distribute: 'running',
+};
+
 export type CampaignStatus =
   | 'configuring'
   | 'ready'
@@ -121,20 +135,6 @@ export type WalletProvisioning =
       readonly mode: 'imported';
       readonly count: number;
     };
-
-export type StageStatus = 'running' | 'paused';
-
-export type StageControl = {
-  readonly scan: StageStatus;
-  readonly filter: StageStatus;
-  readonly distribute: StageStatus;
-};
-
-export const DEFAULT_STAGE_CONTROL: StageControl = {
-  scan: 'running',
-  filter: 'running',
-  distribute: 'running',
-};
 
 export type CampaignManifest = CampaignConfig & {
   readonly id: string;
