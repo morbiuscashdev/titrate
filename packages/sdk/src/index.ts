@@ -18,10 +18,14 @@ export type {
   ContractArtifact,
   CampaignStatus,
   WalletProvisioning,
+  StageStatus,
+  StageControl,
   CampaignManifest,
   PipelineCursor,
   AppSettings,
 } from './types.js';
+
+export { DEFAULT_STAGE_CONTROL } from './types.js';
 
 // Chains
 export { SUPPORTED_CHAINS, getChains, getChainConfig, getExplorerApiUrl } from './chains/index.js';

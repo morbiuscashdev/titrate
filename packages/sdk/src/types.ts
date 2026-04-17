@@ -122,12 +122,32 @@ export type WalletProvisioning =
       readonly count: number;
     };
 
+export type StageStatus = 'running' | 'paused';
+
+export type StageControl = {
+  readonly scan: StageStatus;
+  readonly filter: StageStatus;
+  readonly distribute: StageStatus;
+};
+
+export const DEFAULT_STAGE_CONTROL: StageControl = {
+  scan: 'running',
+  filter: 'running',
+  distribute: 'running',
+};
+
 export type CampaignManifest = CampaignConfig & {
   readonly id: string;
   readonly status: CampaignStatus;
   readonly wallets: WalletProvisioning;
   readonly createdAt: number;
   readonly updatedAt: number;
+
+  // Phase 2 additions — all declarative.
+  readonly startBlock: bigint | null;   // null = chain head at creation time
+  readonly endBlock: bigint | null;     // null = follow head forever
+  readonly autoStart: boolean;          // default false
+  readonly control: StageControl;       // default: all 'running'
 };
 
 export type PipelineCursor = {

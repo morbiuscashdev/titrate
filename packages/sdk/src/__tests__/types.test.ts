@@ -1,9 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, expectTypeOf } from 'vitest';
 import type {
   CampaignManifest,
   CampaignStatus,
   WalletProvisioning,
   PipelineCursor,
+  StageStatus,
+  StageControl,
 } from '../types.js';
 import type { Address } from 'viem';
 
@@ -74,5 +76,27 @@ describe('PipelineCursor', () => {
     };
     expect(cursor.scan.endBlock).toBeNull();
     expect(typeof cursor.scan.lastBlock).toBe('bigint');
+  });
+});
+
+describe('StageStatus', () => {
+  it('is a literal union of running | paused', () => {
+    expectTypeOf<StageStatus>().toEqualTypeOf<'running' | 'paused'>();
+  });
+});
+
+describe('StageControl', () => {
+  it('has readonly scan / filter / distribute fields, each StageStatus', () => {
+    const c: StageControl = { scan: 'running', filter: 'paused', distribute: 'running' };
+    expectTypeOf(c.scan).toEqualTypeOf<StageStatus>();
+    expectTypeOf(c.filter).toEqualTypeOf<StageStatus>();
+    expectTypeOf(c.distribute).toEqualTypeOf<StageStatus>();
+  });
+});
+
+describe('CampaignManifest (Phase 2)', () => {
+  it('requires startBlock / endBlock / autoStart / control fields', () => {
+    type Keys = keyof CampaignManifest;
+    expectTypeOf<Keys>().toMatchTypeOf<'startBlock' | 'endBlock' | 'autoStart' | 'control' | Keys>();
   });
 });
