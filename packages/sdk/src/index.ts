@@ -16,6 +16,10 @@ export type {
   ChainConfig,
   CallData,
   ContractArtifact,
+  CampaignStatus,
+  WalletProvisioning,
+  CampaignManifest,
+  PipelineCursor,
 } from './types.js';
 
 // Chains

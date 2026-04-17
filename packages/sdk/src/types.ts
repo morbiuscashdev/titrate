@@ -101,3 +101,47 @@ export type ContractArtifact = {
   readonly abi: readonly Record<string, unknown>[];
   readonly bytecode: Hex;
 };
+
+export type CampaignStatus =
+  | 'configuring'
+  | 'ready'
+  | 'running'
+  | 'paused'
+  | 'completed'
+  | 'swept';
+
+export type WalletProvisioning =
+  | {
+      readonly mode: 'derived';
+      readonly coldAddress: Address;
+      readonly walletCount: number;
+      readonly walletOffset: number;
+    }
+  | {
+      readonly mode: 'imported';
+      readonly count: number;
+    };
+
+export type CampaignManifest = CampaignConfig & {
+  readonly id: string;
+  readonly status: CampaignStatus;
+  readonly wallets: WalletProvisioning;
+  readonly createdAt: number;
+  readonly updatedAt: number;
+};
+
+export type PipelineCursor = {
+  readonly scan: {
+    readonly lastBlock: bigint;
+    readonly endBlock: bigint | null;
+    readonly addressCount: number;
+  };
+  readonly filter: {
+    readonly watermark: number;
+    readonly qualifiedCount: number;
+  };
+  readonly distribute: {
+    readonly watermark: number;
+    readonly confirmedCount: number;
+  };
+};
