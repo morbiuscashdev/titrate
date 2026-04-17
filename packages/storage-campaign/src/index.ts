@@ -6,11 +6,15 @@ import { createAppendableJSONL, type AppendableJSONL } from './appendable-jsonl.
 import { createManifestStore, type ManifestStore } from './manifest-store.js';
 import { createCursorStore, type CursorStore } from './cursor-store.js';
 import { createPipelineStore, type PipelineStore } from './pipeline-store.js';
+import { createPipelineHistoryStore, type PipelineHistoryStore } from './pipeline-history-store.js';
+import { createErrorsStore, type ErrorsStore } from './errors-store.js';
+import { createLockStore, type LockStore } from './lock-store.js';
 
 export type CampaignStorage = {
   readonly dir: string;
   readonly manifest: ManifestStore;
   readonly pipeline: PipelineStore;
+  readonly pipelineHistory: PipelineHistoryStore;
   readonly cursor: CursorStore;
   readonly addresses: AppendableCSV;
   readonly filtered: AppendableCSV;
@@ -18,19 +22,17 @@ export type CampaignStorage = {
   readonly batches: AppendableJSONL<BatchRecord>;
   readonly wallets: AppendableJSONL<WalletRecord>;
   readonly sweeps: AppendableJSONL<SweepRecord>;
+  readonly errors: ErrorsStore;
+  readonly lock: LockStore;
   readonly ensureDir: () => Promise<void>;
 };
 
-/**
- * Create a CampaignStorage rooted at `dir`. The directory is NOT created
- * eagerly — callers should call ensureDir() before first write.
- * mkdir is idempotent.
- */
 export function createCampaignStorage(dir: string): CampaignStorage {
   return {
     dir,
     manifest: createManifestStore(join(dir, 'campaign.json')),
     pipeline: createPipelineStore(join(dir, 'pipeline.json')),
+    pipelineHistory: createPipelineHistoryStore(join(dir, 'pipeline-history.jsonl')),
     cursor: createCursorStore(join(dir, 'cursor.json')),
     addresses: createAppendableCSV(join(dir, 'addresses.csv')),
     filtered: createAppendableCSV(join(dir, 'filtered.csv')),
@@ -38,6 +40,8 @@ export function createCampaignStorage(dir: string): CampaignStorage {
     batches: createAppendableJSONL<BatchRecord>(join(dir, 'batches.jsonl')),
     wallets: createAppendableJSONL<WalletRecord>(join(dir, 'wallets.jsonl')),
     sweeps: createAppendableJSONL<SweepRecord>(join(dir, 'sweep.jsonl')),
+    errors: createErrorsStore(join(dir, 'errors.jsonl')),
+    lock: createLockStore(join(dir, '.pipeline.lock')),
     async ensureDir() {
       await mkdir(dir, { recursive: true });
     },
@@ -50,8 +54,20 @@ export {
   createManifestStore,
   createCursorStore,
   createPipelineStore,
+  createPipelineHistoryStore,
+  createErrorsStore,
+  createLockStore,
 };
-export type { AppendableCSV, AppendableJSONL, ManifestStore, CursorStore, PipelineStore };
+export type {
+  AppendableCSV,
+  AppendableJSONL,
+  ManifestStore,
+  CursorStore,
+  PipelineStore,
+  PipelineHistoryStore,
+  ErrorsStore,
+  LockStore,
+};
 export type { CSVRow } from './appendable-csv.js';
 
 export { createSharedStorage } from './shared-storage.js';

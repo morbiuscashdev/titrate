@@ -97,3 +97,21 @@ describe('createCampaignStorage', () => {
     expect(entries).toContain('addresses.csv');
   });
 });
+
+describe('createCampaignStorage (Phase 2 surfaces)', () => {
+  it('exposes pipelineHistory / errors / lock stores', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'titrate-cs-'));
+    const storage = createCampaignStorage(dir);
+    await storage.ensureDir();
+
+    expect(typeof storage.pipelineHistory.append).toBe('function');
+    expect(typeof storage.errors.append).toBe('function');
+    expect(typeof storage.lock.acquire).toBe('function');
+
+    const result = await storage.lock.acquire({ session: 'new' });
+    expect(result.acquired).toBe(true);
+
+    await storage.lock.release();
+    await rm(dir, { recursive: true });
+  });
+});
