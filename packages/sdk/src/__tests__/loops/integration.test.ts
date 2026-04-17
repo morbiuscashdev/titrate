@@ -1,5 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
+import { mkdtemp, rm, readFile, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { Address, Hex, PublicClient } from 'viem';
+import { retroactiveReapply } from '../../pipeline/loops/retroactive.js';
 import { createScannerLoop } from '../../pipeline/loops/scanner-loop.js';
 import { createFilterLoop } from '../../pipeline/loops/filter-loop.js';
 import { createDistributorLoop } from '../../pipeline/loops/distributor-loop.js';
@@ -215,5 +219,37 @@ describe('reconciliation on restart', () => {
     const latestByIndex = new Map<number, typeof updated[number]>();
     for (const r of updated) latestByIndex.set(r.batchIndex, r);
     expect(latestByIndex.get(0)!.status).toBe('confirmed');
+  });
+});
+
+describe('filter hot-reload retroactive re-apply', () => {
+  it('shrinks filtered.csv + qualifiedCount after a suffix-added filter is applied retroactively', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'titrate-retro-int-'));
+    const filteredPath = join(dir, 'filtered.csv');
+
+    await writeFile(filteredPath, [
+      '0x1,', '0x2,', '0x3,', '0x4,', '0x5,', '0x6,', '0x7,', '0x8,',
+    ].join('\n') + '\n', 'utf8');
+
+    const result = await retroactiveReapply({
+      filteredPath,
+      predicate: async (addr) => {
+        const last = parseInt(addr.slice(-1), 16);
+        return last % 2 === 0;
+      },
+    });
+
+    expect(result.survivorsCount).toBe(4);
+    expect(result.droppedCount).toBe(4);
+
+    const content = await readFile(filteredPath, 'utf8');
+    const lines = content.trim().split('\n');
+    expect(lines.length).toBe(4);
+    for (const line of lines) {
+      const lastChar = line.replace(',', '').slice(-1);
+      expect(parseInt(lastChar, 16) % 2).toBe(0);
+    }
+
+    await rm(dir, { recursive: true });
   });
 });
