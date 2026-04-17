@@ -26,7 +26,7 @@ export type BatchAttempt = {
   readonly maxFeePerGas: bigint;
   readonly maxPriorityFeePerGas: bigint;
   readonly timestamp: number;
-  readonly outcome: 'confirmed' | 'replaced' | 'reverted' | 'dropped';
+  readonly outcome: BatchAttemptOutcome;
 };
 
 export type BatchResult = {

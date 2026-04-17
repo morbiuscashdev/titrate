@@ -29,6 +29,6 @@ export function batchAttemptFromRecord(record: BatchAttemptRecord): BatchAttempt
     maxFeePerGas: BigInt(record.maxFeePerGas),
     maxPriorityFeePerGas: BigInt(record.maxPriorityFeePerGas),
     timestamp: record.broadcastAt,
-    outcome: record.outcome === 'pending' ? 'dropped' : record.outcome,
+    outcome: record.outcome,
   };
 }

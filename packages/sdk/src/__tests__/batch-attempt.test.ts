@@ -43,3 +43,25 @@ describe('batchAttemptFromRecord', () => {
     expect(out.timestamp).toBe(1_700_000_000_000);
   });
 });
+
+describe('BatchAttempt outcome (widened)', () => {
+  it('accepts pending', () => {
+    const p: BatchAttempt = {
+      txHash: '0x0', nonce: 0,
+      gasEstimate: 0n, maxFeePerGas: 0n, maxPriorityFeePerGas: 0n,
+      timestamp: 0, outcome: 'pending',
+    };
+    expect(p.outcome).toBe('pending');
+  });
+});
+
+describe('batchAttemptFromRecord (pending round-trip)', () => {
+  it('preserves pending when round-tripping', () => {
+    const record = {
+      txHash: '0xabc' as const, nonce: 0,
+      maxFeePerGas: '0', maxPriorityFeePerGas: '0',
+      broadcastAt: 0, outcome: 'pending' as const, confirmedBlock: null,
+    };
+    expect(batchAttemptFromRecord(record).outcome).toBe('pending');
+  });
+});
