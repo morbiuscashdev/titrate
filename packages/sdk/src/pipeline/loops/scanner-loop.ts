@@ -132,7 +132,12 @@ export function createScannerLoop(deps: ScannerLoopDeps): LoopHandle {
 
       if (effectiveLastBlock >= target) {
         if (endBlock !== null) {
+          // Set status before emitting so downstream 'completed' handlers see
+          // the final status immediately. Then emit pipeline-changed to wake
+          // any filter/distributor loops waiting on bus.once(), followed by
+          // 'completed' to signal the scan stage is done.
           status = 'completed';
+          bus.emit('pipeline-changed');
           bus.emit('completed');
           return;
         }

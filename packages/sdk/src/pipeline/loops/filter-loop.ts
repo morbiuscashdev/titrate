@@ -113,6 +113,9 @@ export function createFilterLoop(deps: FilterLoopDeps): LoopHandle {
       if (control.get().filter !== 'paused' && scannerCompleted()) {
         const afterCursor = await storage.cursor.read();
         if (afterCursor.filter.watermark >= afterCursor.scan.addressCount) {
+          // Emit a final filter-progressed to wake the distributor before
+          // transitioning to 'completed', so the distributor's once() resolves.
+          bus.emit('filter-progressed');
           status = 'completed';
           bus.emit('completed');
           return;
