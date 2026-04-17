@@ -20,6 +20,7 @@ export type {
   WalletProvisioning,
   CampaignManifest,
   PipelineCursor,
+  AppSettings,
 } from './types.js';
 
 // Chains

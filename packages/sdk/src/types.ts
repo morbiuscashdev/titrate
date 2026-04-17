@@ -145,3 +145,11 @@ export type PipelineCursor = {
     readonly confirmedCount: number;
   };
 };
+
+export type AppSettings = {
+  readonly providerKeys: {
+    readonly valve?: string;
+    readonly alchemy?: string;
+    readonly infura?: string;
+  };
+};
