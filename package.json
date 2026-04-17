@@ -9,6 +9,7 @@
     "test": "npm run test --workspaces",
     "test:sdk": "npm run test -w packages/sdk",
     "test:contracts": "npm run test -w packages/contracts",
+    "test:all": "yarn workspace @titrate/sdk test && yarn workspace @titrate/storage-fs test && yarn workspace @titrate/storage-idb test && yarn workspace @titrate/storage-campaign test && yarn workspace @titrate/web test && cd packages/tui && bun test && cd ../contracts && forge test",
     "coverage:sdk": "cd packages/sdk && npx vitest run --coverage",
     "coverage:contracts": "cd packages/contracts && forge coverage"
   },
