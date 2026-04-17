@@ -99,10 +99,10 @@ describe('StageControl', () => {
 });
 
 describe('CampaignManifest (Phase 2)', () => {
-  it('requires startBlock / endBlock / autoStart / control fields', () => {
-    expectTypeOf<CampaignManifest>().toHaveProperty('startBlock');
-    expectTypeOf<CampaignManifest>().toHaveProperty('endBlock');
-    expectTypeOf<CampaignManifest>().toHaveProperty('autoStart');
-    expectTypeOf<CampaignManifest>().toHaveProperty('control');
+  it('requires startBlock / endBlock / autoStart / control fields with exact types', () => {
+    expectTypeOf<CampaignManifest['startBlock']>().toEqualTypeOf<bigint | null>();
+    expectTypeOf<CampaignManifest['endBlock']>().toEqualTypeOf<bigint | null>();
+    expectTypeOf<CampaignManifest['autoStart']>().toEqualTypeOf<boolean>();
+    expectTypeOf<CampaignManifest['control']>().toEqualTypeOf<StageControl>();
   });
 });
