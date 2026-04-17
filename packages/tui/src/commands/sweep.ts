@@ -4,6 +4,7 @@ import { stdin as input, stdout as output } from 'node:process';
 import { Command } from 'commander';
 import type { Address, Hex } from 'viem';
 import { createEIP712Message, deriveMultipleWallets } from '@titrate/sdk';
+import { decryptPrivateKey } from '../utils/passphrase.js';
 import { privateKeyToAccount } from 'viem/accounts';
 import { createWalletClient, http, parseAbi } from 'viem';
 import { createRpcClient } from '../utils/rpc.js';
@@ -14,11 +15,8 @@ import { resolveCampaignRoot } from '../utils/campaign-root.js';
 /**
  * Load campaign config from a named campaign directory.
  *
- * NOTE: The `encryptedKey` field on WalletRecord is currently a plain string
- * (Task 2 spec). Proper decryption requires the full envelope
- * `{ ciphertext, iv, authTag }` which Task 28 migrates. Until that lands,
- * this helper intentionally throws — the flag scaffolding is wired but the
- * decryption path is not yet functional.
+ * Reads the passphrase interactively, then decrypts each wallet's private key
+ * using the full AES-GCM envelope stored in `encryptedKey`.
  */
 async function loadFromCampaign(campaignName: string, folder?: string) {
   const root = await resolveCampaignRoot({ folder });
@@ -34,18 +32,18 @@ async function loadFromCampaign(campaignName: string, folder?: string) {
   const privateKeys = await Promise.all(
     records.map(async (r) => {
       try {
-        // Currently encryptedKey is just the ciphertext string (Task 28 will fix).
-        // For now, decryptPrivateKey needs the full envelope which we don't have.
-        // This code path will be completed after Task 28 migrates the schema.
-        throw new Error(`--campaign flag requires Task 28 (encryptedKey envelope migration) to land first`);
+        return await decryptPrivateKey({
+          ciphertext: r.encryptedKey.ciphertext,
+          iv: r.encryptedKey.iv,
+          authTag: r.encryptedKey.authTag,
+          kdf: r.kdf,
+          kdfParams: r.kdfParams,
+        }, passphrase);
       } catch (err) {
-        throw new Error(`Wallet ${r.index}: ${err}`);
+        throw new Error(`Wallet ${r.index}: could not decrypt (wrong passphrase?) — ${err}`);
       }
     }),
   );
-
-  // passphrase is read above but not used until Task 28 — suppress unused warning
-  void passphrase;
 
   return { manifest, privateKeys, storage };
 }
@@ -98,7 +96,6 @@ export function registerSweep(program: Command): void {
       folder?: string;
     }) => {
       if (opts.campaign) {
-        // Throws with "requires Task 28" until the encryptedKey envelope migration lands.
         await loadFromCampaign(opts.campaign, opts.folder);
         return;
       }

@@ -11,7 +11,7 @@ describe('WalletRecord', () => {
     const record: WalletRecord = {
       index: 0,
       address: '0x0000000000000000000000000000000000000001' as Address,
-      encryptedKey: 'ciphertext-base64',
+      encryptedKey: { ciphertext: 'ct', iv: 'iv', authTag: 'at' },
       kdf: 'scrypt',
       kdfParams: { N: 131072, r: 8, p: 1, salt: 'salt-base64' },
       provenance: {
@@ -28,7 +28,7 @@ describe('WalletRecord', () => {
     const record: WalletRecord = {
       index: 0,
       address: '0x0000000000000000000000000000000000000001' as Address,
-      encryptedKey: 'ciphertext-base64',
+      encryptedKey: { ciphertext: 'ct', iv: 'iv', authTag: 'at' },
       kdf: 'scrypt',
       kdfParams: { N: 131072, r: 8, p: 1, salt: 'salt-base64' },
       provenance: { type: 'imported' },

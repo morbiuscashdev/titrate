@@ -64,7 +64,7 @@ describe('createCampaignStorage', () => {
       {
         index: 0,
         address: '0x1',
-        encryptedKey: 'ct',
+        encryptedKey: { ciphertext: 'ct', iv: 'iv', authTag: 'at' },
         kdf: 'scrypt',
         kdfParams: { N: 131072, r: 8, p: 1, salt: 's' },
         provenance: { type: 'imported' },

@@ -121,7 +121,7 @@ export function Wallet({ onDone, onBack }: StepProps) {
           return {
             index: i,
             address: w.address,
-            encryptedKey: enc.ciphertext, // Task 28 will migrate this to full envelope
+            encryptedKey: { ciphertext: enc.ciphertext, iv: enc.iv, authTag: enc.authTag },
             kdf: enc.kdf,
             kdfParams: enc.kdfParams,
             provenance: {
@@ -165,7 +165,7 @@ export function Wallet({ onDone, onBack }: StepProps) {
           return {
             index: i,
             address: account.address,
-            encryptedKey: enc.ciphertext, // Task 28 will migrate this to full envelope
+            encryptedKey: { ciphertext: enc.ciphertext, iv: enc.iv, authTag: enc.authTag },
             kdf: enc.kdf,
             kdfParams: enc.kdfParams,
             provenance: { type: 'imported' as const },

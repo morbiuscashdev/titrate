@@ -67,6 +67,7 @@ export type {
   WalletRecord,
   BatchRecord,
   SweepRecord,
+  EncryptedKeyEnvelope,
 } from './storage/index.js';
 
 // Utils

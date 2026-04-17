@@ -120,10 +120,16 @@ export interface Storage {
   readonly appSettings: AppSettingsStore;
 }
 
+export type EncryptedKeyEnvelope = {
+  readonly ciphertext: string;   // base64
+  readonly iv: string;           // base64
+  readonly authTag: string;      // base64
+};
+
 export type WalletRecord = {
   readonly index: number;
   readonly address: Address;
-  readonly encryptedKey: string;
+  readonly encryptedKey: EncryptedKeyEnvelope;
   readonly kdf: 'scrypt';
   readonly kdfParams: {
     readonly N: number;
