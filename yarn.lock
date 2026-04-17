@@ -3180,6 +3180,18 @@ __metadata:
   languageName: unknown
   linkType: soft
 
+"@titrate/storage-campaign@workspace:packages/storage-campaign":
+  version: 0.0.0-use.local
+  resolution: "@titrate/storage-campaign@workspace:packages/storage-campaign"
+  dependencies:
+    "@titrate/sdk": "npm:0.0.1"
+    "@types/node": "npm:^25.5.0"
+    typescript: "npm:^5.7.3"
+    viem: "npm:^2.23.2"
+    vitest: "npm:^4.1.1"
+  languageName: unknown
+  linkType: soft
+
 "@titrate/storage-fs@npm:0.0.1, @titrate/storage-fs@workspace:packages/storage-fs":
   version: 0.0.0-use.local
   resolution: "@titrate/storage-fs@workspace:packages/storage-fs"
