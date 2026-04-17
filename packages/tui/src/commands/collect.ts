@@ -1,9 +1,53 @@
 import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { createInterface } from 'node:readline/promises';
+import { stdin as input, stdout as output } from 'node:process';
 import { Command } from 'commander';
 import type { Address } from 'viem';
 import { createPipeline } from '@titrate/sdk';
 import { createRpcClient } from '../utils/rpc.js';
 import { createProgressRenderer } from '../progress/renderer.js';
+import { createCampaignStorage } from '@titrate/storage-campaign';
+import { resolveCampaignRoot } from '../utils/campaign-root.js';
+
+/**
+ * Load campaign config from a named campaign directory.
+ *
+ * NOTE: The `encryptedKey` field on WalletRecord is currently a plain string
+ * (Task 2 spec). Proper decryption requires the full envelope
+ * `{ ciphertext, iv, authTag }` which Task 28 migrates. Until that lands,
+ * this helper intentionally throws — the flag scaffolding is wired but the
+ * decryption path is not yet functional.
+ */
+async function loadFromCampaign(campaignName: string, folder?: string) {
+  const root = await resolveCampaignRoot({ folder });
+  const dir = join(root, campaignName);
+  const storage = createCampaignStorage(dir);
+  const manifest = await storage.manifest.read();
+
+  const rl = createInterface({ input, output });
+  const passphrase = await rl.question('Passphrase for this campaign: ');
+  rl.close();
+
+  const records = await storage.wallets.readAll();
+  const privateKeys = await Promise.all(
+    records.map(async (r) => {
+      try {
+        // Currently encryptedKey is just the ciphertext string (Task 28 will fix).
+        // For now, decryptPrivateKey needs the full envelope which we don't have.
+        // This code path will be completed after Task 28 migrates the schema.
+        throw new Error(`--campaign flag requires Task 28 (encryptedKey envelope migration) to land first`);
+      } catch (err) {
+        throw new Error(`Wallet ${r.index}: ${err}`);
+      }
+    }),
+  );
+
+  // passphrase is read above but not used until Task 28 — suppress unused warning
+  void passphrase;
+
+  return { manifest, privateKeys, storage };
+}
 
 /**
  * Parses a block range string of the form "start:end" into a tuple of bigints.
@@ -27,8 +71,8 @@ export function registerCollect(program: Command): void {
   program
     .command('collect')
     .description('Collect addresses via block scan and/or CSV sources, apply filters, write output CSV')
-    .requiredOption('--rpc <url>', 'RPC endpoint URL')
-    .requiredOption('--output <path>', 'Output CSV file path')
+    .option('--rpc <url>', 'RPC endpoint URL')
+    .option('--output <path>', 'Output CSV file path')
     .option('--blocks <start:end>', 'Block range to scan (e.g. 19000000:19100000)')
     .option('--extract <field>', 'Field to extract: tx.from or tx.to', 'tx.from')
     .option('--csv <path>', 'Input CSV file of addresses to include as a source')
@@ -37,9 +81,11 @@ export function registerCollect(program: Command): void {
     .option('--exclude-token-recipients --excludeTokenRecipients <token>', 'Exclude addresses that received this token')
     .option('--exclude-csv --excludeCsv <path>', 'Exclude addresses listed in this CSV file')
     .option('--chain-id --chainId <id>', 'Chain ID for RPC client configuration', parseInt)
+    .option('-c, --campaign <name>', 'Campaign name (loads config from campaign directory)')
+    .option('--folder <path>', 'Campaign root directory (with --campaign)')
     .action(async (opts: {
-      rpc: string;
-      output: string;
+      rpc?: string;
+      output?: string;
       blocks?: string;
       extract: string;
       csv?: string;
@@ -48,7 +94,19 @@ export function registerCollect(program: Command): void {
       excludeTokenRecipients?: string;
       excludeCsv?: string;
       chainId?: number;
+      campaign?: string;
+      folder?: string;
     }) => {
+      if (opts.campaign) {
+        // Throws with "requires Task 28" until the encryptedKey envelope migration lands.
+        await loadFromCampaign(opts.campaign, opts.folder);
+        return;
+      }
+
+      // Guard required flags in the non-campaign path (formerly enforced by requiredOption).
+      if (!opts.rpc) throw new Error('missing required option: --rpc <url>');
+      if (!opts.output) throw new Error('missing required option: --output <path>');
+
       const rpc = createRpcClient(opts.rpc, opts.chainId);
       const onProgress = createProgressRenderer();
       const pipeline = createPipeline();
