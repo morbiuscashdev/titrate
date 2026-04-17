@@ -14,12 +14,21 @@ export function ReloadPrompt() {
 
   if (!needRefresh) return null;
 
+  const handleRefresh = async () => {
+    try {
+      await updateServiceWorker(true);
+    } catch (err) {
+      console.error('[ReloadPrompt] SW update failed:', err);
+    }
+    window.location.reload();
+  };
+
   return (
     <div className="fixed bottom-4 left-4 z-50 flex items-center gap-3 rounded-lg bg-blue-600 px-4 py-3 text-sm text-white shadow-lg">
       <span>New version available.</span>
       <button
         type="button"
-        onClick={() => updateServiceWorker(true)}
+        onClick={handleRefresh}
         className="rounded bg-white px-3 py-1 text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors"
       >
         Refresh
