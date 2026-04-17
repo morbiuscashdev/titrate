@@ -1,5 +1,5 @@
 import type { Address, Hex } from 'viem';
-import type { CampaignConfig, BatchAttempt, BatchAttemptRecord, PipelineConfig, BatchStatus } from '../types.js';
+import type { CampaignConfig, BatchAttempt, BatchAttemptRecord, PipelineConfig, BatchStatus, PipelineHistoryEntry, LoopErrorEntry } from '../types.js';
 
 export type StoredCampaign = CampaignConfig & {
   readonly id: string;
@@ -118,6 +118,15 @@ export interface Storage {
   readonly pipelineConfigs: PipelineConfigStore;
   readonly chainConfigs: ChainConfigStore;
   readonly appSettings: AppSettingsStore;
+  readonly pipelineHistory: {
+    append(campaignId: string, entry: PipelineHistoryEntry): Promise<void>;
+    readAll(campaignId: string): Promise<readonly PipelineHistoryEntry[]>;
+    count?(campaignId: string): Promise<number>;
+  };
+  readonly errors: {
+    append(campaignId: string, entry: LoopErrorEntry): Promise<void>;
+    readAll(campaignId: string): Promise<readonly LoopErrorEntry[]>;
+  };
 }
 
 export type EncryptedKeyEnvelope = {

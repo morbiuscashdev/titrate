@@ -1,7 +1,7 @@
 import { openDB, type IDBPDatabase } from 'idb';
 
 const DEFAULT_DB_NAME = 'titrate';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export type TitrateDB = IDBPDatabase<TitrateSchema>;
 
@@ -14,6 +14,16 @@ export interface TitrateSchema {
   pipelineConfigs: { key: string; value: Record<string, unknown> };
   chainConfigs: { key: string; value: Record<string, unknown> };
   appSettings: { key: string; value: Record<string, unknown> };
+  pipelineHistory: {
+    key: number;
+    value: { campaignId: string; autoId?: number; [k: string]: unknown };
+    indexes: { byCampaign: string };
+  };
+  errors: {
+    key: number;
+    value: { campaignId: string; autoId?: number; [k: string]: unknown };
+    indexes: { byCampaign: string };
+  };
 }
 
 /**
@@ -25,7 +35,7 @@ export interface TitrateSchema {
  */
 export async function openTitrateDB(dbName = DEFAULT_DB_NAME): Promise<TitrateDB> {
   return openDB<TitrateSchema>(dbName, DB_VERSION, {
-    upgrade(db) {
+    upgrade(db, oldVersion) {
       // Campaigns
       if (!db.objectStoreNames.contains('campaigns')) {
         db.createObjectStore('campaigns', { keyPath: 'id' });
@@ -68,6 +78,22 @@ export async function openTitrateDB(dbName = DEFAULT_DB_NAME): Promise<TitrateDB
       // App Settings (v2)
       if (!db.objectStoreNames.contains('appSettings')) {
         db.createObjectStore('appSettings', { keyPath: 'key' });
+      }
+
+      // Pipeline History + Errors (v3)
+      if (oldVersion < 3) {
+        if (!db.objectStoreNames.contains('pipelineHistory')) {
+          const s = db.createObjectStore('pipelineHistory', {
+            keyPath: 'autoId', autoIncrement: true,
+          });
+          s.createIndex('byCampaign', 'campaignId');
+        }
+        if (!db.objectStoreNames.contains('errors')) {
+          const s = db.createObjectStore('errors', {
+            keyPath: 'autoId', autoIncrement: true,
+          });
+          s.createIndex('byCampaign', 'campaignId');
+        }
       }
     },
   });
