@@ -23,6 +23,12 @@ export type {
   CampaignManifest,
   PipelineCursor,
   AppSettings,
+  BatchAttemptOutcome,
+  BatchAttemptRecord,
+  PipelineHistoryKind,
+  PipelineHistoryEntry,
+  LoopId,
+  LoopErrorEntry,
 } from './types.js';
 
 export { DEFAULT_STAGE_CONTROL } from './types.js';

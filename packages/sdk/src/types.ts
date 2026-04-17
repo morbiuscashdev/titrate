@@ -172,3 +172,53 @@ export type AppSettings = {
     readonly infura?: string;
   };
 };
+
+export type BatchAttemptOutcome =
+  | 'pending'
+  | 'confirmed'
+  | 'replaced'
+  | 'reverted'
+  | 'dropped';
+
+export type BatchAttemptRecord = {
+  readonly txHash: Hex;
+  readonly nonce: number;
+  readonly maxFeePerGas: string;          // decimal bigint
+  readonly maxPriorityFeePerGas: string;  // decimal bigint
+  readonly broadcastAt: number;
+  readonly outcome: BatchAttemptOutcome;
+  readonly confirmedBlock: string | null; // decimal bigint
+  readonly reason?: string;
+};
+
+export type PipelineHistoryKind =
+  | 'initial'
+  | 'add'
+  | 'replace'
+  | 'external-add'
+  | 'external-replace'
+  | 'revert';
+
+export type PipelineHistoryEntry = {
+  readonly timestamp: number;
+  readonly kind: PipelineHistoryKind;
+  readonly prior: readonly PipelineStep[] | null;
+  readonly next: readonly PipelineStep[];
+  readonly watermarkBefore: number;
+  readonly watermarkAfter: number;
+  readonly qualifiedCountBefore: number;
+  readonly qualifiedCountAfter: number;
+  readonly source: 'ui' | 'external-fs';
+  readonly userChoice?: 'add' | 'replace' | 'revert';
+};
+
+export type LoopId = 'scanner' | 'filter' | 'distributor';
+
+export type LoopErrorEntry = {
+  readonly timestamp: number;
+  readonly loop: LoopId;
+  readonly phase: string;
+  readonly message: string;
+  readonly stack?: string;
+  readonly context?: Record<string, unknown>;
+};

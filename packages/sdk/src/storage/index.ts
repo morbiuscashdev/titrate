@@ -1,5 +1,5 @@
 import type { Address, Hex } from 'viem';
-import type { CampaignConfig, BatchAttempt, PipelineConfig, BatchStatus } from '../types.js';
+import type { CampaignConfig, BatchAttempt, BatchAttemptRecord, PipelineConfig, BatchStatus } from '../types.js';
 
 export type StoredCampaign = CampaignConfig & {
   readonly id: string;
@@ -152,6 +152,7 @@ export type BatchRecord = {
   readonly recipients: readonly Address[];
   readonly amounts: readonly string[];
   readonly status: 'pending' | 'broadcast' | 'confirmed' | 'failed';
+  readonly attempts: readonly BatchAttemptRecord[];
   readonly confirmedTxHash: Hex | null;
   readonly confirmedBlock: string | null;
   readonly createdAt: number;
