@@ -4,11 +4,11 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
 
-const SRC_ENTRY = join(__dirname, '..', 'src', 'index.ts');
+const SRC_ENTRY = join(__dirname, '..', 'src', 'index.tsx');
 const EXEC_OPTS = { encoding: 'utf-8' as const, timeout: 30_000 };
 
 function runCli(args: string[]): string {
-  return execFileSync('npx', ['tsx', SRC_ENTRY, ...args], EXEC_OPTS);
+  return execFileSync('bun', ['run', SRC_ENTRY, ...args], EXEC_OPTS);
 }
 
 describe('set-ops command', () => {

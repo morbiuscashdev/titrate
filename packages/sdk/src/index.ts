@@ -16,10 +16,22 @@ export type {
   ChainConfig,
   CallData,
   ContractArtifact,
+  CampaignStatus,
+  WalletProvisioning,
+  CampaignManifest,
+  PipelineCursor,
+  AppSettings,
 } from './types.js';
 
 // Chains
 export { SUPPORTED_CHAINS, getChains, getChainConfig, getExplorerApiUrl } from './chains/index.js';
+export {
+  PROVIDERS,
+  getProvider,
+  resolveRpcUrl,
+  splitTemplate,
+} from './chains/providers.js';
+export type { ProviderId, RpcProvider, ProviderKeys } from './chains/providers.js';
 
 // CSV
 export { parseCSV, detectAmountFormat, validateAddresses, deduplicateAddresses, flagConflicts } from './csv/index.js';
@@ -52,6 +64,10 @@ export type {
   StoredBatch,
   StoredWallet,
   StoredChainConfig,
+  WalletRecord,
+  BatchRecord,
+  SweepRecord,
+  EncryptedKeyEnvelope,
 } from './storage/index.js';
 
 // Utils
@@ -223,3 +239,6 @@ export type { RequestBus, RequestBusOptions } from './request-bus.js';
 // Cache
 export { computeCacheKey, createMemoryCache, createCache } from './cache/index.js';
 export type { CacheKey, CacheEntry, CacheStore, CacheConfig, Cache, MemoryCache } from './cache/index.js';
+
+// Signers
+export * from './signers/index.js';

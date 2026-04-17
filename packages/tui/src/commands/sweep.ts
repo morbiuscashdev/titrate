@@ -1,10 +1,52 @@
+import { join } from 'node:path';
+import { createInterface } from 'node:readline/promises';
+import { stdin as input, stdout as output } from 'node:process';
 import { Command } from 'commander';
 import type { Address, Hex } from 'viem';
 import { createEIP712Message, deriveMultipleWallets } from '@titrate/sdk';
+import { decryptPrivateKey } from '../utils/passphrase.js';
 import { privateKeyToAccount } from 'viem/accounts';
 import { createWalletClient, http, parseAbi } from 'viem';
 import { createRpcClient } from '../utils/rpc.js';
 import { resolvePrivateKey } from '../utils/wallet.js';
+import { createCampaignStorage } from '@titrate/storage-campaign';
+import { resolveCampaignRoot } from '../utils/campaign-root.js';
+
+/**
+ * Load campaign config from a named campaign directory.
+ *
+ * Reads the passphrase interactively, then decrypts each wallet's private key
+ * using the full AES-GCM envelope stored in `encryptedKey`.
+ */
+async function loadFromCampaign(campaignName: string, folder?: string) {
+  const root = await resolveCampaignRoot({ folder });
+  const dir = join(root, campaignName);
+  const storage = createCampaignStorage(dir);
+  const manifest = await storage.manifest.read();
+
+  const rl = createInterface({ input, output });
+  const passphrase = await rl.question('Passphrase for this campaign: ');
+  rl.close();
+
+  const records = await storage.wallets.readAll();
+  const privateKeys = await Promise.all(
+    records.map(async (r) => {
+      try {
+        return await decryptPrivateKey({
+          ciphertext: r.encryptedKey.ciphertext,
+          iv: r.encryptedKey.iv,
+          authTag: r.encryptedKey.authTag,
+          kdf: r.kdf,
+          kdfParams: r.kdfParams,
+        }, passphrase);
+      } catch (err) {
+        throw new Error(`Wallet ${r.index}: could not decrypt (wrong passphrase?) — ${err}`);
+      }
+    }),
+  );
+
+  return { manifest, privateKeys, storage };
+}
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address;
 
@@ -31,24 +73,38 @@ export function registerSweep(program: Command): void {
   program
     .command('sweep')
     .description('Sweep residual balances from derived hot wallets back to the funder')
-    .requiredOption('--rpc <url>', 'RPC endpoint URL')
-    .requiredOption('--campaign-name --campaignName <name>', 'Campaign name for EIP-712 wallet derivation')
-    .requiredOption('--count <number>', 'Number of derived hot wallets to sweep', parseInt)
+    .option('--rpc <url>', 'RPC endpoint URL')
+    .option('--campaign-name --campaignName <name>', 'Campaign name for EIP-712 wallet derivation')
+    .option('--count <number>', 'Number of derived hot wallets to sweep', parseInt)
     .option('--token <address>', 'Token contract address (zero address or omit for native ETH)')
     .option('--private-key --privateKey <key>', 'Cold wallet private key (or set TITRATE_PRIVATE_KEY)')
     .option('--offset <number>', 'Starting index offset for wallet derivation (default: 0)', parseInt)
     .option('--chain-id --chainId <id>', 'Chain ID for RPC client configuration', parseInt)
     .option('--dry-run --dryRun', 'Check balances without sending transactions')
+    .option('-c, --campaign <name>', 'Campaign name (loads config from campaign directory)')
+    .option('--folder <path>', 'Campaign root directory (with --campaign)')
     .action(async (opts: {
-      rpc: string;
-      campaignName: string;
-      count: number;
+      rpc?: string;
+      campaignName?: string;
+      count?: number;
       token?: string;
       privateKey?: string;
       offset?: number;
       chainId?: number;
       dryRun?: boolean;
+      campaign?: string;
+      folder?: string;
     }) => {
+      if (opts.campaign) {
+        await loadFromCampaign(opts.campaign, opts.folder);
+        return;
+      }
+
+      // Guard required flags in the non-campaign path (formerly enforced by requiredOption).
+      if (!opts.rpc) throw new Error('missing required option: --rpc <url>');
+      if (!opts.campaignName) throw new Error('missing required option: --campaign-name <name>');
+      if (opts.count === undefined) throw new Error('missing required option: --count <number>');
+
       const coldKey = resolvePrivateKey(opts.privateKey);
       const coldAccount = privateKeyToAccount(coldKey);
       const funder = coldAccount.address;

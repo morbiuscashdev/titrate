@@ -119,3 +119,49 @@ export interface Storage {
   readonly chainConfigs: ChainConfigStore;
   readonly appSettings: AppSettingsStore;
 }
+
+export type EncryptedKeyEnvelope = {
+  readonly ciphertext: string;   // base64
+  readonly iv: string;           // base64
+  readonly authTag: string;      // base64
+};
+
+export type WalletRecord = {
+  readonly index: number;
+  readonly address: Address;
+  readonly encryptedKey: EncryptedKeyEnvelope;
+  readonly kdf: 'scrypt';
+  readonly kdfParams: {
+    readonly N: number;
+    readonly r: number;
+    readonly p: number;
+    readonly salt: string;
+  };
+  readonly provenance:
+    | {
+        readonly type: 'derived';
+        readonly coldAddress: Address;
+        readonly derivationIndex: number;
+      }
+    | { readonly type: 'imported' };
+  readonly createdAt: number;
+};
+
+export type BatchRecord = {
+  readonly batchIndex: number;
+  readonly recipients: readonly Address[];
+  readonly amounts: readonly string[];
+  readonly status: 'pending' | 'broadcast' | 'confirmed' | 'failed';
+  readonly confirmedTxHash: Hex | null;
+  readonly confirmedBlock: string | null;
+  readonly createdAt: number;
+};
+
+export type SweepRecord = {
+  readonly walletIndex: number;
+  readonly walletAddress: Address;
+  readonly balance: string;
+  readonly txHash: Hex | null;
+  readonly error: string | null;
+  readonly createdAt: number;
+};

@@ -1,8 +1,17 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "jsxImportSource": "@opentui/react",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "rootDir": ".",
     "outDir": "dist",
-    "rootDir": "src"
+    "types": ["bun-types", "react"],
+    "skipLibCheck": true
   },
-  "include": ["src"]
+  "include": ["src/**/*", "__tests__/**/*"]
 }

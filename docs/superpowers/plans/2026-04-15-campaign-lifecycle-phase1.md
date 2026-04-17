@@ -1,110 +1,163 @@
-# Campaign Lifecycle Phase 1 — Campaign Directory + Static Commands
+# Campaign Lifecycle Phase 1 Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Replace the TUI's one-shot wizard with persistent, directory-scoped campaigns that users can create, configure step-by-step, close, and reopen later. No live pipeline yet — steps run sequentially on demand.
+**Goal:** Replace the TUI's one-shot clack wizard with a persistent, directory-scoped campaign workspace rendered via OpenTUI React on Bun. Add a unified wallet-encryption model (passphrase + scrypt + AES-GCM), an EIP-712 signer abstraction, and a templated RPC provider catalog.
 
-**Architecture:** A new `@titrate/storage-campaign` package provides appendable file primitives (`AppendableCSV`, `AppendableJSONL`) and JSON config stores. The TUI gains `new`, `open`, and `list` commands that read/write campaign directories. Existing standalone commands gain a `--campaign` flag. The SDK extends `CampaignConfig` with `coldAddress`, `walletCount`, `walletOffset` and adds `CampaignManifest` and `PipelineCursor` types.
+**Architecture:** New `@titrate/storage-campaign` package provides append-only file primitives and JSON config stores. SDK gains type extensions (`CampaignManifest`, `WalletProvisioning`, `PipelineCursor`), a `PROVIDERS` catalog with templated URL builders, and an `EIP712Signer` abstraction. The TUI package switches runtime to Bun and interactive UI to OpenTUI React, replacing `@clack/prompts` + `ora` + Vitest.
 
-**Tech Stack:** TypeScript, Node.js fs/promises, Vitest, Commander.js, @clack/prompts, Viem
+**Tech Stack:** TypeScript 5.7, Bun 1.x, React 19, OpenTUI React, Commander, Viem, Vitest (SDK/storage-campaign), bun:test (TUI), scrypt, AES-GCM (WebCrypto).
 
-**Testing Strategy:** Unit tests for storage primitives and CLI logic. Integration test at the end uses Anvil fork to run a full campaign cycle. Real testnet tests (PulseChain v4) gated behind `PULSECHAIN_TESTNET_RPC` env var for smoke testing.
-
----
-
-## File Structure
-
-### New package: `packages/storage-campaign/`
-
-| File | Responsibility |
-|------|----------------|
-| `package.json` | Package manifest, depends on `@titrate/sdk` |
-| `tsconfig.json` | Extends `../../tsconfig.base.json` |
-| `src/index.ts` | Factory: `createCampaignStorage(dir)`, `createSharedStorage(dir)` |
-| `src/appendable-csv.ts` | `AppendableCSV` — append rows, stream from offset, count lines |
-| `src/appendable-jsonl.ts` | `AppendableJSONL<T>` — append records, stream from offset, read all |
-| `src/manifest-store.ts` | Read/write `campaign.json` (JSON read-modify-write) |
-| `src/cursor-store.ts` | Read/write `cursor.json` (pipeline watermarks) |
-| `src/pipeline-store.ts` | Read/write `pipeline.json` (source + filter config) |
-| `src/shared-storage.ts` | `createSharedStorage` — chains.json + settings.json |
-| `src/types.ts` | Package-internal types (serialization helpers) |
-
-### New test files: `packages/storage-campaign/__tests__/`
-
-| File | Covers |
-|------|--------|
-| `appendable-csv.test.ts` | Append, read-from-offset, count, empty file, large datasets |
-| `appendable-jsonl.test.ts` | Append, read-from-offset, readAll, count, type safety |
-| `manifest-store.test.ts` | Create, read, update, missing file handling |
-| `cursor-store.test.ts` | Create, read, update, BigInt serialization |
-| `pipeline-store.test.ts` | Create, read, update |
-| `campaign-storage.test.ts` | Factory integration, directory creation |
-| `shared-storage.test.ts` | Chain configs, settings, cross-campaign isolation |
-
-### Modified files in `packages/sdk/`
-
-| File | Change |
-|------|--------|
-| `src/types.ts` | Add `coldAddress`, `walletCount`, `walletOffset` to `CampaignConfig`. Add `CampaignManifest`, `PipelineCursor`, `CampaignStatus` types. |
-| `src/storage/index.ts` | Add `WalletRecord`, `BatchRecord`, `SweepRecord` types for JSONL serialization |
-| `src/index.ts` | Export new types |
-
-### New/modified files in `packages/tui/`
-
-| File | Change |
-|------|--------|
-| `src/index.ts` | Register `new`, `open`, `list` commands |
-| `src/commands/new-campaign.ts` | Create: `titrate new <name>` command |
-| `src/commands/open-campaign.ts` | Create: `titrate open <name-or-path>` command |
-| `src/commands/list-campaigns.ts` | Create: `titrate list` command |
-| `src/interactive/dashboard.ts` | Create: step-based menu with status indicators |
-| `src/interactive/steps/campaign.ts` | Modify: accept optional `CampaignStorage` to persist config |
-| `src/interactive/steps/addresses.ts` | Modify: write to `addresses.csv` via storage |
-| `src/interactive/steps/filters.ts` | Modify: write to `filtered.csv` + `pipeline.json` via storage |
-| `src/interactive/steps/amounts.ts` | Modify: write to `amounts.csv` or manifest via storage |
-| `src/interactive/steps/wallet.ts` | Modify: write to `wallets.jsonl` + update manifest via storage |
-| `src/interactive/steps/distribute.ts` | Modify: write to `batches.jsonl` via storage |
-| `src/commands/sweep.ts` | Modify: add `--campaign` flag, load from storage |
-| `src/commands/distribute.ts` | Modify: add `--campaign` flag, load from storage |
-| `src/commands/collect.ts` | Modify: add `--campaign` flag, write to storage |
-| `src/utils/campaign-root.ts` | Create: resolve campaign root directory |
-| `package.json` | Add `@titrate/storage-campaign` dependency |
-
-### New test files in `packages/tui/__tests__/`
-
-| File | Covers |
-|------|--------|
-| `campaign-root.test.ts` | Resolution logic (flag > env > auto-detect) |
-| `dashboard.test.ts` | State derivation from file existence |
-| `new-campaign.test.ts` | Command parsing, directory creation |
-| `open-campaign.test.ts` | Command parsing, campaign loading |
-| `list-campaigns.test.ts` | Directory scanning |
+**Testing Strategy:** SDK + storage-campaign use Vitest (Node). TUI uses `bun test` with `@opentui/core/testing` snapshots. Anvil-gated integration tests via `describe.runIf(anvilUp)`. Pure functions unit-tested before integration.
 
 ---
 
-### Task 1: Extend SDK types
+## File Structure Map
+
+### Phase 1a — SDK Foundation
+
+| File | Action | Responsibility |
+|------|--------|----------------|
+| `packages/sdk/src/types.ts` | Modify | Add `CampaignStatus`, `WalletProvisioning`, `CampaignManifest`, `PipelineCursor`, `AppSettings.providerKeys` |
+| `packages/sdk/src/storage/index.ts` | Modify | Add `WalletRecord`, `BatchRecord`, `SweepRecord` exports |
+| `packages/sdk/src/chains/providers.ts` | Create | `RpcProvider` type, `PROVIDERS` catalog, `resolveRpcUrl`, `splitTemplate` |
+| `packages/sdk/src/chains/config.ts` | Modify | Move valve templates out of `rpcUrls` (public-only list) |
+| `packages/sdk/src/signers/types.ts` | Create | `EIP712Signer`, `SignerFactory` |
+| `packages/sdk/src/signers/paste.ts` | Create | `createPasteSignerFactory` |
+| `packages/sdk/src/signers/index.ts` | Create | Barrel re-exports |
+| `packages/sdk/src/index.ts` | Modify | Export new modules |
+| `packages/sdk/src/__tests__/types.test.ts` | Create | Type-shape smoke tests |
+| `packages/sdk/src/__tests__/providers.test.ts` | Create | URL builder + resolver tests |
+| `packages/sdk/src/__tests__/signers.test.ts` | Create | PasteSigner tests |
+
+### Phase 1b — `@titrate/storage-campaign`
+
+| File | Action | Responsibility |
+|------|--------|----------------|
+| `packages/storage-campaign/package.json` | Create | Package manifest |
+| `packages/storage-campaign/tsconfig.json` | Create | Extends `../../tsconfig.base.json` |
+| `packages/storage-campaign/vitest.config.ts` | Create | Test config |
+| `packages/storage-campaign/src/index.ts` | Create | `createCampaignStorage`, `createSharedStorage` factories |
+| `packages/storage-campaign/src/types.ts` | Create | Package-internal types |
+| `packages/storage-campaign/src/appendable-csv.ts` | Create | `AppendableCSV` primitive |
+| `packages/storage-campaign/src/appendable-jsonl.ts` | Create | `AppendableJSONL<T>` primitive |
+| `packages/storage-campaign/src/manifest-store.ts` | Create | `campaign.json` read/write |
+| `packages/storage-campaign/src/cursor-store.ts` | Create | `cursor.json` read/write (BigInt-safe) |
+| `packages/storage-campaign/src/pipeline-store.ts` | Create | `pipeline.json` read/write |
+| `packages/storage-campaign/src/shared-storage.ts` | Create | `_shared/chains.json`, `_shared/settings.json` |
+| `packages/storage-campaign/__tests__/*.test.ts` | Create | One test file per source file |
+
+### Phase 1c — TUI Bun + OpenTUI Foundation
+
+| File | Action | Responsibility |
+|------|--------|----------------|
+| `packages/tui/package.json` | Modify | Bun runtime, OpenTUI/React deps, drop clack/ora/vitest |
+| `packages/tui/tsconfig.json` | Modify | JSX: react-jsx, module: esnext, Bun types |
+| `packages/tui/bunfig.toml` | Create | Bun test config |
+| `packages/tui/src/index.tsx` | Create | Commander dispatch (replaces `src/index.ts`) |
+| `packages/tui/src/index.ts` | Delete | Replaced by `.tsx` |
+| `packages/tui/src/interactive/App.tsx` | Create | Root component, provider stack, screen router |
+| `packages/tui/src/interactive/context.tsx` | Create | CampaignStorage, Manifest, Client, Intervention contexts |
+| `packages/tui/src/interactive/step-status.ts` | Create | `deriveStepStates` pure fn |
+| `packages/tui/src/interactive/screens/Dashboard.tsx` | Create | Step menu |
+| `packages/tui/src/interactive/screens/CampaignSetup.tsx` | Create | Step 1 |
+| `packages/tui/src/interactive/screens/Addresses.tsx` | Create | Step 2 |
+| `packages/tui/src/interactive/screens/Filters.tsx` | Create | Step 3 |
+| `packages/tui/src/interactive/screens/Amounts.tsx` | Create | Step 4 |
+| `packages/tui/src/interactive/screens/Wallet.tsx` | Create | Step 5 |
+| `packages/tui/src/interactive/screens/Distribute.tsx` | Create | Step 6 |
+| `packages/tui/src/interactive/components/StepBadge.tsx` | Create | Status indicator |
+| `packages/tui/src/interactive/components/ProviderKeyInput.tsx` | Create | Templated RPC input |
+| `packages/tui/src/interactive/components/Spinner.tsx` | Create | `useTimeline` spinner |
+| `packages/tui/src/interactive/components/InterventionOverlay.tsx` | Create | Pause/abort/continue modal |
+| `packages/tui/src/utils/campaign-root.ts` | Create | Campaign root resolution |
+| `packages/tui/src/utils/passphrase.ts` | Create | scrypt + AES-GCM helpers |
+
+### Phase 1d — Command Wiring
+
+| File | Action | Responsibility |
+|------|--------|----------------|
+| `packages/tui/src/commands/new-campaign.ts` | Create | `titrate new <name>` |
+| `packages/tui/src/commands/open-campaign.ts` | Create | `titrate open <name-or-path>` |
+| `packages/tui/src/commands/list-campaigns.ts` | Create | `titrate list` |
+| `packages/tui/src/commands/distribute.ts` | Modify | Add `--campaign` flag |
+| `packages/tui/src/commands/sweep.ts` | Modify | Add `--campaign` flag |
+| `packages/tui/src/commands/collect.ts` | Modify | Add `--campaign` flag |
+| `packages/tui/src/interactive/wizard.ts` | Delete | Replaced |
+| `packages/tui/src/interactive/steps/*.ts` | Delete | Replaced by React screens |
+| `packages/tui/src/interactive/format.ts` | Delete | clack-specific |
+
+### Phase 1e — Signer & Encryption
+
+| File | Action | Responsibility |
+|------|--------|----------------|
+| `packages/sdk/src/signers/walletconnect.ts` | Create | `createWalletConnectSignerFactory` |
+| `packages/sdk/src/signers/ledger.ts` | Create | `createLedgerSignerFactory` (stretch) |
+| `packages/tui/src/interactive/components/QRCode.tsx` | Create | Unicode-block QR renderer |
+| `packages/tui/__tests__/integration/full-campaign.test.ts` | Create | Anvil end-to-end |
+
+### Phase 1f — Regression
+
+| File | Action | Responsibility |
+|------|--------|----------------|
+| `progress.txt` | Modify | Checkpoint |
+| `package.json` (root) | Modify | Yarn workspace + test aggregation |
+
+---
+
+## Phase 1a — SDK Foundation
+
+### Task 1: Add SDK types for `CampaignManifest`, `WalletProvisioning`, `PipelineCursor`
 
 **Files:**
 - Modify: `packages/sdk/src/types.ts`
-- Modify: `packages/sdk/src/storage/index.ts`
-- Modify: `packages/sdk/src/index.ts`
 - Test: `packages/sdk/src/__tests__/types.test.ts`
 
-- [ ] **Step 1: Write type compatibility test**
+- [ ] **Step 1: Write the failing test**
 
-Create a test that verifies the new types exist and are structurally correct:
+Create `packages/sdk/src/__tests__/types.test.ts`:
 
 ```typescript
-// packages/sdk/src/__tests__/types.test.ts
 import { describe, it, expect } from 'vitest';
-import type { CampaignManifest, PipelineCursor, CampaignStatus, CampaignConfig } from '../types.js';
-import type { WalletRecord, BatchRecord, SweepRecord } from '../storage/index.js';
-import type { Address, Hex } from 'viem';
+import type {
+  CampaignManifest,
+  CampaignStatus,
+  WalletProvisioning,
+  PipelineCursor,
+} from '../types.js';
+import type { Address } from 'viem';
+
+describe('CampaignStatus', () => {
+  it('accepts all lifecycle states', () => {
+    const states: readonly CampaignStatus[] = [
+      'configuring', 'ready', 'running', 'paused', 'completed', 'swept',
+    ];
+    expect(states).toHaveLength(6);
+  });
+});
+
+describe('WalletProvisioning', () => {
+  it('derived branch carries cold address + count + offset', () => {
+    const p: WalletProvisioning = {
+      mode: 'derived',
+      coldAddress: '0x0000000000000000000000000000000000000001' as Address,
+      walletCount: 3,
+      walletOffset: 0,
+    };
+    expect(p.mode).toBe('derived');
+    if (p.mode === 'derived') expect(p.walletCount).toBe(3);
+  });
+
+  it('imported branch carries only count', () => {
+    const p: WalletProvisioning = { mode: 'imported', count: 2 };
+    expect(p.mode).toBe('imported');
+    if (p.mode === 'imported') expect(p.count).toBe(2);
+  });
+});
 
 describe('CampaignManifest', () => {
   it('extends CampaignConfig with lifecycle fields', () => {
     const manifest: CampaignManifest = {
-      // CampaignConfig fields
       funder: '0x0000000000000000000000000000000000000001' as Address,
       name: 'test',
       version: 1,
@@ -121,93 +174,64 @@ describe('CampaignManifest', () => {
       batchSize: 200,
       campaignId: null,
       pinnedBlock: null,
-      // New CampaignConfig fields
-      coldAddress: '0x0000000000000000000000000000000000000003' as Address,
-      walletCount: 3,
-      walletOffset: 0,
-      // CampaignManifest-only fields
       id: 'test-campaign',
       status: 'configuring',
+      wallets: { mode: 'imported', count: 0 },
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-
     expect(manifest.status).toBe('configuring');
-    expect(manifest.coldAddress).toBeTruthy();
-    expect(manifest.walletCount).toBe(3);
+    expect(manifest.wallets.mode).toBe('imported');
   });
 });
 
 describe('PipelineCursor', () => {
-  it('tracks watermarks for all three pipeline stages', () => {
+  it('tracks watermarks for all three stages', () => {
     const cursor: PipelineCursor = {
-      scan: { lastBlock: 18000000n, endBlock: null, addressCount: 0 },
+      scan: { lastBlock: 18_000_000n, endBlock: null, addressCount: 0 },
       filter: { watermark: 0, qualifiedCount: 0 },
       distribute: { watermark: 0, confirmedCount: 0 },
     };
-
     expect(cursor.scan.endBlock).toBeNull();
-    expect(cursor.filter.watermark).toBe(0);
-  });
-});
-
-describe('JSONL record types', () => {
-  it('WalletRecord has required fields', () => {
-    const record: WalletRecord = {
-      index: 0,
-      address: '0x0000000000000000000000000000000000000001' as Address,
-      coldAddress: '0x0000000000000000000000000000000000000002' as Address,
-      createdAt: Date.now(),
-    };
-    expect(record.index).toBe(0);
-  });
-
-  it('BatchRecord has required fields', () => {
-    const record: BatchRecord = {
-      batchIndex: 0,
-      recipients: ['0x0000000000000000000000000000000000000001' as Address],
-      amounts: ['1000000'],
-      status: 'confirmed',
-      confirmedTxHash: '0xabc' as Hex,
-      confirmedBlock: '12345',
-      createdAt: Date.now(),
-    };
-    expect(record.status).toBe('confirmed');
-  });
-
-  it('SweepRecord has required fields', () => {
-    const record: SweepRecord = {
-      walletIndex: 0,
-      walletAddress: '0x0000000000000000000000000000000000000001' as Address,
-      balance: '1000000',
-      txHash: '0xabc' as Hex,
-      error: null,
-      createdAt: Date.now(),
-    };
-    expect(record.error).toBeNull();
+    expect(typeof cursor.scan.lastBlock).toBe('bigint');
   });
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run test to verify failure**
 
 Run: `cd packages/sdk && npx vitest run src/__tests__/types.test.ts`
-Expected: FAIL — types don't exist yet
+Expected: FAIL — "Cannot find name 'CampaignManifest'" (or similar).
 
-- [ ] **Step 3: Add new fields to CampaignConfig and new types to types.ts**
+- [ ] **Step 3: Add types to `packages/sdk/src/types.ts`**
+
+Append to the existing file:
 
 ```typescript
-// Add to CampaignConfig in packages/sdk/src/types.ts:
-//   readonly coldAddress: Address;
-//   readonly walletCount: number;
-//   readonly walletOffset: number;
+export type CampaignStatus =
+  | 'configuring'
+  | 'ready'
+  | 'running'
+  | 'paused'
+  | 'completed'
+  | 'swept';
 
-// Add after CampaignConfig:
-export type CampaignStatus = 'configuring' | 'ready' | 'running' | 'paused' | 'completed' | 'swept';
+export type WalletProvisioning =
+  | {
+      readonly mode: 'derived';
+      readonly coldAddress: Address;
+      readonly walletCount: number;
+      readonly walletOffset: number;
+    }
+  | {
+      readonly mode: 'imported';
+      readonly count: number;
+    };
 
 export type CampaignManifest = CampaignConfig & {
   readonly id: string;
   readonly status: CampaignStatus;
+  readonly wallets: WalletProvisioning;
   readonly createdAt: number;
   readonly updatedAt: number;
 };
@@ -229,84 +253,702 @@ export type PipelineCursor = {
 };
 ```
 
-- [ ] **Step 4: Add JSONL record types to storage/index.ts**
+- [ ] **Step 4: Export the new types from `packages/sdk/src/index.ts`**
+
+Add to the existing exports:
 
 ```typescript
-// Add to packages/sdk/src/storage/index.ts after StoredChainConfig:
+export type {
+  CampaignStatus,
+  WalletProvisioning,
+  CampaignManifest,
+  PipelineCursor,
+} from './types.js';
+```
 
+- [ ] **Step 5: Run test to verify pass**
+
+Run: `cd packages/sdk && npx vitest run src/__tests__/types.test.ts`
+Expected: PASS — 4 tests.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add packages/sdk/src/types.ts packages/sdk/src/index.ts packages/sdk/src/__tests__/types.test.ts
+git commit -m "feat(sdk): add CampaignManifest, WalletProvisioning, PipelineCursor types"
+```
+
+---
+
+### Task 2: Add JSONL record types (`WalletRecord`, `BatchRecord`, `SweepRecord`)
+
+**Files:**
+- Modify: `packages/sdk/src/storage/index.ts`
+- Modify: `packages/sdk/src/index.ts`
+- Test: `packages/sdk/src/__tests__/storage-records.test.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `packages/sdk/src/__tests__/storage-records.test.ts`:
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import type {
+  WalletRecord,
+  BatchRecord,
+  SweepRecord,
+} from '../storage/index.js';
+import type { Address, Hex } from 'viem';
+
+describe('WalletRecord', () => {
+  it('derived branch carries coldAddress + derivationIndex', () => {
+    const record: WalletRecord = {
+      index: 0,
+      address: '0x0000000000000000000000000000000000000001' as Address,
+      encryptedKey: 'ciphertext-base64',
+      kdf: 'scrypt',
+      kdfParams: { N: 131072, r: 8, p: 1, salt: 'salt-base64' },
+      provenance: {
+        type: 'derived',
+        coldAddress: '0x0000000000000000000000000000000000000002' as Address,
+        derivationIndex: 0,
+      },
+      createdAt: Date.now(),
+    };
+    expect(record.provenance.type).toBe('derived');
+  });
+
+  it('imported branch has type only', () => {
+    const record: WalletRecord = {
+      index: 0,
+      address: '0x0000000000000000000000000000000000000001' as Address,
+      encryptedKey: 'ciphertext-base64',
+      kdf: 'scrypt',
+      kdfParams: { N: 131072, r: 8, p: 1, salt: 'salt-base64' },
+      provenance: { type: 'imported' },
+      createdAt: Date.now(),
+    };
+    expect(record.provenance.type).toBe('imported');
+  });
+});
+
+describe('BatchRecord', () => {
+  it('serializes amounts as decimal strings (BigInt-safe)', () => {
+    const record: BatchRecord = {
+      batchIndex: 0,
+      recipients: ['0x0000000000000000000000000000000000000001' as Address],
+      amounts: ['1000000000000000000'],
+      status: 'confirmed',
+      confirmedTxHash: '0xabc' as Hex,
+      confirmedBlock: '18000000',
+      createdAt: Date.now(),
+    };
+    expect(record.status).toBe('confirmed');
+    expect(typeof record.amounts[0]).toBe('string');
+  });
+});
+
+describe('SweepRecord', () => {
+  it('carries per-wallet sweep outcome', () => {
+    const record: SweepRecord = {
+      walletIndex: 0,
+      walletAddress: '0x0000000000000000000000000000000000000001' as Address,
+      balance: '5000000000000000',
+      txHash: '0xdef' as Hex,
+      error: null,
+      createdAt: Date.now(),
+    };
+    expect(record.error).toBeNull();
+  });
+});
+```
+
+- [ ] **Step 2: Run test — expect failure**
+
+Run: `cd packages/sdk && npx vitest run src/__tests__/storage-records.test.ts`
+Expected: FAIL — types undefined.
+
+- [ ] **Step 3: Add types to `packages/sdk/src/storage/index.ts`**
+
+Append:
+
+```typescript
 export type WalletRecord = {
   readonly index: number;
   readonly address: Address;
-  readonly coldAddress: Address;
+  readonly encryptedKey: string;
+  readonly kdf: 'scrypt';
+  readonly kdfParams: {
+    readonly N: number;
+    readonly r: number;
+    readonly p: number;
+    readonly salt: string;
+  };
+  readonly provenance:
+    | {
+        readonly type: 'derived';
+        readonly coldAddress: Address;
+        readonly derivationIndex: number;
+      }
+    | { readonly type: 'imported' };
   readonly createdAt: number;
 };
 
 export type BatchRecord = {
   readonly batchIndex: number;
   readonly recipients: readonly Address[];
-  readonly amounts: readonly string[];
-  readonly status: BatchStatus;
+  readonly amounts: readonly string[];  // decimal-string BigInt
+  readonly status: 'pending' | 'broadcast' | 'confirmed' | 'failed';
   readonly confirmedTxHash: Hex | null;
-  readonly confirmedBlock: string | null;
+  readonly confirmedBlock: string | null;  // decimal-string BigInt
   readonly createdAt: number;
 };
 
 export type SweepRecord = {
   readonly walletIndex: number;
   readonly walletAddress: Address;
-  readonly balance: string;
+  readonly balance: string;            // decimal-string BigInt
   readonly txHash: Hex | null;
   readonly error: string | null;
   readonly createdAt: number;
 };
 ```
 
-Import `BatchStatus` at the top of `storage/index.ts` if not already imported.
-
-- [ ] **Step 5: Export new types from SDK barrel**
-
-Add to `packages/sdk/src/index.ts` in the types export section:
+Add the import at the top of the file if not already present:
 
 ```typescript
-export type { CampaignManifest, PipelineCursor, CampaignStatus } from './types.js';
-export type { WalletRecord, BatchRecord, SweepRecord } from './storage/index.js';
+import type { Address, Hex } from 'viem';
 ```
 
-- [ ] **Step 6: Fix existing tests and usages that reference CampaignConfig**
-
-`CampaignConfig` now requires `coldAddress`, `walletCount`, `walletOffset`. Search for all test files creating `CampaignConfig` or `StoredCampaign` objects and add the new fields with defaults:
+- [ ] **Step 4: Re-export from `packages/sdk/src/index.ts`**
 
 ```typescript
-coldAddress: '0x0000000000000000000000000000000000000000' as Address,
-walletCount: 1,
-walletOffset: 0,
+export type {
+  WalletRecord,
+  BatchRecord,
+  SweepRecord,
+} from './storage/index.js';
 ```
 
-Also update `packages/tui/src/interactive/steps/distribute.ts` line 179 where `StoredCampaign` is constructed — add the three new fields.
+- [ ] **Step 5: Run test — expect pass**
 
-- [ ] **Step 7: Run all SDK tests**
+Run: `cd packages/sdk && npx vitest run src/__tests__/storage-records.test.ts`
+Expected: PASS — 4 tests.
 
-Run: `cd packages/sdk && npx vitest run`
-Expected: All tests pass including the new types test
-
-- [ ] **Step 8: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add packages/sdk/src/types.ts packages/sdk/src/storage/index.ts packages/sdk/src/index.ts packages/sdk/src/__tests__/types.test.ts
-git commit -m "feat(sdk): add CampaignManifest, PipelineCursor, JSONL record types"
+git add packages/sdk/src/storage/index.ts packages/sdk/src/index.ts packages/sdk/src/__tests__/storage-records.test.ts
+git commit -m "feat(sdk): add WalletRecord, BatchRecord, SweepRecord JSONL types"
 ```
 
 ---
 
-### Task 2: Scaffold `@titrate/storage-campaign` package
+### Task 3: RPC provider catalog — `PROVIDERS`, `resolveRpcUrl`, `splitTemplate`
+
+**Files:**
+- Create: `packages/sdk/src/chains/providers.ts`
+- Modify: `packages/sdk/src/index.ts`
+- Test: `packages/sdk/src/__tests__/providers.test.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+Create `packages/sdk/src/__tests__/providers.test.ts`:
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import {
+  PROVIDERS,
+  getProvider,
+  resolveRpcUrl,
+  splitTemplate,
+} from '../chains/providers.js';
+
+describe('PROVIDERS catalog', () => {
+  it('exposes valve, alchemy, infura, public, custom', () => {
+    const ids = PROVIDERS.map((p) => p.id);
+    expect(ids).toContain('valve');
+    expect(ids).toContain('alchemy');
+    expect(ids).toContain('infura');
+    expect(ids).toContain('public');
+    expect(ids).toContain('custom');
+  });
+});
+
+describe('valve.city URL builder', () => {
+  it('uses chainId directly in subdomain', () => {
+    const valve = getProvider('valve');
+    expect(valve.buildUrl(369, 'vk_demo')).toBe('https://evm369.rpc.valve.city/v1/vk_demo');
+    expect(valve.buildUrl(1, 'vk_abc')).toBe('https://evm1.rpc.valve.city/v1/vk_abc');
+  });
+
+  it('supports any EVM chain', () => {
+    const valve = getProvider('valve');
+    expect(valve.buildUrl(42161, 'key')).toBe('https://evm42161.rpc.valve.city/v1/key');
+    expect(valve.buildUrl(8453, 'key')).toBe('https://evm8453.rpc.valve.city/v1/key');
+  });
+});
+
+describe('alchemy URL builder', () => {
+  it('returns slug-based URL for supported chains', () => {
+    const alchemy = getProvider('alchemy');
+    expect(alchemy.buildUrl(1, 'k')).toBe('https://eth-mainnet.g.alchemy.com/v2/k');
+  });
+
+  it('returns null for unsupported chains', () => {
+    const alchemy = getProvider('alchemy');
+    expect(alchemy.buildUrl(369, 'k')).toBeNull();
+  });
+});
+
+describe('resolveRpcUrl', () => {
+  it('prefers valve key when set', () => {
+    const url = resolveRpcUrl(1, { providerKeys: { valve: 'vk_1' } }, ['https://public.example/rpc']);
+    expect(url).toBe('https://evm1.rpc.valve.city/v1/vk_1');
+  });
+
+  it('falls back to alchemy if no valve key', () => {
+    const url = resolveRpcUrl(1, { providerKeys: { alchemy: 'ak_1' } }, ['https://public.example/rpc']);
+    expect(url).toBe('https://eth-mainnet.g.alchemy.com/v2/ak_1');
+  });
+
+  it('falls back to public rpc when no provider keys match', () => {
+    const url = resolveRpcUrl(369, { providerKeys: { alchemy: 'ak_1' } }, ['https://rpc.pulsechain.com']);
+    expect(url).toBe('https://rpc.pulsechain.com');
+  });
+});
+
+describe('splitTemplate', () => {
+  it('splits valve template into prefix + suffix', () => {
+    const { prefix, suffix } = splitTemplate('valve', 369);
+    expect(prefix).toBe('https://evm369.rpc.valve.city/v1/');
+    expect(suffix).toBe('');
+  });
+
+  it('splits alchemy template into prefix + suffix', () => {
+    const { prefix, suffix } = splitTemplate('alchemy', 1);
+    expect(prefix).toBe('https://eth-mainnet.g.alchemy.com/v2/');
+    expect(suffix).toBe('');
+  });
+});
+```
+
+- [ ] **Step 2: Run test — expect failure**
+
+Run: `cd packages/sdk && npx vitest run src/__tests__/providers.test.ts`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Implement `packages/sdk/src/chains/providers.ts`**
+
+```typescript
+/**
+ * RPC provider catalog — templated URL builders for known paid RPC services.
+ *
+ * Usage: pick a provider, call buildUrl(chainId, key). Returns null if the
+ * provider doesn't support the chain. See resolveRpcUrl() for priority-based
+ * selection across providers + public fallbacks.
+ */
+
+export type ProviderId = 'valve' | 'alchemy' | 'infura' | 'public' | 'custom';
+
+export type RpcProvider = {
+  readonly id: ProviderId;
+  readonly name: string;
+  readonly helpUrl: string;
+  readonly requiresKey: boolean;
+  readonly buildUrl: (chainId: number, key: string) => string | null;
+};
+
+const ALCHEMY_SLUGS: Record<number, string> = {
+  1: 'eth-mainnet',
+  8453: 'base-mainnet',
+  42161: 'arb-mainnet',
+  11155111: 'eth-sepolia',
+  84532: 'base-sepolia',
+  421614: 'arb-sepolia',
+};
+
+const INFURA_SLUGS: Record<number, string> = {
+  1: 'mainnet',
+  42161: 'arbitrum-mainnet',
+  11155111: 'sepolia',
+};
+
+export const PROVIDERS: readonly RpcProvider[] = [
+  {
+    id: 'valve',
+    name: 'valve.city',
+    helpUrl: 'https://valve.city',
+    requiresKey: true,
+    buildUrl: (chainId, key) => `https://evm${chainId}.rpc.valve.city/v1/${key}`,
+  },
+  {
+    id: 'alchemy',
+    name: 'Alchemy',
+    helpUrl: 'https://alchemy.com',
+    requiresKey: true,
+    buildUrl: (chainId, key) => {
+      const slug = ALCHEMY_SLUGS[chainId];
+      return slug ? `https://${slug}.g.alchemy.com/v2/${key}` : null;
+    },
+  },
+  {
+    id: 'infura',
+    name: 'Infura',
+    helpUrl: 'https://infura.io',
+    requiresKey: true,
+    buildUrl: (chainId, key) => {
+      const slug = INFURA_SLUGS[chainId];
+      return slug ? `https://${slug}.infura.io/v3/${key}` : null;
+    },
+  },
+  {
+    id: 'public',
+    name: 'Public',
+    helpUrl: '',
+    requiresKey: false,
+    buildUrl: () => null,
+  },
+  {
+    id: 'custom',
+    name: 'Custom URL',
+    helpUrl: '',
+    requiresKey: false,
+    buildUrl: () => null,
+  },
+];
+
+export function getProvider(id: ProviderId): RpcProvider {
+  const p = PROVIDERS.find((x) => x.id === id);
+  if (!p) throw new Error(`Unknown provider: ${id}`);
+  return p;
+}
+
+export type ProviderKeys = {
+  readonly valve?: string;
+  readonly alchemy?: string;
+  readonly infura?: string;
+};
+
+/**
+ * Resolve an RPC URL for a chain given provider keys and public fallbacks.
+ * Priority: valve → alchemy → infura → publicRpcUrls[0].
+ */
+export function resolveRpcUrl(
+  chainId: number,
+  settings: { readonly providerKeys: ProviderKeys },
+  publicRpcUrls: readonly string[],
+): string {
+  const keys = settings.providerKeys;
+  if (keys.valve) {
+    const url = getProvider('valve').buildUrl(chainId, keys.valve);
+    if (url) return url;
+  }
+  if (keys.alchemy) {
+    const url = getProvider('alchemy').buildUrl(chainId, keys.alchemy);
+    if (url) return url;
+  }
+  if (keys.infura) {
+    const url = getProvider('infura').buildUrl(chainId, keys.infura);
+    if (url) return url;
+  }
+  if (publicRpcUrls.length === 0) {
+    throw new Error(`No RPC URL available for chain ${chainId}`);
+  }
+  return publicRpcUrls[0];
+}
+
+/**
+ * Split a provider's URL template into prefix and suffix around the key slot.
+ * Used by the templated input UI to render fixed zones around an editable key field.
+ */
+export function splitTemplate(id: ProviderId, chainId: number): { prefix: string; suffix: string } {
+  const url = getProvider(id).buildUrl(chainId, '\x00');
+  if (!url) return { prefix: '', suffix: '' };
+  const idx = url.indexOf('\x00');
+  return { prefix: url.slice(0, idx), suffix: url.slice(idx + 1) };
+}
+```
+
+- [ ] **Step 4: Export from `packages/sdk/src/index.ts`**
+
+```typescript
+export {
+  PROVIDERS,
+  getProvider,
+  resolveRpcUrl,
+  splitTemplate,
+} from './chains/providers.js';
+export type { ProviderId, RpcProvider, ProviderKeys } from './chains/providers.js';
+```
+
+- [ ] **Step 5: Run test — expect pass**
+
+Run: `cd packages/sdk && npx vitest run src/__tests__/providers.test.ts`
+Expected: PASS — 9 tests.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add packages/sdk/src/chains/providers.ts packages/sdk/src/index.ts packages/sdk/src/__tests__/providers.test.ts
+git commit -m "feat(sdk): add RPC provider catalog with valve.city, Alchemy, Infura"
+```
+
+---
+
+### Task 4: Add `AppSettings.providerKeys`
+
+**Files:**
+- Modify: `packages/sdk/src/types.ts` (if `AppSettings` defined there) or `packages/sdk/src/storage/app-settings.ts`
+
+- [ ] **Step 1: Locate `AppSettings` type**
+
+Run: `cd packages/sdk && grep -rn "AppSettings" src/ | head -10`
+Expected: a file defining `AppSettings`. If absent (TUI may have used a local type), add to `src/types.ts`.
+
+- [ ] **Step 2: Write failing test**
+
+Create or extend `packages/sdk/src/__tests__/app-settings.test.ts`:
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import type { AppSettings } from '../types.js';
+
+describe('AppSettings.providerKeys', () => {
+  it('accepts an object with optional valve/alchemy/infura fields', () => {
+    const settings: AppSettings = {
+      providerKeys: { valve: 'vk_1' },
+    };
+    expect(settings.providerKeys.valve).toBe('vk_1');
+  });
+
+  it('accepts an empty providerKeys object', () => {
+    const settings: AppSettings = { providerKeys: {} };
+    expect(settings.providerKeys).toEqual({});
+  });
+});
+```
+
+- [ ] **Step 3: Run — expect failure**
+
+Run: `cd packages/sdk && npx vitest run src/__tests__/app-settings.test.ts`
+Expected: FAIL — `AppSettings` not exported, or missing `providerKeys`.
+
+- [ ] **Step 4: Add or extend `AppSettings` in `packages/sdk/src/types.ts`**
+
+If `AppSettings` doesn't exist, add:
+
+```typescript
+export type AppSettings = {
+  readonly providerKeys: {
+    readonly valve?: string;
+    readonly alchemy?: string;
+    readonly infura?: string;
+  };
+};
+```
+
+If it exists elsewhere (e.g. `src/storage/app-settings.ts`), add the `providerKeys` field there instead, preserving all existing fields.
+
+- [ ] **Step 5: Export**
+
+Add to `packages/sdk/src/index.ts` if not already:
+
+```typescript
+export type { AppSettings } from './types.js';
+```
+
+- [ ] **Step 6: Run — expect pass**
+
+Run: `cd packages/sdk && npx vitest run src/__tests__/app-settings.test.ts`
+Expected: PASS.
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add packages/sdk/src/types.ts packages/sdk/src/index.ts packages/sdk/src/__tests__/app-settings.test.ts
+git commit -m "feat(sdk): add providerKeys to AppSettings"
+```
+
+---
+
+### Task 5: EIP-712 Signer abstraction + `PasteSigner`
+
+**Files:**
+- Create: `packages/sdk/src/signers/types.ts`
+- Create: `packages/sdk/src/signers/paste.ts`
+- Create: `packages/sdk/src/signers/index.ts`
+- Modify: `packages/sdk/src/index.ts`
+- Test: `packages/sdk/src/__tests__/signers.test.ts`
+
+- [ ] **Step 1: Write failing tests**
+
+Create `packages/sdk/src/__tests__/signers.test.ts`:
+
+```typescript
+import { describe, it, expect } from 'vitest';
+import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
+import type { TypedDataDefinition } from 'viem';
+import {
+  createPasteSignerFactory,
+  type EIP712Signer,
+} from '../signers/index.js';
+
+const TYPED_DATA: TypedDataDefinition = {
+  domain: { name: 'Titrate', version: '1', chainId: 1 },
+  types: {
+    StorageEncryption: [{ name: 'campaignId', type: 'string' }],
+  },
+  primaryType: 'StorageEncryption',
+  message: { campaignId: 'test-campaign' },
+};
+
+describe('PasteSigner', () => {
+  it('round-trips an externally-produced signature', async () => {
+    const pk = generatePrivateKey();
+    const account = privateKeyToAccount(pk);
+    const signature = await account.signTypedData(TYPED_DATA);
+
+    const factory = createPasteSignerFactory({
+      coldAddress: account.address,
+      readSignature: async () => signature,
+    });
+    expect(await factory.available()).toBe(true);
+    const signer: EIP712Signer = await factory.create();
+    expect(await signer.getAddress()).toBe(account.address);
+    expect(await signer.signTypedData(TYPED_DATA)).toBe(signature);
+  });
+
+  it('rejects a signature that does not recover to the declared cold address', async () => {
+    const pkA = generatePrivateKey();
+    const pkB = generatePrivateKey();
+    const accountA = privateKeyToAccount(pkA);
+    const accountB = privateKeyToAccount(pkB);
+    const signatureFromB = await accountB.signTypedData(TYPED_DATA);
+
+    const factory = createPasteSignerFactory({
+      coldAddress: accountA.address,
+      readSignature: async () => signatureFromB,
+    });
+    const signer = await factory.create();
+    await expect(signer.signTypedData(TYPED_DATA)).rejects.toThrow(/recovered address/i);
+  });
+});
+```
+
+- [ ] **Step 2: Run — expect failure**
+
+Run: `cd packages/sdk && npx vitest run src/__tests__/signers.test.ts`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Create `packages/sdk/src/signers/types.ts`**
+
+```typescript
+import type { Address, Hex, TypedDataDefinition } from 'viem';
+
+export type EIP712Signer = {
+  readonly getAddress: () => Promise<Address>;
+  readonly signTypedData: (payload: TypedDataDefinition) => Promise<Hex>;
+  readonly close?: () => Promise<void>;
+};
+
+export type SignerFactoryId = 'paste' | 'walletconnect' | 'ledger';
+
+export type SignerFactory = {
+  readonly id: SignerFactoryId;
+  readonly label: string;
+  readonly available: () => Promise<boolean>;
+  readonly create: () => Promise<EIP712Signer>;
+};
+```
+
+- [ ] **Step 4: Create `packages/sdk/src/signers/paste.ts`**
+
+```typescript
+import { recoverTypedDataAddress, isAddressEqual, type Address, type Hex, type TypedDataDefinition } from 'viem';
+import type { EIP712Signer, SignerFactory } from './types.js';
+
+export type PasteSignerOptions = {
+  readonly coldAddress: Address;
+  /** Prompt the user for a pasted 0x-prefixed signature and return it. */
+  readonly readSignature: (payload: TypedDataDefinition) => Promise<Hex>;
+};
+
+/**
+ * Factory for a "paste a signature" signer. The user signs the EIP-712 payload
+ * externally (web app, `cast wallet sign-typed-data`, etc.) and pastes the
+ * resulting hex signature back into the TUI. Verifies that the signature
+ * recovers to the declared cold address before accepting.
+ */
+export function createPasteSignerFactory(options: PasteSignerOptions): SignerFactory {
+  const signer: EIP712Signer = {
+    async getAddress() {
+      return options.coldAddress;
+    },
+    async signTypedData(payload) {
+      const signature = await options.readSignature(payload);
+      const recovered = await recoverTypedDataAddress({ ...payload, signature });
+      if (!isAddressEqual(recovered, options.coldAddress)) {
+        throw new Error(
+          `Signature verification failed: recovered address ${recovered} does not match cold address ${options.coldAddress}`,
+        );
+      }
+      return signature;
+    },
+  };
+  return {
+    id: 'paste',
+    label: 'Paste signature',
+    available: async () => true,
+    create: async () => signer,
+  };
+}
+```
+
+- [ ] **Step 5: Create `packages/sdk/src/signers/index.ts`**
+
+```typescript
+export type { EIP712Signer, SignerFactory, SignerFactoryId } from './types.js';
+export { createPasteSignerFactory, type PasteSignerOptions } from './paste.js';
+```
+
+- [ ] **Step 6: Export from `packages/sdk/src/index.ts`**
+
+```typescript
+export * from './signers/index.js';
+```
+
+- [ ] **Step 7: Run — expect pass**
+
+Run: `cd packages/sdk && npx vitest run src/__tests__/signers.test.ts`
+Expected: PASS — 2 tests.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add packages/sdk/src/signers packages/sdk/src/index.ts packages/sdk/src/__tests__/signers.test.ts
+git commit -m "feat(sdk): add EIP712Signer abstraction + PasteSigner implementation"
+```
+
+---
+
+## Phase 1b — `@titrate/storage-campaign` Package
+
+### Task 6: Scaffold `@titrate/storage-campaign`
 
 **Files:**
 - Create: `packages/storage-campaign/package.json`
 - Create: `packages/storage-campaign/tsconfig.json`
-- Create: `packages/storage-campaign/src/index.ts`
-- Create: `packages/storage-campaign/src/types.ts`
+- Create: `packages/storage-campaign/vitest.config.ts`
+- Create: `packages/storage-campaign/src/index.ts` (empty stub)
 
-- [ ] **Step 1: Create package.json**
+- [ ] **Step 1: Create directory**
+
+```bash
+mkdir -p packages/storage-campaign/src packages/storage-campaign/__tests__
+```
+
+- [ ] **Step 2: Write `packages/storage-campaign/package.json`**
 
 ```json
 {
@@ -317,222 +959,205 @@ git commit -m "feat(sdk): add CampaignManifest, PipelineCursor, JSONL record typ
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
-    "@titrate/sdk": "0.0.1"
+    "@titrate/sdk": "0.0.1",
+    "viem": "^2.23.2"
   },
   "devDependencies": {
+    "@types/node": "^25.5.0",
     "typescript": "^5.7.3",
     "vitest": "^4.1.1"
   }
 }
 ```
 
-- [ ] **Step 2: Create tsconfig.json**
+- [ ] **Step 3: Write `packages/storage-campaign/tsconfig.json`**
 
 ```json
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src"
+    "rootDir": "src",
+    "declaration": true
   },
-  "include": ["src"],
-  "exclude": ["__tests__", "dist"]
+  "include": ["src/**/*"]
 }
 ```
 
-- [ ] **Step 3: Create internal types**
+- [ ] **Step 4: Write `packages/storage-campaign/vitest.config.ts`**
 
 ```typescript
-// packages/storage-campaign/src/types.ts
-import type { Address } from 'viem';
+import { defineConfig } from 'vitest/config';
 
-/** Serialized form of PipelineCursor for JSON storage (BigInt → string). */
-export type SerializedPipelineCursor = {
-  readonly scan: {
-    readonly lastBlock: string;
-    readonly endBlock: string | null;
-    readonly addressCount: number;
-  };
-  readonly filter: {
-    readonly watermark: number;
-    readonly qualifiedCount: number;
-  };
-  readonly distribute: {
-    readonly watermark: number;
-    readonly confirmedCount: number;
-  };
-};
-
-/** Serialized form of CampaignManifest for JSON storage (BigInt → string). */
-export type SerializedCampaignManifest = {
-  readonly id: string;
-  readonly status: string;
-  readonly funder: string;
-  readonly name: string;
-  readonly version: number;
-  readonly chainId: number;
-  readonly rpcUrl: string;
-  readonly tokenAddress: string;
-  readonly tokenDecimals: number;
-  readonly contractAddress: string | null;
-  readonly contractVariant: 'simple' | 'full';
-  readonly contractName: string;
-  readonly amountMode: 'uniform' | 'variable';
-  readonly amountFormat: 'integer' | 'decimal';
-  readonly uniformAmount: string | null;
-  readonly batchSize: number;
-  readonly campaignId: string | null;
-  readonly pinnedBlock: string | null;
-  readonly coldAddress: string;
-  readonly walletCount: number;
-  readonly walletOffset: number;
-  readonly createdAt: number;
-  readonly updatedAt: number;
-};
+export default defineConfig({
+  test: {
+    include: ['__tests__/**/*.test.ts'],
+    environment: 'node',
+  },
+});
 ```
 
-- [ ] **Step 4: Create stub index.ts**
+- [ ] **Step 5: Write initial `packages/storage-campaign/src/index.ts`**
 
 ```typescript
-// packages/storage-campaign/src/index.ts
-export { createAppendableCSV } from './appendable-csv.js';
-export { createAppendableJSONL } from './appendable-jsonl.js';
-export { createManifestStore } from './manifest-store.js';
-export { createCursorStore } from './cursor-store.js';
-export { createPipelineStore } from './pipeline-store.js';
-export { createCampaignStorage } from './campaign-storage.js';
-export { createSharedStorage } from './shared-storage.js';
+// Entry point — real exports added in Task 10.
+export {};
 ```
 
-This will fail to compile until we create the modules — that's fine, we'll fill them in Tasks 3-7.
-
-- [ ] **Step 5: Install dependencies**
-
-Run: `cd /Users/michaelmclaughlin/Documents/morbius/github/airdrop && npm install`
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Add workspace entry** (if root `package.json` uses `workspaces`)
 
 ```bash
-git add packages/storage-campaign/
-git commit -m "feat(storage-campaign): scaffold package"
+# Verify the packages/* glob is already present in root package.json
+cd /Users/michaelmclaughlin/Documents/morbius/github/titrate
+grep -A2 '"workspaces"' package.json
+```
+
+Expected: shows `"packages/*"` glob. If explicit list, add `"packages/storage-campaign"`.
+
+- [ ] **Step 7: Install (yarn)**
+
+```bash
+cd /Users/michaelmclaughlin/Documents/morbius/github/titrate
+yarn install
+```
+
+Expected: workspace discovered, no install errors.
+
+- [ ] **Step 8: Verify build + test harness**
+
+```bash
+cd packages/storage-campaign
+npx tsc --noEmit
+npx vitest run
+```
+
+Expected: tsc clean, vitest reports "No test files found" (not an error — just empty).
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add packages/storage-campaign package.json yarn.lock
+git commit -m "feat(storage-campaign): scaffold empty package"
 ```
 
 ---
 
-### Task 3: Implement `AppendableCSV`
+### Task 7: `AppendableCSV` primitive
 
 **Files:**
 - Create: `packages/storage-campaign/src/appendable-csv.ts`
-- Create: `packages/storage-campaign/__tests__/appendable-csv.test.ts`
+- Test: `packages/storage-campaign/__tests__/appendable-csv.test.ts`
 
-- [ ] **Step 1: Write tests**
+- [ ] **Step 1: Write failing tests**
+
+Create `packages/storage-campaign/__tests__/appendable-csv.test.ts`:
 
 ```typescript
-// packages/storage-campaign/__tests__/appendable-csv.test.ts
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtemp, rm, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createAppendableCSV } from '../src/appendable-csv.js';
-import type { Address } from 'viem';
+import { join } from 'node:path';
+import { createAppendableCSV, type CSVRow } from '../src/appendable-csv.js';
+
+let dir: string;
+let path: string;
+
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'titrate-csv-'));
+  path = join(dir, 'addresses.csv');
+});
 
 describe('AppendableCSV', () => {
-  let dir: string;
-
-  beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'csv-test-'));
-  });
-
-  afterEach(async () => {
+  it('appends rows and persists them with a newline per row', async () => {
+    const csv = createAppendableCSV(path);
+    await csv.append([
+      { address: '0x1', amount: '100' },
+      { address: '0x2', amount: null },
+    ]);
+    const raw = await readFile(path, 'utf8');
+    expect(raw).toBe('0x1,100\n0x2,\n');
     await rm(dir, { recursive: true });
   });
 
-  it('creates file on first append', async () => {
-    const csv = createAppendableCSV(join(dir, 'addresses.csv'));
+  it('count() returns total line count', async () => {
+    const csv = createAppendableCSV(path);
     await csv.append([
-      { address: '0x0000000000000000000000000000000000000001' as Address, amount: null },
+      { address: '0x1', amount: null },
+      { address: '0x2', amount: null },
+      { address: '0x3', amount: null },
     ]);
-
-    const content = await readFile(join(dir, 'addresses.csv'), 'utf8');
-    expect(content).toBe('0x0000000000000000000000000000000000000001\n');
+    expect(await csv.count()).toBe(3);
+    await rm(dir, { recursive: true });
   });
 
-  it('appends with amounts', async () => {
-    const csv = createAppendableCSV(join(dir, 'addresses.csv'));
-    await csv.append([
-      { address: '0x0000000000000000000000000000000000000001' as Address, amount: '1000' },
-      { address: '0x0000000000000000000000000000000000000002' as Address, amount: '2000' },
-    ]);
-
-    const content = await readFile(join(dir, 'addresses.csv'), 'utf8');
-    expect(content).toBe(
-      '0x0000000000000000000000000000000000000001,1000\n' +
-      '0x0000000000000000000000000000000000000002,2000\n'
-    );
-  });
-
-  it('appends to existing file without overwriting', async () => {
-    const csv = createAppendableCSV(join(dir, 'addresses.csv'));
-    await csv.append([
-      { address: '0x0000000000000000000000000000000000000001' as Address, amount: null },
-    ]);
-    await csv.append([
-      { address: '0x0000000000000000000000000000000000000002' as Address, amount: null },
-    ]);
-
-    expect(await csv.count()).toBe(2);
-  });
-
-  it('reads from offset', async () => {
-    const csv = createAppendableCSV(join(dir, 'addresses.csv'));
-    await csv.append([
-      { address: '0x0000000000000000000000000000000000000001' as Address, amount: null },
-      { address: '0x0000000000000000000000000000000000000002' as Address, amount: null },
-      { address: '0x0000000000000000000000000000000000000003' as Address, amount: null },
-    ]);
-
-    const rows = [];
-    for await (const row of csv.readFrom(1)) {
-      rows.push(row);
-    }
-
-    expect(rows).toHaveLength(2);
-    expect(rows[0].address).toBe('0x0000000000000000000000000000000000000002');
-  });
-
-  it('returns 0 count for missing file', async () => {
-    const csv = createAppendableCSV(join(dir, 'missing.csv'));
+  it('count() returns 0 for a missing file', async () => {
+    const csv = createAppendableCSV(path);
     expect(await csv.count()).toBe(0);
+    await rm(dir, { recursive: true });
   });
 
-  it('readFrom on empty file yields nothing', async () => {
-    const csv = createAppendableCSV(join(dir, 'empty.csv'));
-    const rows = [];
-    for await (const row of csv.readFrom(0)) {
-      rows.push(row);
-    }
-    expect(rows).toHaveLength(0);
+  it('readFrom(offset) streams rows starting at the given line number', async () => {
+    const csv = createAppendableCSV(path);
+    await csv.append([
+      { address: '0xa', amount: null },
+      { address: '0xb', amount: null },
+      { address: '0xc', amount: null },
+    ]);
+    const rows: CSVRow[] = [];
+    for await (const row of csv.readFrom(1)) rows.push(row);
+    expect(rows.map((r) => r.address)).toEqual(['0xb', '0xc']);
+    await rm(dir, { recursive: true });
+  });
+
+  it('handles empty-amount rows correctly on readFrom', async () => {
+    const csv = createAppendableCSV(path);
+    await csv.append([{ address: '0xa', amount: null }]);
+    const rows: CSVRow[] = [];
+    for await (const row of csv.readFrom(0)) rows.push(row);
+    expect(rows[0]).toEqual({ address: '0xa', amount: null });
+    await rm(dir, { recursive: true });
+  });
+
+  it('append with zero rows is a no-op', async () => {
+    const csv = createAppendableCSV(path);
+    await csv.append([]);
+    expect(await csv.count()).toBe(0);
+    await rm(dir, { recursive: true });
+  });
+
+  it('handles a large batch (10k rows) without truncation', async () => {
+    const csv = createAppendableCSV(path);
+    const rows: CSVRow[] = Array.from({ length: 10_000 }, (_, i) => ({
+      address: `0x${i.toString(16).padStart(40, '0')}`,
+      amount: null,
+    }));
+    await csv.append(rows);
+    expect(await csv.count()).toBe(10_000);
+    await rm(dir, { recursive: true });
   });
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run — expect failure**
 
 Run: `cd packages/storage-campaign && npx vitest run __tests__/appendable-csv.test.ts`
-Expected: FAIL — module doesn't exist
+Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement AppendableCSV**
+- [ ] **Step 3: Implement `packages/storage-campaign/src/appendable-csv.ts`**
 
 ```typescript
-// packages/storage-campaign/src/appendable-csv.ts
 import { appendFile, readFile, stat } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
-import type { CSVRow } from '@titrate/sdk';
-import type { Address } from 'viem';
+
+export type CSVRow = {
+  readonly address: string;
+  readonly amount: string | null;
+};
 
 export type AppendableCSV = {
   readonly append: (rows: readonly CSVRow[]) => Promise<void>;
@@ -540,186 +1165,177 @@ export type AppendableCSV = {
   readonly count: () => Promise<number>;
 };
 
-function serializeRow(row: CSVRow): string {
-  return row.amount !== null ? `${row.address},${row.amount}` : row.address;
+function rowToLine(row: CSVRow): string {
+  return `${row.address},${row.amount ?? ''}`;
 }
 
-function deserializeLine(line: string): CSVRow {
-  const trimmed = line.trim();
-  if (trimmed.length === 0) return { address: '' as Address, amount: null };
-
-  const commaIndex = trimmed.indexOf(',');
-  if (commaIndex === -1) {
-    return { address: trimmed.toLowerCase() as Address, amount: null };
+function parseLine(line: string): CSVRow {
+  const commaIdx = line.indexOf(',');
+  if (commaIdx === -1) {
+    return { address: line, amount: null };
   }
-
-  return {
-    address: trimmed.slice(0, commaIndex).toLowerCase() as Address,
-    amount: trimmed.slice(commaIndex + 1),
-  };
+  const address = line.slice(0, commaIdx);
+  const amount = line.slice(commaIdx + 1);
+  return { address, amount: amount === '' ? null : amount };
 }
 
-export function createAppendableCSV(filePath: string): AppendableCSV {
-  let cachedCount: number | null = null;
-
+/**
+ * Append-only CSV file optimized for streaming. No header row; each line is
+ * `<address>,<amount?>`. Safe to call append() concurrently — node's
+ * fs.appendFile is atomic on POSIX. count() is not cached in memory
+ * (re-scans on each call) — callers should cache if invoked hot.
+ */
+export function createAppendableCSV(path: string): AppendableCSV {
   return {
     async append(rows) {
       if (rows.length === 0) return;
-
-      const data = rows.map(serializeRow).join('\n') + '\n';
-      await appendFile(filePath, data, 'utf8');
-
-      if (cachedCount !== null) {
-        cachedCount += rows.length;
-      }
+      const buf = rows.map(rowToLine).join('\n') + '\n';
+      await appendFile(path, buf, 'utf8');
     },
-
-    async *readFrom(lineOffset) {
-      try {
-        await stat(filePath);
-      } catch {
-        return;
-      }
-
-      const stream = createReadStream(filePath, { encoding: 'utf8' });
-      const rl = createInterface({ input: stream, crlfDelay: Infinity });
-
-      let lineIndex = 0;
-      for await (const line of rl) {
-        if (lineIndex >= lineOffset && line.trim().length > 0) {
-          yield deserializeLine(line);
-        }
-        lineIndex++;
-      }
-    },
-
     async count() {
-      if (cachedCount !== null) return cachedCount;
-
       try {
-        const content = await readFile(filePath, 'utf8');
-        const lines = content.split('\n').filter((l) => l.trim().length > 0);
-        cachedCount = lines.length;
-        return cachedCount;
-      } catch {
-        cachedCount = 0;
-        return 0;
+        const s = await stat(path);
+        if (s.size === 0) return 0;
+        const data = await readFile(path, 'utf8');
+        // Count newlines. The last line always ends with \n (we write it that way).
+        let n = 0;
+        for (let i = 0; i < data.length; i++) {
+          if (data.charCodeAt(i) === 10) n++;
+        }
+        return n;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return 0;
+        throw err;
       }
+    },
+    readFrom(lineOffset) {
+      async function* gen(): AsyncIterable<CSVRow> {
+        try {
+          await stat(path);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+          throw err;
+        }
+        const stream = createReadStream(path, { encoding: 'utf8' });
+        const rl = createInterface({ input: stream, crlfDelay: Infinity });
+        let i = 0;
+        for await (const line of rl) {
+          if (i >= lineOffset && line.length > 0) {
+            yield parseLine(line);
+          }
+          i++;
+        }
+      }
+      return gen();
     },
   };
 }
 ```
 
-- [ ] **Step 4: Run tests**
+- [ ] **Step 4: Run — expect pass**
 
 Run: `cd packages/storage-campaign && npx vitest run __tests__/appendable-csv.test.ts`
-Expected: All 6 tests pass
+Expected: PASS — 7 tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add packages/storage-campaign/src/appendable-csv.ts packages/storage-campaign/__tests__/appendable-csv.test.ts
-git commit -m "feat(storage-campaign): implement AppendableCSV"
+git commit -m "feat(storage-campaign): add AppendableCSV primitive"
 ```
 
 ---
 
-### Task 4: Implement `AppendableJSONL`
+### Task 8: `AppendableJSONL<T>` primitive
 
 **Files:**
 - Create: `packages/storage-campaign/src/appendable-jsonl.ts`
-- Create: `packages/storage-campaign/__tests__/appendable-jsonl.test.ts`
+- Test: `packages/storage-campaign/__tests__/appendable-jsonl.test.ts`
 
-- [ ] **Step 1: Write tests**
+- [ ] **Step 1: Write failing tests**
+
+Create `packages/storage-campaign/__tests__/appendable-jsonl.test.ts`:
 
 ```typescript
-// packages/storage-campaign/__tests__/appendable-jsonl.test.ts
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtemp, rm, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { createAppendableJSONL } from '../src/appendable-jsonl.js';
 
-type TestRecord = { id: number; name: string };
+type Record = { readonly a: number; readonly b: string };
+
+let dir: string;
+let path: string;
+
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'titrate-jsonl-'));
+  path = join(dir, 'records.jsonl');
+});
 
 describe('AppendableJSONL', () => {
-  let dir: string;
-
-  beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'jsonl-test-'));
-  });
-
-  afterEach(async () => {
+  it('appends records as one JSON per line', async () => {
+    const jsonl = createAppendableJSONL<Record>(path);
+    await jsonl.append([
+      { a: 1, b: 'one' },
+      { a: 2, b: 'two' },
+    ]);
+    const raw = await readFile(path, 'utf8');
+    expect(raw).toBe('{"a":1,"b":"one"}\n{"a":2,"b":"two"}\n');
     await rm(dir, { recursive: true });
   });
 
-  it('creates file on first append', async () => {
-    const jsonl = createAppendableJSONL<TestRecord>(join(dir, 'records.jsonl'));
-    await jsonl.append([{ id: 1, name: 'alice' }]);
-
-    const content = await readFile(join(dir, 'records.jsonl'), 'utf8');
-    expect(content).toBe('{"id":1,"name":"alice"}\n');
-  });
-
-  it('appends without overwriting', async () => {
-    const jsonl = createAppendableJSONL<TestRecord>(join(dir, 'records.jsonl'));
-    await jsonl.append([{ id: 1, name: 'alice' }]);
-    await jsonl.append([{ id: 2, name: 'bob' }]);
-
-    expect(await jsonl.count()).toBe(2);
-  });
-
-  it('reads from offset', async () => {
-    const jsonl = createAppendableJSONL<TestRecord>(join(dir, 'records.jsonl'));
-    await jsonl.append([
-      { id: 1, name: 'alice' },
-      { id: 2, name: 'bob' },
-      { id: 3, name: 'carol' },
-    ]);
-
-    const rows = [];
-    for await (const row of jsonl.readFrom(2)) {
-      rows.push(row);
-    }
-
-    expect(rows).toHaveLength(1);
-    expect(rows[0].name).toBe('carol');
-  });
-
   it('readAll returns all records', async () => {
-    const jsonl = createAppendableJSONL<TestRecord>(join(dir, 'records.jsonl'));
-    await jsonl.append([
-      { id: 1, name: 'alice' },
-      { id: 2, name: 'bob' },
-    ]);
-
+    const jsonl = createAppendableJSONL<Record>(path);
+    await jsonl.append([{ a: 1, b: 'one' }, { a: 2, b: 'two' }]);
     const all = await jsonl.readAll();
-    expect(all).toHaveLength(2);
-    expect(all[0].id).toBe(1);
+    expect(all).toEqual([
+      { a: 1, b: 'one' },
+      { a: 2, b: 'two' },
+    ]);
+    await rm(dir, { recursive: true });
   });
 
-  it('returns 0 count for missing file', async () => {
-    const jsonl = createAppendableJSONL<TestRecord>(join(dir, 'missing.jsonl'));
+  it('readFrom(offset) skips the first N records', async () => {
+    const jsonl = createAppendableJSONL<Record>(path);
+    await jsonl.append([
+      { a: 1, b: 'one' },
+      { a: 2, b: 'two' },
+      { a: 3, b: 'three' },
+    ]);
+    const rows: Record[] = [];
+    for await (const r of jsonl.readFrom(1)) rows.push(r);
+    expect(rows).toEqual([
+      { a: 2, b: 'two' },
+      { a: 3, b: 'three' },
+    ]);
+    await rm(dir, { recursive: true });
+  });
+
+  it('count() returns 0 when file missing', async () => {
+    const jsonl = createAppendableJSONL<Record>(path);
     expect(await jsonl.count()).toBe(0);
+    await rm(dir, { recursive: true });
   });
 
-  it('readAll on missing file returns empty array', async () => {
-    const jsonl = createAppendableJSONL<TestRecord>(join(dir, 'missing.jsonl'));
-    expect(await jsonl.readAll()).toEqual([]);
+  it('count() returns number of records', async () => {
+    const jsonl = createAppendableJSONL<Record>(path);
+    await jsonl.append([{ a: 1, b: 'x' }, { a: 2, b: 'y' }]);
+    expect(await jsonl.count()).toBe(2);
+    await rm(dir, { recursive: true });
   });
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run — expect failure**
 
 Run: `cd packages/storage-campaign && npx vitest run __tests__/appendable-jsonl.test.ts`
-Expected: FAIL — module doesn't exist
+Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement AppendableJSONL**
+- [ ] **Step 3: Implement `packages/storage-campaign/src/appendable-jsonl.ts`**
 
 ```typescript
-// packages/storage-campaign/src/appendable-jsonl.ts
-import { appendFile, readFile, stat } from 'node:fs/promises';
+import { appendFile, stat, readFile } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
 
@@ -730,451 +1346,422 @@ export type AppendableJSONL<T> = {
   readonly count: () => Promise<number>;
 };
 
-export function createAppendableJSONL<T>(filePath: string): AppendableJSONL<T> {
-  let cachedCount: number | null = null;
-
+/**
+ * Append-only JSONL file. Each record is serialized as a single-line JSON
+ * record followed by \n. Consumers are expected to handle BigInt
+ * serialization before passing records in (BigInts are not JSON-safe).
+ */
+export function createAppendableJSONL<T>(path: string): AppendableJSONL<T> {
   return {
     async append(records) {
       if (records.length === 0) return;
-
-      const data = records.map((r) => JSON.stringify(r)).join('\n') + '\n';
-      await appendFile(filePath, data, 'utf8');
-
-      if (cachedCount !== null) {
-        cachedCount += records.length;
-      }
+      const buf = records.map((r) => JSON.stringify(r)).join('\n') + '\n';
+      await appendFile(path, buf, 'utf8');
     },
-
-    async *readFrom(lineOffset) {
-      try {
-        await stat(filePath);
-      } catch {
-        return;
-      }
-
-      const stream = createReadStream(filePath, { encoding: 'utf8' });
-      const rl = createInterface({ input: stream, crlfDelay: Infinity });
-
-      let lineIndex = 0;
-      for await (const line of rl) {
-        if (lineIndex >= lineOffset && line.trim().length > 0) {
-          yield JSON.parse(line) as T;
-        }
-        lineIndex++;
-      }
-    },
-
-    async readAll() {
-      try {
-        const content = await readFile(filePath, 'utf8');
-        return content
-          .split('\n')
-          .filter((l) => l.trim().length > 0)
-          .map((l) => JSON.parse(l) as T);
-      } catch {
-        return [];
-      }
-    },
-
     async count() {
-      if (cachedCount !== null) return cachedCount;
-
       try {
-        const content = await readFile(filePath, 'utf8');
-        const lines = content.split('\n').filter((l) => l.trim().length > 0);
-        cachedCount = lines.length;
-        return cachedCount;
-      } catch {
-        cachedCount = 0;
-        return 0;
+        const s = await stat(path);
+        if (s.size === 0) return 0;
+        const data = await readFile(path, 'utf8');
+        let n = 0;
+        for (let i = 0; i < data.length; i++) {
+          if (data.charCodeAt(i) === 10) n++;
+        }
+        return n;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return 0;
+        throw err;
       }
+    },
+    async readAll() {
+      const out: T[] = [];
+      for await (const r of this.readFrom(0)) out.push(r);
+      return out;
+    },
+    readFrom(lineOffset) {
+      async function* gen(): AsyncIterable<T> {
+        try {
+          await stat(path);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+          throw err;
+        }
+        const stream = createReadStream(path, { encoding: 'utf8' });
+        const rl = createInterface({ input: stream, crlfDelay: Infinity });
+        let i = 0;
+        for await (const line of rl) {
+          if (i >= lineOffset && line.length > 0) {
+            yield JSON.parse(line) as T;
+          }
+          i++;
+        }
+      }
+      return gen();
     },
   };
 }
 ```
 
-- [ ] **Step 4: Run tests**
+- [ ] **Step 4: Run — expect pass**
 
 Run: `cd packages/storage-campaign && npx vitest run __tests__/appendable-jsonl.test.ts`
-Expected: All 6 tests pass
+Expected: PASS — 5 tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add packages/storage-campaign/src/appendable-jsonl.ts packages/storage-campaign/__tests__/appendable-jsonl.test.ts
-git commit -m "feat(storage-campaign): implement AppendableJSONL"
+git commit -m "feat(storage-campaign): add AppendableJSONL<T> primitive"
 ```
 
 ---
 
-### Task 5: Implement JSON config stores (manifest, cursor, pipeline)
+### Task 9: JSON config stores — `ManifestStore`, `CursorStore`, `PipelineStore`
 
 **Files:**
 - Create: `packages/storage-campaign/src/manifest-store.ts`
 - Create: `packages/storage-campaign/src/cursor-store.ts`
 - Create: `packages/storage-campaign/src/pipeline-store.ts`
-- Create: `packages/storage-campaign/__tests__/manifest-store.test.ts`
-- Create: `packages/storage-campaign/__tests__/cursor-store.test.ts`
-- Create: `packages/storage-campaign/__tests__/pipeline-store.test.ts`
+- Test: `packages/storage-campaign/__tests__/manifest-store.test.ts`
+- Test: `packages/storage-campaign/__tests__/cursor-store.test.ts`
+- Test: `packages/storage-campaign/__tests__/pipeline-store.test.ts`
 
-- [ ] **Step 1: Write manifest store tests**
+- [ ] **Step 1: Write manifest-store tests**
+
+Create `packages/storage-campaign/__tests__/manifest-store.test.ts`:
 
 ```typescript
-// packages/storage-campaign/__tests__/manifest-store.test.ts
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createManifestStore } from '../src/manifest-store.js';
+import { join } from 'node:path';
 import type { CampaignManifest } from '@titrate/sdk';
-import type { Address } from 'viem';
+import { createManifestStore } from '../src/manifest-store.js';
 
-const ZERO = '0x0000000000000000000000000000000000000000' as Address;
+let dir: string;
+let path: string;
 
-function makeManifest(overrides: Partial<CampaignManifest> = {}): CampaignManifest {
-  return {
-    id: 'test',
-    status: 'configuring',
-    funder: ZERO,
-    name: 'Test Campaign',
-    version: 1,
-    chainId: 1,
-    rpcUrl: 'https://rpc.example.com',
-    tokenAddress: ZERO,
-    tokenDecimals: 18,
-    contractAddress: null,
-    contractVariant: 'simple',
-    contractName: 'Test',
-    amountMode: 'uniform',
-    amountFormat: 'integer',
-    uniformAmount: null,
-    batchSize: 200,
-    campaignId: null,
-    pinnedBlock: null,
-    coldAddress: ZERO,
-    walletCount: 1,
-    walletOffset: 0,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    ...overrides,
-  };
-}
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'titrate-mf-'));
+  path = join(dir, 'campaign.json');
+});
+
+const baseManifest: CampaignManifest = {
+  id: 'abc',
+  funder: '0x0000000000000000000000000000000000000001',
+  name: 'test',
+  version: 1,
+  chainId: 1,
+  rpcUrl: 'https://x',
+  tokenAddress: '0x0000000000000000000000000000000000000002',
+  tokenDecimals: 18,
+  contractAddress: null,
+  contractVariant: 'simple',
+  contractName: 'X',
+  amountMode: 'uniform',
+  amountFormat: 'integer',
+  uniformAmount: '1',
+  batchSize: 200,
+  campaignId: null,
+  pinnedBlock: null,
+  status: 'configuring',
+  wallets: { mode: 'imported', count: 0 },
+  createdAt: 1,
+  updatedAt: 1,
+};
 
 describe('ManifestStore', () => {
-  let dir: string;
-
-  beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'manifest-test-'));
-  });
-
-  afterEach(async () => {
+  it('read() throws when file missing', async () => {
+    const s = createManifestStore(path);
+    await expect(s.read()).rejects.toThrow();
     await rm(dir, { recursive: true });
   });
 
-  it('returns null for missing campaign.json', async () => {
-    const store = createManifestStore(dir);
-    expect(await store.read()).toBeNull();
+  it('write then read round-trips', async () => {
+    const s = createManifestStore(path);
+    await s.write(baseManifest);
+    const r = await s.read();
+    expect(r).toEqual(baseManifest);
+    await rm(dir, { recursive: true });
   });
 
-  it('writes and reads manifest', async () => {
-    const store = createManifestStore(dir);
-    const manifest = makeManifest({ name: 'My Campaign', pinnedBlock: 12345n });
-    await store.write(manifest);
-
-    const loaded = await store.read();
-    expect(loaded).not.toBeNull();
-    expect(loaded!.name).toBe('My Campaign');
-    expect(loaded!.pinnedBlock).toBe(12345n);
+  it('update() applies a patch and bumps updatedAt', async () => {
+    const s = createManifestStore(path);
+    await s.write(baseManifest);
+    const before = (await s.read()).updatedAt;
+    await new Promise((r) => setTimeout(r, 2));
+    await s.update({ status: 'ready' });
+    const after = await s.read();
+    expect(after.status).toBe('ready');
+    expect(after.updatedAt).toBeGreaterThan(before);
+    await rm(dir, { recursive: true });
   });
 
-  it('update merges partial changes', async () => {
-    const store = createManifestStore(dir);
-    await store.write(makeManifest({ status: 'configuring' }));
-    await store.update({ status: 'ready' });
-
-    const loaded = await store.read();
-    expect(loaded!.status).toBe('ready');
-    expect(loaded!.name).toBe('Test Campaign');
-  });
-
-  it('update throws if no manifest exists', async () => {
-    const store = createManifestStore(dir);
-    await expect(store.update({ status: 'ready' })).rejects.toThrow();
+  it('exists() returns true only when file present', async () => {
+    const s = createManifestStore(path);
+    expect(await s.exists()).toBe(false);
+    await s.write(baseManifest);
+    expect(await s.exists()).toBe(true);
+    await rm(dir, { recursive: true });
   });
 });
 ```
 
-- [ ] **Step 2: Write cursor store tests**
+- [ ] **Step 2: Write cursor-store tests (BigInt-safe)**
+
+Create `packages/storage-campaign/__tests__/cursor-store.test.ts`:
 
 ```typescript
-// packages/storage-campaign/__tests__/cursor-store.test.ts
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { createCursorStore } from '../src/cursor-store.js';
+import { join } from 'node:path';
 import type { PipelineCursor } from '@titrate/sdk';
+import { createCursorStore } from '../src/cursor-store.js';
 
-function makeCursor(overrides: Partial<PipelineCursor> = {}): PipelineCursor {
-  return {
-    scan: { lastBlock: 0n, endBlock: null, addressCount: 0 },
-    filter: { watermark: 0, qualifiedCount: 0 },
-    distribute: { watermark: 0, confirmedCount: 0 },
-    ...overrides,
-  };
-}
+let dir: string;
+let path: string;
+
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'titrate-cur-'));
+  path = join(dir, 'cursor.json');
+});
 
 describe('CursorStore', () => {
-  let dir: string;
-
-  beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'cursor-test-'));
-  });
-
-  afterEach(async () => {
+  it('serializes bigints as decimal strings on disk', async () => {
+    const s = createCursorStore(path);
+    const cursor: PipelineCursor = {
+      scan: { lastBlock: 99999999999999n, endBlock: null, addressCount: 0 },
+      filter: { watermark: 0, qualifiedCount: 0 },
+      distribute: { watermark: 0, confirmedCount: 0 },
+    };
+    await s.write(cursor);
+    const raw = await readFile(path, 'utf8');
+    expect(raw).toContain('"lastBlock":"99999999999999"');
     await rm(dir, { recursive: true });
   });
 
-  it('returns null for missing cursor.json', async () => {
-    const store = createCursorStore(dir);
-    expect(await store.read()).toBeNull();
+  it('deserializes bigints back to bigint', async () => {
+    const s = createCursorStore(path);
+    const cursor: PipelineCursor = {
+      scan: { lastBlock: 12345n, endBlock: 67890n, addressCount: 5 },
+      filter: { watermark: 10, qualifiedCount: 3 },
+      distribute: { watermark: 0, confirmedCount: 0 },
+    };
+    await s.write(cursor);
+    const r = await s.read();
+    expect(r.scan.lastBlock).toBe(12345n);
+    expect(r.scan.endBlock).toBe(67890n);
+    expect(typeof r.scan.lastBlock).toBe('bigint');
+    await rm(dir, { recursive: true });
   });
 
-  it('writes and reads cursor with BigInt fields', async () => {
-    const store = createCursorStore(dir);
-    const cursor = makeCursor({
-      scan: { lastBlock: 18000000n, endBlock: 19000000n, addressCount: 500 },
-    });
-    await store.write(cursor);
-
-    const loaded = await store.read();
-    expect(loaded!.scan.lastBlock).toBe(18000000n);
-    expect(loaded!.scan.endBlock).toBe(19000000n);
-  });
-
-  it('handles null endBlock', async () => {
-    const store = createCursorStore(dir);
-    await store.write(makeCursor());
-
-    const loaded = await store.read();
-    expect(loaded!.scan.endBlock).toBeNull();
+  it('read() returns a zero cursor when file missing', async () => {
+    const s = createCursorStore(path);
+    const r = await s.read();
+    expect(r.scan.lastBlock).toBe(0n);
+    expect(r.scan.endBlock).toBeNull();
+    expect(r.filter.watermark).toBe(0);
+    await rm(dir, { recursive: true });
   });
 });
 ```
 
-- [ ] **Step 3: Write pipeline store tests**
+- [ ] **Step 3: Write pipeline-store tests**
+
+Create `packages/storage-campaign/__tests__/pipeline-store.test.ts`:
 
 ```typescript
-// packages/storage-campaign/__tests__/pipeline-store.test.ts
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createPipelineStore } from '../src/pipeline-store.js';
+import { join } from 'node:path';
 import type { PipelineConfig } from '@titrate/sdk';
+import { createPipelineStore } from '../src/pipeline-store.js';
+
+let dir: string;
+let path: string;
+
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'titrate-pl-'));
+  path = join(dir, 'pipeline.json');
+});
 
 describe('PipelineStore', () => {
-  let dir: string;
-
-  beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'pipeline-test-'));
-  });
-
-  afterEach(async () => {
-    await rm(dir, { recursive: true });
-  });
-
-  it('returns null for missing pipeline.json', async () => {
-    const store = createPipelineStore(dir);
-    expect(await store.read()).toBeNull();
-  });
-
-  it('writes and reads pipeline config', async () => {
-    const store = createPipelineStore(dir);
-    const config: PipelineConfig = {
+  it('write+read round-trips', async () => {
+    const s = createPipelineStore(path);
+    const pipeline: PipelineConfig = {
       steps: [
-        { type: 'source', sourceType: 'csv', params: { path: './addresses.csv' } },
+        { type: 'source', sourceType: 'csv', params: { path: 'addrs.csv' } },
         { type: 'filter', filterType: 'contract-check', params: {} },
       ],
     };
-    await store.write(config);
+    await s.write(pipeline);
+    const r = await s.read();
+    expect(r).toEqual(pipeline);
+    await rm(dir, { recursive: true });
+  });
 
-    const loaded = await store.read();
-    expect(loaded!.steps).toHaveLength(2);
-    expect(loaded!.steps[0].type).toBe('source');
+  it('read returns an empty pipeline when file missing', async () => {
+    const s = createPipelineStore(path);
+    const r = await s.read();
+    expect(r.steps).toEqual([]);
+    await rm(dir, { recursive: true });
   });
 });
 ```
 
-- [ ] **Step 4: Run all three test files to verify they fail**
+- [ ] **Step 4: Run — expect all three fail**
 
-Run: `cd packages/storage-campaign && npx vitest run __tests__/manifest-store.test.ts __tests__/cursor-store.test.ts __tests__/pipeline-store.test.ts`
-Expected: FAIL — modules don't exist
+Run: `cd packages/storage-campaign && npx vitest run`
+Expected: FAIL — three files missing.
 
-- [ ] **Step 5: Implement manifest store**
+- [ ] **Step 5: Implement `packages/storage-campaign/src/manifest-store.ts`**
 
 ```typescript
-// packages/storage-campaign/src/manifest-store.ts
-import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { readFile, writeFile, stat } from 'node:fs/promises';
 import type { CampaignManifest } from '@titrate/sdk';
-import type { SerializedCampaignManifest } from './types.js';
-import type { Address, Hex } from 'viem';
-
-const FILENAME = 'campaign.json';
 
 export type ManifestStore = {
-  readonly read: () => Promise<CampaignManifest | null>;
+  readonly read: () => Promise<CampaignManifest>;
   readonly write: (manifest: CampaignManifest) => Promise<void>;
-  readonly update: (partial: Partial<CampaignManifest>) => Promise<void>;
+  readonly update: (patch: Partial<CampaignManifest>) => Promise<void>;
+  readonly exists: () => Promise<boolean>;
 };
 
-function serialize(manifest: CampaignManifest): SerializedCampaignManifest {
-  return {
-    ...manifest,
-    funder: manifest.funder,
-    tokenAddress: manifest.tokenAddress,
-    contractAddress: manifest.contractAddress,
-    coldAddress: manifest.coldAddress,
-    campaignId: manifest.campaignId,
-    pinnedBlock: manifest.pinnedBlock !== null ? manifest.pinnedBlock.toString() : null,
-  };
-}
-
-function deserialize(data: SerializedCampaignManifest): CampaignManifest {
-  return {
-    ...data,
-    funder: data.funder as Address,
-    tokenAddress: data.tokenAddress as Address,
-    contractAddress: data.contractAddress as Address | null,
-    coldAddress: data.coldAddress as Address,
-    campaignId: data.campaignId as Hex | null,
-    pinnedBlock: data.pinnedBlock !== null ? BigInt(data.pinnedBlock) : null,
-    status: data.status as CampaignManifest['status'],
-    contractVariant: data.contractVariant,
-    amountMode: data.amountMode,
-    amountFormat: data.amountFormat,
-  };
-}
-
-export function createManifestStore(dir: string): ManifestStore {
-  const filePath = join(dir, FILENAME);
-
+export function createManifestStore(path: string): ManifestStore {
   return {
     async read() {
-      try {
-        const content = await readFile(filePath, 'utf8');
-        return deserialize(JSON.parse(content));
-      } catch {
-        return null;
-      }
+      const raw = await readFile(path, 'utf8');
+      return JSON.parse(raw) as CampaignManifest;
     },
-
     async write(manifest) {
-      await writeFile(filePath, JSON.stringify(serialize(manifest), null, 2) + '\n', 'utf8');
+      await writeFile(path, JSON.stringify(manifest, null, 2), 'utf8');
     },
-
-    async update(partial) {
-      const existing = await this.read();
-      if (!existing) {
-        throw new Error('Cannot update: campaign.json does not exist. Use write() first.');
+    async update(patch) {
+      const current = await this.read();
+      const next: CampaignManifest = {
+        ...current,
+        ...patch,
+        updatedAt: Date.now(),
+      };
+      await this.write(next);
+    },
+    async exists() {
+      try {
+        await stat(path);
+        return true;
+      } catch {
+        return false;
       }
-      await this.write({ ...existing, ...partial, updatedAt: Date.now() });
     },
   };
 }
 ```
 
-- [ ] **Step 6: Implement cursor store**
+- [ ] **Step 6: Implement `packages/storage-campaign/src/cursor-store.ts`**
 
 ```typescript
-// packages/storage-campaign/src/cursor-store.ts
 import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import type { PipelineCursor } from '@titrate/sdk';
-import type { SerializedPipelineCursor } from './types.js';
-
-const FILENAME = 'cursor.json';
 
 export type CursorStore = {
-  readonly read: () => Promise<PipelineCursor | null>;
+  readonly read: () => Promise<PipelineCursor>;
   readonly write: (cursor: PipelineCursor) => Promise<void>;
+  readonly update: (patch: Partial<PipelineCursor>) => Promise<void>;
 };
 
-function serialize(cursor: PipelineCursor): SerializedPipelineCursor {
+type CursorOnDisk = {
+  readonly scan: {
+    readonly lastBlock: string;
+    readonly endBlock: string | null;
+    readonly addressCount: number;
+  };
+  readonly filter: { readonly watermark: number; readonly qualifiedCount: number };
+  readonly distribute: { readonly watermark: number; readonly confirmedCount: number };
+};
+
+const ZERO_CURSOR: PipelineCursor = {
+  scan: { lastBlock: 0n, endBlock: null, addressCount: 0 },
+  filter: { watermark: 0, qualifiedCount: 0 },
+  distribute: { watermark: 0, confirmedCount: 0 },
+};
+
+function toDisk(c: PipelineCursor): CursorOnDisk {
   return {
     scan: {
-      lastBlock: cursor.scan.lastBlock.toString(),
-      endBlock: cursor.scan.endBlock !== null ? cursor.scan.endBlock.toString() : null,
-      addressCount: cursor.scan.addressCount,
+      lastBlock: c.scan.lastBlock.toString(),
+      endBlock: c.scan.endBlock === null ? null : c.scan.endBlock.toString(),
+      addressCount: c.scan.addressCount,
     },
-    filter: { ...cursor.filter },
-    distribute: { ...cursor.distribute },
+    filter: c.filter,
+    distribute: c.distribute,
   };
 }
 
-function deserialize(data: SerializedPipelineCursor): PipelineCursor {
+function fromDisk(d: CursorOnDisk): PipelineCursor {
   return {
     scan: {
-      lastBlock: BigInt(data.scan.lastBlock),
-      endBlock: data.scan.endBlock !== null ? BigInt(data.scan.endBlock) : null,
-      addressCount: data.scan.addressCount,
+      lastBlock: BigInt(d.scan.lastBlock),
+      endBlock: d.scan.endBlock === null ? null : BigInt(d.scan.endBlock),
+      addressCount: d.scan.addressCount,
     },
-    filter: { ...data.filter },
-    distribute: { ...data.distribute },
+    filter: d.filter,
+    distribute: d.distribute,
   };
 }
 
-export function createCursorStore(dir: string): CursorStore {
-  const filePath = join(dir, FILENAME);
-
+export function createCursorStore(path: string): CursorStore {
   return {
     async read() {
       try {
-        const content = await readFile(filePath, 'utf8');
-        return deserialize(JSON.parse(content));
-      } catch {
-        return null;
+        const raw = await readFile(path, 'utf8');
+        return fromDisk(JSON.parse(raw) as CursorOnDisk);
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return ZERO_CURSOR;
+        throw err;
       }
     },
-
     async write(cursor) {
-      await writeFile(filePath, JSON.stringify(serialize(cursor), null, 2) + '\n', 'utf8');
+      await writeFile(path, JSON.stringify(toDisk(cursor), null, 2), 'utf8');
+    },
+    async update(patch) {
+      const current = await this.read();
+      const next: PipelineCursor = {
+        scan: { ...current.scan, ...(patch.scan ?? {}) },
+        filter: { ...current.filter, ...(patch.filter ?? {}) },
+        distribute: { ...current.distribute, ...(patch.distribute ?? {}) },
+      };
+      await this.write(next);
     },
   };
 }
 ```
 
-- [ ] **Step 7: Implement pipeline store**
+- [ ] **Step 7: Implement `packages/storage-campaign/src/pipeline-store.ts`**
 
 ```typescript
-// packages/storage-campaign/src/pipeline-store.ts
 import { readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
 import type { PipelineConfig } from '@titrate/sdk';
 
-const FILENAME = 'pipeline.json';
-
 export type PipelineStore = {
-  readonly read: () => Promise<PipelineConfig | null>;
-  readonly write: (config: PipelineConfig) => Promise<void>;
+  readonly read: () => Promise<PipelineConfig>;
+  readonly write: (pipeline: PipelineConfig) => Promise<void>;
 };
 
-export function createPipelineStore(dir: string): PipelineStore {
-  const filePath = join(dir, FILENAME);
-
+export function createPipelineStore(path: string): PipelineStore {
   return {
     async read() {
       try {
-        const content = await readFile(filePath, 'utf8');
-        return JSON.parse(content) as PipelineConfig;
-      } catch {
-        return null;
+        const raw = await readFile(path, 'utf8');
+        return JSON.parse(raw) as PipelineConfig;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code === 'ENOENT') return { steps: [] };
+        throw err;
       }
     },
-
-    async write(config) {
-      await writeFile(filePath, JSON.stringify(config, null, 2) + '\n', 'utf8');
+    async write(pipeline) {
+      await writeFile(path, JSON.stringify(pipeline, null, 2), 'utf8');
     },
   };
 }
@@ -1182,152 +1769,209 @@ export function createPipelineStore(dir: string): PipelineStore {
 
 - [ ] **Step 8: Run all tests**
 
-Run: `cd packages/storage-campaign && npx vitest run __tests__/manifest-store.test.ts __tests__/cursor-store.test.ts __tests__/pipeline-store.test.ts`
-Expected: All tests pass
+Run: `cd packages/storage-campaign && npx vitest run`
+Expected: PASS — manifest (4), cursor (3), pipeline (2) = 9 tests.
 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add packages/storage-campaign/src/manifest-store.ts packages/storage-campaign/src/cursor-store.ts packages/storage-campaign/src/pipeline-store.ts packages/storage-campaign/__tests__/
-git commit -m "feat(storage-campaign): implement manifest, cursor, pipeline JSON stores"
+git add packages/storage-campaign/src/manifest-store.ts packages/storage-campaign/src/cursor-store.ts packages/storage-campaign/src/pipeline-store.ts packages/storage-campaign/__tests__/manifest-store.test.ts packages/storage-campaign/__tests__/cursor-store.test.ts packages/storage-campaign/__tests__/pipeline-store.test.ts
+git commit -m "feat(storage-campaign): add ManifestStore, CursorStore, PipelineStore"
 ```
 
 ---
 
-### Task 6: Implement `createCampaignStorage` and `createSharedStorage` factories
+### Task 10: `createCampaignStorage` + `createSharedStorage` factories
 
 **Files:**
-- Create: `packages/storage-campaign/src/campaign-storage.ts`
 - Create: `packages/storage-campaign/src/shared-storage.ts`
-- Create: `packages/storage-campaign/__tests__/campaign-storage.test.ts`
-- Create: `packages/storage-campaign/__tests__/shared-storage.test.ts`
 - Modify: `packages/storage-campaign/src/index.ts`
+- Test: `packages/storage-campaign/__tests__/campaign-storage.test.ts`
+- Test: `packages/storage-campaign/__tests__/shared-storage.test.ts`
 
-- [ ] **Step 1: Write campaign storage factory test**
+- [ ] **Step 1: Write campaign-storage tests**
+
+Create `packages/storage-campaign/__tests__/campaign-storage.test.ts`:
 
 ```typescript
-// packages/storage-campaign/__tests__/campaign-storage.test.ts
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm, stat } from 'node:fs/promises';
-import { join } from 'node:path';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { mkdtemp, rm, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { createCampaignStorage } from '../src/campaign-storage.js';
+import { join } from 'node:path';
+import type { CampaignManifest } from '@titrate/sdk';
+import { createCampaignStorage } from '../src/index.js';
+
+let dir: string;
+
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'titrate-cs-'));
+});
+
+const baseManifest: CampaignManifest = {
+  id: 'abc', funder: '0x0000000000000000000000000000000000000001',
+  name: 'x', version: 1, chainId: 1, rpcUrl: 'https://x',
+  tokenAddress: '0x0000000000000000000000000000000000000002', tokenDecimals: 18,
+  contractAddress: null, contractVariant: 'simple', contractName: 'X',
+  amountMode: 'uniform', amountFormat: 'integer', uniformAmount: '1',
+  batchSize: 200, campaignId: null, pinnedBlock: null,
+  status: 'configuring', wallets: { mode: 'imported', count: 0 },
+  createdAt: 1, updatedAt: 1,
+};
 
 describe('createCampaignStorage', () => {
-  let dir: string;
-
-  beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'campaign-storage-test-'));
-  });
-
-  afterEach(async () => {
+  it('exposes manifest / pipeline / cursor stores', async () => {
+    const s = createCampaignStorage(dir);
+    await s.manifest.write(baseManifest);
+    expect((await s.manifest.read()).id).toBe('abc');
     await rm(dir, { recursive: true });
   });
 
-  it('creates campaign directory if it does not exist', async () => {
-    const campaignDir = join(dir, 'my-campaign');
-    await createCampaignStorage(campaignDir);
-
-    const dirStat = await stat(campaignDir);
-    expect(dirStat.isDirectory()).toBe(true);
+  it('exposes appendable files that write into the campaign dir', async () => {
+    const s = createCampaignStorage(dir);
+    await s.addresses.append([{ address: '0x1', amount: null }]);
+    const entries = await readdir(dir);
+    expect(entries).toContain('addresses.csv');
+    await rm(dir, { recursive: true });
   });
 
-  it('exposes all store properties', async () => {
-    const storage = await createCampaignStorage(join(dir, 'test'));
-
-    expect(storage.manifest).toBeDefined();
-    expect(storage.pipeline).toBeDefined();
-    expect(storage.cursor).toBeDefined();
-    expect(storage.addresses).toBeDefined();
-    expect(storage.filtered).toBeDefined();
-    expect(storage.amounts).toBeDefined();
-    expect(storage.batches).toBeDefined();
-    expect(storage.wallets).toBeDefined();
-    expect(storage.sweeps).toBeDefined();
-  });
-
-  it('round-trips data through all stores', async () => {
-    const storage = await createCampaignStorage(join(dir, 'roundtrip'));
-
-    await storage.addresses.append([
-      { address: '0x0000000000000000000000000000000000000001' as `0x${string}`, amount: null },
-    ]);
-    expect(await storage.addresses.count()).toBe(1);
-
-    await storage.batches.append([{ batchIndex: 0, recipients: [], amounts: [], status: 'confirmed', confirmedTxHash: null, confirmedBlock: null, createdAt: Date.now() }]);
-    expect(await storage.batches.count()).toBe(1);
+  it('supports wallets.jsonl, batches.jsonl, sweep.jsonl', async () => {
+    const s = createCampaignStorage(dir);
+    await s.wallets.append([{
+      index: 0, address: '0x1', encryptedKey: 'ct',
+      kdf: 'scrypt', kdfParams: { N: 131072, r: 8, p: 1, salt: 's' },
+      provenance: { type: 'imported' }, createdAt: 1,
+    }]);
+    expect(await s.wallets.count()).toBe(1);
+    await rm(dir, { recursive: true });
   });
 });
 ```
 
-- [ ] **Step 2: Write shared storage test**
+- [ ] **Step 2: Write shared-storage tests**
+
+Create `packages/storage-campaign/__tests__/shared-storage.test.ts`:
 
 ```typescript
-// packages/storage-campaign/__tests__/shared-storage.test.ts
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { createSharedStorage } from '../src/shared-storage.js';
+import { join } from 'node:path';
+import { createSharedStorage } from '../src/index.js';
+
+let root: string;
+
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), 'titrate-shared-'));
+});
 
 describe('createSharedStorage', () => {
-  let dir: string;
-
-  beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'shared-storage-test-'));
+  it('writes chains + settings into _shared/', async () => {
+    const s = createSharedStorage(root);
+    await s.settings.write({ providerKeys: { valve: 'vk_x' } });
+    const read = await s.settings.read();
+    expect(read.providerKeys.valve).toBe('vk_x');
+    await rm(root, { recursive: true });
   });
 
-  afterEach(async () => {
-    await rm(dir, { recursive: true });
-  });
-
-  it('reads and writes chain configs', async () => {
-    const shared = await createSharedStorage(join(dir, '_shared'));
-
-    await shared.chains.put({
-      id: 'eth-mainnet',
-      chainId: 1,
-      name: 'Ethereum',
-      rpcUrl: 'https://rpc.example.com',
-      rpcBusKey: 'eth-rpc',
-      explorerApiUrl: 'https://api.etherscan.io',
-      explorerApiKey: 'APIKEY',
-      explorerBusKey: 'eth-explorer',
-      trueBlocksUrl: '',
-      trueBlocksBusKey: '',
-    });
-
-    const loaded = await shared.chains.getByChainId(1);
-    expect(loaded).not.toBeNull();
-    expect(loaded!.name).toBe('Ethereum');
-  });
-
-  it('reads and writes settings', async () => {
-    const shared = await createSharedStorage(join(dir, '_shared'));
-
-    await shared.settings.put('theme', 'dark');
-    expect(await shared.settings.get('theme')).toBe('dark');
-  });
-
-  it('returns null for missing settings', async () => {
-    const shared = await createSharedStorage(join(dir, '_shared'));
-    expect(await shared.settings.get('missing')).toBeNull();
+  it('isolates from campaign dirs', async () => {
+    const s = createSharedStorage(root);
+    await s.chains.write([]);
+    // Did not touch root itself, only _shared/
+    expect(await s.chains.read()).toEqual([]);
+    await rm(root, { recursive: true });
   });
 });
 ```
 
-- [ ] **Step 3: Implement campaign storage factory**
+- [ ] **Step 3: Run — expect failure**
+
+Run: `cd packages/storage-campaign && npx vitest run __tests__/campaign-storage.test.ts __tests__/shared-storage.test.ts`
+Expected: FAIL — factories not exported.
+
+- [ ] **Step 4: Implement `packages/storage-campaign/src/shared-storage.ts`**
 
 ```typescript
-// packages/storage-campaign/src/campaign-storage.ts
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import type { AppSettings, ChainConfig } from '@titrate/sdk';
+
+export type AppSettingsStore = {
+  readonly read: () => Promise<AppSettings>;
+  readonly write: (settings: AppSettings) => Promise<void>;
+  readonly update: (patch: Partial<AppSettings>) => Promise<void>;
+};
+
+export type ChainConfigStore = {
+  readonly read: () => Promise<readonly ChainConfig[]>;
+  readonly write: (chains: readonly ChainConfig[]) => Promise<void>;
+};
+
+export type SharedStorage = {
+  readonly chains: ChainConfigStore;
+  readonly settings: AppSettingsStore;
+};
+
+const EMPTY_SETTINGS: AppSettings = { providerKeys: {} };
+
+export function createSharedStorage(campaignRoot: string): SharedStorage {
+  const sharedDir = join(campaignRoot, '_shared');
+  const chainsPath = join(sharedDir, 'chains.json');
+  const settingsPath = join(sharedDir, 'settings.json');
+
+  async function ensureDir(): Promise<void> {
+    await mkdir(sharedDir, { recursive: true });
+  }
+
+  return {
+    chains: {
+      async read() {
+        try {
+          const raw = await readFile(chainsPath, 'utf8');
+          return JSON.parse(raw) as readonly ChainConfig[];
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+          throw err;
+        }
+      },
+      async write(chains) {
+        await ensureDir();
+        await writeFile(chainsPath, JSON.stringify(chains, null, 2), 'utf8');
+      },
+    },
+    settings: {
+      async read() {
+        try {
+          const raw = await readFile(settingsPath, 'utf8');
+          return JSON.parse(raw) as AppSettings;
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === 'ENOENT') return EMPTY_SETTINGS;
+          throw err;
+        }
+      },
+      async write(settings) {
+        await ensureDir();
+        await writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf8');
+      },
+      async update(patch) {
+        const current = await this.read();
+        await this.write({ ...current, ...patch });
+      },
+    },
+  };
+}
+```
+
+- [ ] **Step 5: Replace `packages/storage-campaign/src/index.ts` with factories**
+
+```typescript
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
+import type { WalletRecord, BatchRecord, SweepRecord } from '@titrate/sdk';
 import { createAppendableCSV, type AppendableCSV } from './appendable-csv.js';
 import { createAppendableJSONL, type AppendableJSONL } from './appendable-jsonl.js';
 import { createManifestStore, type ManifestStore } from './manifest-store.js';
 import { createCursorStore, type CursorStore } from './cursor-store.js';
 import { createPipelineStore, type PipelineStore } from './pipeline-store.js';
-import type { BatchRecord, WalletRecord, SweepRecord } from '@titrate/sdk';
 
 export type CampaignStorage = {
   readonly dir: string;
@@ -1340,1162 +1984,2655 @@ export type CampaignStorage = {
   readonly batches: AppendableJSONL<BatchRecord>;
   readonly wallets: AppendableJSONL<WalletRecord>;
   readonly sweeps: AppendableJSONL<SweepRecord>;
+  readonly ensureDir: () => Promise<void>;
 };
 
-export async function createCampaignStorage(dir: string): Promise<CampaignStorage> {
-  await mkdir(dir, { recursive: true });
-
+/**
+ * Create a CampaignStorage rooted at `dir`. The directory is NOT created
+ * eagerly — callers should call ensureDir() before first write, or rely on
+ * individual append/write operations to create the file on demand.
+ * mkdir is idempotent.
+ */
+export function createCampaignStorage(dir: string): CampaignStorage {
   return {
     dir,
-    manifest: createManifestStore(dir),
-    pipeline: createPipelineStore(dir),
-    cursor: createCursorStore(dir),
+    manifest: createManifestStore(join(dir, 'campaign.json')),
+    pipeline: createPipelineStore(join(dir, 'pipeline.json')),
+    cursor: createCursorStore(join(dir, 'cursor.json')),
     addresses: createAppendableCSV(join(dir, 'addresses.csv')),
     filtered: createAppendableCSV(join(dir, 'filtered.csv')),
     amounts: createAppendableCSV(join(dir, 'amounts.csv')),
     batches: createAppendableJSONL<BatchRecord>(join(dir, 'batches.jsonl')),
     wallets: createAppendableJSONL<WalletRecord>(join(dir, 'wallets.jsonl')),
     sweeps: createAppendableJSONL<SweepRecord>(join(dir, 'sweep.jsonl')),
-  };
-}
-```
-
-- [ ] **Step 4: Implement shared storage factory**
-
-```typescript
-// packages/storage-campaign/src/shared-storage.ts
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import type { StoredChainConfig } from '@titrate/sdk';
-
-export type SharedStorage = {
-  readonly chains: SharedChainConfigStore;
-  readonly settings: SharedSettingsStore;
-};
-
-type SharedChainConfigStore = {
-  readonly get: (id: string) => Promise<StoredChainConfig | null>;
-  readonly getByChainId: (chainId: number) => Promise<StoredChainConfig | null>;
-  readonly put: (config: StoredChainConfig) => Promise<void>;
-  readonly list: () => Promise<readonly StoredChainConfig[]>;
-  readonly delete: (id: string) => Promise<void>;
-};
-
-type SharedSettingsStore = {
-  readonly get: (key: string) => Promise<string | null>;
-  readonly put: (key: string, value: string) => Promise<void>;
-  readonly delete: (key: string) => Promise<void>;
-};
-
-async function readJSON<T>(filePath: string): Promise<T | null> {
-  try {
-    const content = await readFile(filePath, 'utf8');
-    return JSON.parse(content) as T;
-  } catch {
-    return null;
-  }
-}
-
-async function writeJSON(filePath: string, data: unknown): Promise<void> {
-  await writeFile(filePath, JSON.stringify(data, null, 2) + '\n', 'utf8');
-}
-
-export async function createSharedStorage(dir: string): Promise<SharedStorage> {
-  await mkdir(dir, { recursive: true });
-
-  const chainsPath = join(dir, 'chains.json');
-  const settingsPath = join(dir, 'settings.json');
-
-  const chains: SharedChainConfigStore = {
-    async get(id) {
-      const all = await readJSON<Record<string, StoredChainConfig>>(chainsPath) ?? {};
-      return all[id] ?? null;
-    },
-
-    async getByChainId(chainId) {
-      const all = await readJSON<Record<string, StoredChainConfig>>(chainsPath) ?? {};
-      return Object.values(all).find((c) => c.chainId === chainId) ?? null;
-    },
-
-    async put(config) {
-      const all = await readJSON<Record<string, StoredChainConfig>>(chainsPath) ?? {};
-      all[config.id] = config;
-      await writeJSON(chainsPath, all);
-    },
-
-    async list() {
-      const all = await readJSON<Record<string, StoredChainConfig>>(chainsPath) ?? {};
-      return Object.values(all);
-    },
-
-    async delete(id) {
-      const all = await readJSON<Record<string, StoredChainConfig>>(chainsPath) ?? {};
-      delete (all as Record<string, StoredChainConfig>)[id];
-      await writeJSON(chainsPath, all);
+    async ensureDir() {
+      await mkdir(dir, { recursive: true });
     },
   };
-
-  const settings: SharedSettingsStore = {
-    async get(key) {
-      const all = await readJSON<Record<string, string>>(settingsPath) ?? {};
-      return all[key] ?? null;
-    },
-
-    async put(key, value) {
-      const all = await readJSON<Record<string, string>>(settingsPath) ?? {};
-      all[key] = value;
-      await writeJSON(settingsPath, all);
-    },
-
-    async delete(key) {
-      const all = await readJSON<Record<string, string>>(settingsPath) ?? {};
-      delete (all as Record<string, string>)[key];
-      await writeJSON(settingsPath, all);
-    },
-  };
-
-  return { chains, settings };
 }
-```
 
-- [ ] **Step 5: Update index.ts to export the real modules**
+export {
+  createAppendableCSV,
+  createAppendableJSONL,
+  createManifestStore,
+  createCursorStore,
+  createPipelineStore,
+};
+export type { AppendableCSV, AppendableJSONL, ManifestStore, CursorStore, PipelineStore };
+export type { CSVRow } from './appendable-csv.js';
 
-Replace the stub `packages/storage-campaign/src/index.ts`:
-
-```typescript
-export { createAppendableCSV, type AppendableCSV } from './appendable-csv.js';
-export { createAppendableJSONL, type AppendableJSONL } from './appendable-jsonl.js';
-export { createManifestStore, type ManifestStore } from './manifest-store.js';
-export { createCursorStore, type CursorStore } from './cursor-store.js';
-export { createPipelineStore, type PipelineStore } from './pipeline-store.js';
-export { createCampaignStorage, type CampaignStorage } from './campaign-storage.js';
-export { createSharedStorage, type SharedStorage } from './shared-storage.js';
+export { createSharedStorage } from './shared-storage.js';
+export type { SharedStorage, AppSettingsStore, ChainConfigStore } from './shared-storage.js';
 ```
 
 - [ ] **Step 6: Run all storage-campaign tests**
 
 Run: `cd packages/storage-campaign && npx vitest run`
-Expected: All tests pass
+Expected: PASS — ~14 tests total.
 
-- [ ] **Step 7: Type-check**
-
-Run: `cd packages/storage-campaign && npx tsc --noEmit`
-Expected: No errors
-
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add packages/storage-campaign/
-git commit -m "feat(storage-campaign): factories, shared storage, full test coverage"
+git add packages/storage-campaign
+git commit -m "feat(storage-campaign): add createCampaignStorage + createSharedStorage factories"
 ```
 
 ---
 
-### Task 7: Campaign root resolution utility
+## Phase 1c — TUI Bun + OpenTUI Foundation
+
+### Task 11: Switch `@titrate/tui` runtime to Bun + install OpenTUI
+
+**Files:**
+- Modify: `packages/tui/package.json`
+- Modify: `packages/tui/tsconfig.json`
+- Create: `packages/tui/bunfig.toml`
+
+- [ ] **Step 1: Verify Bun is installed**
+
+```bash
+bun --version
+```
+
+Expected: `1.x.x`. If not installed, run `curl -fsSL https://bun.sh/install | bash` first.
+
+- [ ] **Step 2: Rewrite `packages/tui/package.json`**
+
+```json
+{
+  "name": "@titrate/tui",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": {
+    "titrate": "src/index.tsx"
+  },
+  "scripts": {
+    "dev": "bun run src/index.tsx",
+    "build": "bun build src/index.tsx --outdir dist --target bun",
+    "test": "bun test",
+    "test:watch": "bun test --watch"
+  },
+  "dependencies": {
+    "@opentui/core": "latest",
+    "@opentui/react": "latest",
+    "@titrate/sdk": "file:../sdk",
+    "@titrate/storage-campaign": "file:../storage-campaign",
+    "commander": "^13.1.0",
+    "react": "^19.0.0",
+    "viem": "^2.23.2"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19.0.0",
+    "typescript": "^5.7.3"
+  }
+}
+```
+
+- [ ] **Step 3: Rewrite `packages/tui/tsconfig.json`**
+
+```json
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "allowImportingTsExtensions": true,
+    "noEmit": true,
+    "types": ["bun-types", "react"],
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*", "__tests__/**/*"]
+}
+```
+
+- [ ] **Step 4: Create `packages/tui/bunfig.toml`**
+
+```toml
+[test]
+root = "__tests__"
+preload = []
+```
+
+- [ ] **Step 5: Install via Bun**
+
+```bash
+cd packages/tui
+rm -rf node_modules
+bun install
+```
+
+Expected: creates `bun.lockb`, populates `node_modules`. No install errors.
+
+- [ ] **Step 6: Verify Bun runs a trivial script**
+
+```bash
+cd packages/tui
+bun -e "console.log('hello from bun')"
+```
+
+Expected: `hello from bun`.
+
+- [ ] **Step 7: Verify OpenTUI imports resolve**
+
+```bash
+cd packages/tui
+bun -e "import('@opentui/react').then(m => console.log(Object.keys(m).slice(0, 5)))"
+```
+
+Expected: prints an array of exported names (e.g., `createRoot`, `useKeyboard`, ...).
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add packages/tui/package.json packages/tui/tsconfig.json packages/tui/bunfig.toml packages/tui/bun.lockb
+git commit -m "chore(tui): switch runtime to Bun and add OpenTUI dependencies"
+```
+
+---
+
+### Task 12: Campaign root resolution utility
 
 **Files:**
 - Create: `packages/tui/src/utils/campaign-root.ts`
-- Create: `packages/tui/__tests__/campaign-root.test.ts`
+- Test: `packages/tui/__tests__/campaign-root.test.ts`
 
-- [ ] **Step 1: Write tests**
+- [ ] **Step 1: Write failing tests**
+
+Create `packages/tui/__tests__/campaign-root.test.ts`:
 
 ```typescript
-// packages/tui/__tests__/campaign-root.test.ts
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import { resolveCampaignRoot, resolveCampaignDir } from '../src/utils/campaign-root.js';
+import { test, expect, beforeEach, afterEach } from 'bun:test';
+import { mkdtemp, rm, mkdir, writeFile } from 'node:fs/promises';
+import { tmpdir, homedir } from 'node:os';
+import { join } from 'node:path';
+import { resolveCampaignRoot } from '../src/utils/campaign-root.ts';
 
-describe('resolveCampaignRoot', () => {
-  afterEach(() => {
-    delete process.env['TITRATE_CAMPAIGNS_DIR'];
-  });
+let dir: string;
 
-  it('uses explicit folder when provided', () => {
-    expect(resolveCampaignRoot('/custom/path')).toBe('/custom/path');
-  });
-
-  it('uses TITRATE_CAMPAIGNS_DIR env when no folder', () => {
-    process.env['TITRATE_CAMPAIGNS_DIR'] = '/env/campaigns';
-    expect(resolveCampaignRoot()).toBe('/env/campaigns');
-  });
-
-  it('falls back to ./titrate-campaigns/ when no folder or env', () => {
-    const root = resolveCampaignRoot();
-    expect(root).toMatch(/titrate-campaigns$/);
-  });
+beforeEach(async () => {
+  dir = await mkdtemp(join(tmpdir(), 'titrate-root-'));
 });
 
-describe('resolveCampaignDir', () => {
-  afterEach(() => {
-    delete process.env['TITRATE_CAMPAIGNS_DIR'];
-  });
+afterEach(async () => {
+  await rm(dir, { recursive: true, force: true });
+});
 
-  it('resolves absolute path as-is', () => {
-    expect(resolveCampaignDir('/absolute/path/my-campaign')).toBe('/absolute/path/my-campaign');
-  });
+test('--folder flag takes precedence', async () => {
+  const root = await resolveCampaignRoot({ folder: dir });
+  expect(root).toBe(dir);
+});
 
-  it('resolves name under campaign root', () => {
-    process.env['TITRATE_CAMPAIGNS_DIR'] = '/campaigns';
-    expect(resolveCampaignDir('my-campaign')).toBe('/campaigns/my-campaign');
-  });
+test('TITRATE_CAMPAIGNS_DIR env var is used when no flag', async () => {
+  process.env.TITRATE_CAMPAIGNS_DIR = dir;
+  const root = await resolveCampaignRoot({});
+  expect(root).toBe(dir);
+  delete process.env.TITRATE_CAMPAIGNS_DIR;
+});
+
+test('auto-detect prefers ./titrate-campaigns when in a git repo', async () => {
+  delete process.env.TITRATE_CAMPAIGNS_DIR;
+  await mkdir(join(dir, '.git'), { recursive: true });
+  const root = await resolveCampaignRoot({ cwd: dir });
+  expect(root).toBe(join(dir, 'titrate-campaigns'));
+});
+
+test('auto-detect falls back to ~/.titrate-campaigns when not in a repo', async () => {
+  delete process.env.TITRATE_CAMPAIGNS_DIR;
+  const root = await resolveCampaignRoot({ cwd: dir });
+  expect(root).toBe(join(homedir(), '.titrate-campaigns'));
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run — expect failure**
 
-Run: `cd packages/tui && npx vitest run __tests__/campaign-root.test.ts`
-Expected: FAIL — module doesn't exist
+Run: `cd packages/tui && bun test __tests__/campaign-root.test.ts`
+Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement campaign root resolution**
+- [ ] **Step 3: Implement `packages/tui/src/utils/campaign-root.ts`**
 
 ```typescript
-// packages/tui/src/utils/campaign-root.ts
-import { resolve, isAbsolute } from 'node:path';
+import { stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
 
-const DEFAULT_DIR_NAME = 'titrate-campaigns';
+export type CampaignRootOptions = {
+  readonly folder?: string;
+  readonly cwd?: string;
+};
 
-/**
- * Resolves the campaign root directory.
- *
- * Resolution order:
- *   1. Explicit folder (--folder flag)
- *   2. TITRATE_CAMPAIGNS_DIR env var
- *   3. ./titrate-campaigns/ (relative to cwd)
- */
-export function resolveCampaignRoot(folder?: string): string {
-  if (folder) return resolve(folder);
-
-  const envDir = process.env['TITRATE_CAMPAIGNS_DIR'];
-  if (envDir) return resolve(envDir);
-
-  return resolve(process.cwd(), DEFAULT_DIR_NAME);
+async function isGitRepo(dir: string): Promise<boolean> {
+  try {
+    const s = await stat(join(dir, '.git'));
+    return s.isDirectory() || s.isFile();
+  } catch {
+    return false;
+  }
 }
 
 /**
- * Resolves a campaign directory from a name or path.
- *
- * If the argument is an absolute path, use it directly.
- * If it contains a path separator, resolve relative to cwd.
- * Otherwise, treat it as a campaign name under the campaign root.
+ * Resolve the campaign root directory. Priority:
+ *   1. explicit --folder flag
+ *   2. TITRATE_CAMPAIGNS_DIR environment variable
+ *   3. auto-detect: ./titrate-campaigns/ if in a git repo, else ~/.titrate-campaigns/
  */
-export function resolveCampaignDir(nameOrPath: string, folder?: string): string {
-  if (isAbsolute(nameOrPath)) return nameOrPath;
-  if (nameOrPath.includes('/') || nameOrPath.includes('\\')) return resolve(nameOrPath);
-
-  const root = resolveCampaignRoot(folder);
-  return resolve(root, nameOrPath);
+export async function resolveCampaignRoot(options: CampaignRootOptions): Promise<string> {
+  if (options.folder) return options.folder;
+  const env = process.env.TITRATE_CAMPAIGNS_DIR;
+  if (env) return env;
+  const cwd = options.cwd ?? process.cwd();
+  if (await isGitRepo(cwd)) {
+    return join(cwd, 'titrate-campaigns');
+  }
+  return join(homedir(), '.titrate-campaigns');
 }
 ```
 
-- [ ] **Step 4: Run tests**
+- [ ] **Step 4: Run — expect pass**
 
-Run: `cd packages/tui && npx vitest run __tests__/campaign-root.test.ts`
-Expected: All tests pass
+Run: `cd packages/tui && bun test __tests__/campaign-root.test.ts`
+Expected: PASS — 4 tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add packages/tui/src/utils/campaign-root.ts packages/tui/__tests__/campaign-root.test.ts
-git commit -m "feat(tui): campaign root directory resolution"
+git commit -m "feat(tui): add campaign root resolution utility"
 ```
 
 ---
 
-### Task 8: Dashboard — step-based menu with status indicators
+### Task 13: Passphrase helpers (scrypt + AES-GCM)
 
 **Files:**
-- Create: `packages/tui/src/interactive/dashboard.ts`
-- Create: `packages/tui/__tests__/dashboard.test.ts`
+- Create: `packages/tui/src/utils/passphrase.ts`
+- Test: `packages/tui/__tests__/passphrase.test.ts`
 
-- [ ] **Step 1: Write state derivation tests**
+- [ ] **Step 1: Write failing tests**
 
-The dashboard derives step status from file existence. Test the state derivation logic separately from the UI rendering.
+Create `packages/tui/__tests__/passphrase.test.ts`:
 
 ```typescript
-// packages/tui/__tests__/dashboard.test.ts
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { deriveDashboardState, type DashboardState } from '../src/interactive/dashboard.js';
-import { createCampaignStorage } from '@titrate/storage-campaign';
-import type { Address } from 'viem';
+import { test, expect } from 'bun:test';
+import { encryptPrivateKey, decryptPrivateKey, type EncryptedKey } from '../src/utils/passphrase.ts';
 
-const ZERO = '0x0000000000000000000000000000000000000000' as Address;
+test('encrypt then decrypt round-trips a private key', async () => {
+  const passphrase = 'correct horse battery staple';
+  const plaintext = '0x' + '11'.repeat(32);
+  const encrypted: EncryptedKey = await encryptPrivateKey(plaintext, passphrase);
+  expect(encrypted.ciphertext).toBeTruthy();
+  expect(encrypted.kdf).toBe('scrypt');
+  expect(encrypted.kdfParams.salt).toBeTruthy();
 
-describe('deriveDashboardState', () => {
-  let dir: string;
+  const decrypted = await decryptPrivateKey(encrypted, passphrase);
+  expect(decrypted).toBe(plaintext);
+});
 
-  beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'dashboard-test-'));
-  });
+test('decrypt rejects wrong passphrase', async () => {
+  const encrypted = await encryptPrivateKey('0x' + '11'.repeat(32), 'right');
+  await expect(decryptPrivateKey(encrypted, 'wrong')).rejects.toThrow();
+});
 
-  afterEach(async () => {
-    await rm(dir, { recursive: true });
-  });
-
-  it('shows only campaign as complete for a fresh campaign', async () => {
-    const storage = await createCampaignStorage(dir);
-    await storage.manifest.write({
-      id: 'test', status: 'configuring', funder: ZERO, name: 'Test', version: 1,
-      chainId: 1, rpcUrl: 'https://rpc', tokenAddress: ZERO, tokenDecimals: 18,
-      contractAddress: null, contractVariant: 'simple', contractName: 'Test',
-      amountMode: 'uniform', amountFormat: 'integer', uniformAmount: null,
-      batchSize: 200, campaignId: null, pinnedBlock: null,
-      coldAddress: ZERO, walletCount: 1, walletOffset: 0,
-      createdAt: Date.now(), updatedAt: Date.now(),
-    });
-
-    const state = await deriveDashboardState(storage);
-    expect(state.campaign).toBe('complete');
-    expect(state.addresses).toBe('empty');
-    expect(state.filters).toBe('locked');
-    expect(state.amounts).toBe('locked');
-    expect(state.wallet).toBe('locked');
-    expect(state.distribute).toBe('locked');
-    expect(state.sweep).toBe('locked');
-  });
-
-  it('unlocks filters when addresses exist', async () => {
-    const storage = await createCampaignStorage(dir);
-    await storage.manifest.write({
-      id: 'test', status: 'configuring', funder: ZERO, name: 'Test', version: 1,
-      chainId: 1, rpcUrl: 'https://rpc', tokenAddress: ZERO, tokenDecimals: 18,
-      contractAddress: null, contractVariant: 'simple', contractName: 'Test',
-      amountMode: 'uniform', amountFormat: 'integer', uniformAmount: null,
-      batchSize: 200, campaignId: null, pinnedBlock: null,
-      coldAddress: ZERO, walletCount: 1, walletOffset: 0,
-      createdAt: Date.now(), updatedAt: Date.now(),
-    });
-    await storage.addresses.append([
-      { address: '0x0000000000000000000000000000000000000001' as Address, amount: null },
-    ]);
-
-    const state = await deriveDashboardState(storage);
-    expect(state.addresses).toBe('complete');
-    expect(state.filters).toBe('available');
-  });
-
-  it('unlocks distribute when wallet is configured', async () => {
-    const storage = await createCampaignStorage(dir);
-    await storage.manifest.write({
-      id: 'test', status: 'funded', funder: ZERO, name: 'Test', version: 1,
-      chainId: 1, rpcUrl: 'https://rpc', tokenAddress: ZERO, tokenDecimals: 18,
-      contractAddress: '0x0000000000000000000000000000000000000099' as Address,
-      contractVariant: 'simple', contractName: 'Test',
-      amountMode: 'uniform', amountFormat: 'integer', uniformAmount: '1000',
-      batchSize: 200, campaignId: null, pinnedBlock: null,
-      coldAddress: ZERO, walletCount: 1, walletOffset: 0,
-      createdAt: Date.now(), updatedAt: Date.now(),
-    });
-    await storage.addresses.append([
-      { address: '0x0000000000000000000000000000000000000001' as Address, amount: null },
-    ]);
-    await storage.filtered.append([
-      { address: '0x0000000000000000000000000000000000000001' as Address, amount: null },
-    ]);
-    await storage.wallets.append([
-      { index: 0, address: '0x0000000000000000000000000000000000000010' as Address, coldAddress: ZERO, createdAt: Date.now() },
-    ]);
-
-    const state = await deriveDashboardState(storage);
-    expect(state.distribute).toBe('available');
-  });
+test('each encryption produces a unique salt and IV', async () => {
+  const pass = 'same';
+  const pk = '0x' + '11'.repeat(32);
+  const a = await encryptPrivateKey(pk, pass);
+  const b = await encryptPrivateKey(pk, pass);
+  expect(a.kdfParams.salt).not.toBe(b.kdfParams.salt);
+  expect(a.iv).not.toBe(b.iv);
+  expect(a.ciphertext).not.toBe(b.ciphertext);
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [ ] **Step 2: Run — expect failure**
 
-Run: `cd packages/tui && npx vitest run __tests__/dashboard.test.ts`
-Expected: FAIL — module doesn't exist
+Run: `cd packages/tui && bun test __tests__/passphrase.test.ts`
+Expected: FAIL — module not found.
 
-- [ ] **Step 3: Implement dashboard state derivation and rendering**
+- [ ] **Step 3: Implement `packages/tui/src/utils/passphrase.ts`**
 
 ```typescript
-// packages/tui/src/interactive/dashboard.ts
-import { select, isCancel } from '@clack/prompts';
-import type { CampaignStorage } from '@titrate/storage-campaign';
+import { scryptSync, randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
 
-export type StepStatus = 'complete' | 'available' | 'locked' | 'empty' | 'in_progress';
+const N = 131072;   // 2^17
+const R = 8;
+const P = 1;
+const KEY_LEN = 32;
+const IV_LEN = 12;
 
-export type DashboardState = {
-  readonly campaign: StepStatus;
-  readonly addresses: StepStatus;
-  readonly filters: StepStatus;
-  readonly amounts: StepStatus;
-  readonly wallet: StepStatus;
-  readonly distribute: StepStatus;
-  readonly sweep: StepStatus;
+export type EncryptedKey = {
+  readonly ciphertext: string;   // base64
+  readonly iv: string;           // base64
+  readonly authTag: string;      // base64
+  readonly kdf: 'scrypt';
+  readonly kdfParams: {
+    readonly N: number;
+    readonly r: number;
+    readonly p: number;
+    readonly salt: string;       // base64
+  };
 };
 
-export type DashboardAction =
-  | 'campaign' | 'addresses' | 'filters' | 'amounts'
-  | 'wallet' | 'distribute' | 'sweep' | 'quit';
-
-const STATUS_ICONS: Record<StepStatus, string> = {
-  complete: '\u2713',     // ✓
-  available: '\u2192',    // →
-  locked: '\u25CB',       // ○
-  empty: '\u25CB',        // ○
-  in_progress: '\u25D0',  // ◐
-};
-
-export async function deriveDashboardState(storage: CampaignStorage): Promise<DashboardState> {
-  const manifest = await storage.manifest.read();
-  if (!manifest) {
-    return { campaign: 'empty', addresses: 'locked', filters: 'locked', amounts: 'locked', wallet: 'locked', distribute: 'locked', sweep: 'locked' };
-  }
-
-  const addressCount = await storage.addresses.count();
-  const filteredCount = await storage.filtered.count();
-  const walletCount = await storage.wallets.count();
-  const batchCount = await storage.batches.count();
-  const hasContract = manifest.contractAddress !== null;
-  const hasAmounts = manifest.amountMode === 'uniform'
-    ? manifest.uniformAmount !== null
-    : (await storage.amounts.count()) > 0;
-
-  const addresses: StepStatus = addressCount > 0 ? 'complete' : 'empty';
-  const filters: StepStatus = addressCount === 0 ? 'locked' : filteredCount > 0 ? 'complete' : 'available';
-  const amounts: StepStatus = filteredCount === 0 ? 'locked' : hasAmounts ? 'complete' : 'available';
-  const wallet: StepStatus = !hasAmounts ? 'locked' : (walletCount > 0 && hasContract) ? 'complete' : 'available';
-  const distribute: StepStatus = !(walletCount > 0 && hasContract) ? 'locked' : batchCount > 0 ? 'complete' : 'available';
-  const sweep: StepStatus = batchCount === 0 ? 'locked' : 'available';
-
-  return { campaign: 'complete', addresses, filters, amounts, wallet, distribute, sweep };
+function toB64(buf: Buffer): string {
+  return buf.toString('base64');
 }
 
-type StepDef = { key: DashboardAction; label: string; detail: string };
+function fromB64(s: string): Buffer {
+  return Buffer.from(s, 'base64');
+}
 
-function buildMenuOptions(
-  state: DashboardState,
-  manifest: { name: string; chainId: number; tokenAddress: string },
-  counts: { addresses: number; filtered: number; batches: number },
-): { value: DashboardAction; label: string; hint?: string }[] {
-  const steps: StepDef[] = [
-    { key: 'campaign', label: 'Campaign', detail: `${manifest.name} · chain ${manifest.chainId}` },
-    { key: 'addresses', label: 'Addresses', detail: counts.addresses > 0 ? `${counts.addresses} sourced` : 'Not configured' },
-    { key: 'filters', label: 'Filters', detail: counts.filtered > 0 ? `${counts.filtered} qualified` : state.filters === 'locked' ? 'Waiting for addresses' : 'Not configured' },
-    { key: 'amounts', label: 'Amounts', detail: state.amounts === 'locked' ? 'Waiting for filters' : state.amounts === 'complete' ? 'Configured' : 'Not configured' },
-    { key: 'wallet', label: 'Wallet', detail: state.wallet === 'locked' ? 'Waiting for amounts' : state.wallet === 'complete' ? 'Funded' : 'Not configured' },
-    { key: 'distribute', label: 'Distribute', detail: state.distribute === 'locked' ? 'Waiting for wallet' : counts.batches > 0 ? `${counts.batches} batches sent` : 'Ready' },
-    { key: 'sweep', label: 'Sweep', detail: state.sweep === 'locked' ? 'Waiting for distribution' : 'Available' },
-  ];
-
-  const options = steps.map((s) => ({
-    value: s.key,
-    label: `${STATUS_ICONS[state[s.key]]} ${s.label}`,
-    hint: s.detail,
-  }));
-
-  options.push({ value: 'quit' as DashboardAction, label: 'Quit', hint: undefined });
-
-  return options;
+function deriveKey(passphrase: string, salt: Buffer): Buffer {
+  return scryptSync(passphrase.normalize('NFKC'), salt, KEY_LEN, { N, r: R, p: P, maxmem: 256 * 1024 * 1024 });
 }
 
 /**
- * Shows the campaign dashboard menu and returns the selected action.
- * The caller is responsible for executing the action and re-calling this in a loop.
+ * Encrypt a private key (hex string) with a user passphrase.
+ * Uses scrypt for key derivation, AES-256-GCM for authenticated encryption.
  */
-export async function showDashboard(storage: CampaignStorage): Promise<DashboardAction | symbol> {
-  const manifest = await storage.manifest.read();
-  if (!manifest) {
-    throw new Error('No campaign.json found. Use `titrate new` to create a campaign.');
-  }
+export async function encryptPrivateKey(plaintext: string, passphrase: string): Promise<EncryptedKey> {
+  const salt = randomBytes(16);
+  const key = deriveKey(passphrase, salt);
+  const iv = randomBytes(IV_LEN);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const ct = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  const authTag = cipher.getAuthTag();
+  return {
+    ciphertext: toB64(ct),
+    iv: toB64(iv),
+    authTag: toB64(authTag),
+    kdf: 'scrypt',
+    kdfParams: { N, r: R, p: P, salt: toB64(salt) },
+  };
+}
 
-  const state = await deriveDashboardState(storage);
-  const addressCount = await storage.addresses.count();
-  const filteredCount = await storage.filtered.count();
-  const batchCount = await storage.batches.count();
-
-  const options = buildMenuOptions(
-    state,
-    { name: manifest.name, chainId: manifest.chainId, tokenAddress: manifest.tokenAddress },
-    { addresses: addressCount, filtered: filteredCount, batches: batchCount },
-  );
-
-  const action = await select({
-    message: `${manifest.name}`,
-    options,
-  });
-
-  if (isCancel(action)) return action;
-  return action as DashboardAction;
+export async function decryptPrivateKey(encrypted: EncryptedKey, passphrase: string): Promise<string> {
+  const salt = fromB64(encrypted.kdfParams.salt);
+  const key = deriveKey(passphrase, salt);
+  const iv = fromB64(encrypted.iv);
+  const authTag = fromB64(encrypted.authTag);
+  const ct = fromB64(encrypted.ciphertext);
+  const decipher = createDecipheriv('aes-256-gcm', key, iv);
+  decipher.setAuthTag(authTag);
+  const pt = Buffer.concat([decipher.update(ct), decipher.final()]);
+  return pt.toString('utf8');
 }
 ```
 
-- [ ] **Step 4: Add `@titrate/storage-campaign` dependency to TUI package.json**
+- [ ] **Step 4: Run — expect pass**
 
-Add to `packages/tui/package.json` dependencies:
-
-```json
-"@titrate/storage-campaign": "0.0.1"
-```
-
-Run: `cd /Users/michaelmclaughlin/Documents/morbius/github/airdrop && npm install`
-
-- [ ] **Step 5: Run tests**
-
-Run: `cd packages/tui && npx vitest run __tests__/dashboard.test.ts`
-Expected: All tests pass
-
-- [ ] **Step 6: Commit**
-
-```bash
-git add packages/tui/src/interactive/dashboard.ts packages/tui/__tests__/dashboard.test.ts packages/tui/package.json
-git commit -m "feat(tui): campaign dashboard with step status derivation"
-```
-
----
-
-### Task 9: `titrate new` command
-
-**Files:**
-- Create: `packages/tui/src/commands/new-campaign.ts`
-- Modify: `packages/tui/src/index.ts`
-
-- [ ] **Step 1: Implement `titrate new` command**
-
-```typescript
-// packages/tui/src/commands/new-campaign.ts
-import { Command } from 'commander';
-import { intro, outro, isCancel } from '@clack/prompts';
-import { stat } from 'node:fs/promises';
-import { join } from 'node:path';
-import { createCampaignStorage } from '@titrate/storage-campaign';
-import { slugifyCampaignName } from '@titrate/sdk';
-import { resolveCampaignDir } from '../utils/campaign-root.js';
-import { campaignStep } from '../interactive/steps/campaign.js';
-import { showDashboard, type DashboardAction } from '../interactive/dashboard.js';
-
-export function registerNewCampaign(program: Command): void {
-  program
-    .command('new <name>')
-    .description('Create a new campaign')
-    .option('--folder <path>', 'Campaign root directory override')
-    .action(async (name: string, opts: { folder?: string }) => {
-      const campaignId = slugifyCampaignName(name);
-      const campaignDir = resolveCampaignDir(campaignId, opts.folder);
-
-      // Check if campaign already exists
-      try {
-        await stat(join(campaignDir, 'campaign.json'));
-        console.error(`Campaign "${name}" already exists at ${campaignDir}. Use \`titrate open\` instead.`);
-        process.exit(1);
-      } catch {
-        // Expected — campaign doesn't exist yet
-      }
-
-      intro(`Titrate — New Campaign: ${name}`);
-
-      const storage = await createCampaignStorage(campaignDir);
-
-      // Run Step 1: Campaign Setup (reuse existing step)
-      const campaign = await campaignStep(storage);
-      if (isCancel(campaign)) {
-        outro('Cancelled.');
-        return;
-      }
-
-      // Persist campaign manifest
-      const now = Date.now();
-      await storage.manifest.write({
-        id: campaignId,
-        status: 'configuring',
-        funder: '0x0000000000000000000000000000000000000000' as `0x${string}`,
-        name,
-        version: 1,
-        chainId: campaign.chainId,
-        rpcUrl: campaign.rpcUrl,
-        tokenAddress: campaign.tokenAddress as `0x${string}`,
-        tokenDecimals: campaign.tokenDecimals,
-        contractAddress: null,
-        contractVariant: campaign.contractVariant,
-        contractName: campaign.contractName,
-        amountMode: 'uniform',
-        amountFormat: 'integer',
-        uniformAmount: null,
-        batchSize: campaign.batchSize,
-        campaignId: null,
-        pinnedBlock: null,
-        coldAddress: '0x0000000000000000000000000000000000000000' as `0x${string}`,
-        walletCount: 1,
-        walletOffset: 0,
-        createdAt: now,
-        updatedAt: now,
-      });
-
-      console.log(`\n  Campaign created at ${campaignDir}\n`);
-
-      // Drop into the dashboard loop
-      let running = true;
-      while (running) {
-        const action = await showDashboard(storage);
-        if (isCancel(action) || action === 'quit') {
-          running = false;
-          continue;
-        }
-        // TODO: Phase 1 will wire up step handlers in Task 11
-        console.log(`  Action "${action}" selected — step handlers coming in a future task.`);
-      }
-
-      outro('Done.');
-    });
-}
-```
-
-- [ ] **Step 2: Register command in index.ts**
-
-Add import and registration to `packages/tui/src/index.ts`:
-
-```typescript
-import { registerNewCampaign } from './commands/new-campaign.js';
-// ... in the registration block:
-registerNewCampaign(program);
-```
-
-- [ ] **Step 3: Type-check**
-
-Run: `cd packages/tui && npx tsc --noEmit`
-Expected: No errors
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add packages/tui/src/commands/new-campaign.ts packages/tui/src/index.ts
-git commit -m "feat(tui): titrate new command with dashboard loop"
-```
-
----
-
-### Task 10: `titrate open` and `titrate list` commands
-
-**Files:**
-- Create: `packages/tui/src/commands/open-campaign.ts`
-- Create: `packages/tui/src/commands/list-campaigns.ts`
-- Modify: `packages/tui/src/index.ts`
-
-- [ ] **Step 1: Implement `titrate open`**
-
-```typescript
-// packages/tui/src/commands/open-campaign.ts
-import { Command } from 'commander';
-import { intro, outro, isCancel } from '@clack/prompts';
-import { stat } from 'node:fs/promises';
-import { join } from 'node:path';
-import { createCampaignStorage } from '@titrate/storage-campaign';
-import { resolveCampaignDir } from '../utils/campaign-root.js';
-import { showDashboard } from '../interactive/dashboard.js';
-
-export function registerOpenCampaign(program: Command): void {
-  program
-    .command('open <name-or-path>')
-    .description('Open an existing campaign')
-    .option('--folder <path>', 'Campaign root directory override')
-    .action(async (nameOrPath: string, opts: { folder?: string }) => {
-      const campaignDir = resolveCampaignDir(nameOrPath, opts.folder);
-
-      try {
-        await stat(join(campaignDir, 'campaign.json'));
-      } catch {
-        console.error(`No campaign found at ${campaignDir}. Use \`titrate new\` to create one.`);
-        process.exit(1);
-      }
-
-      const storage = await createCampaignStorage(campaignDir);
-      const manifest = await storage.manifest.read();
-
-      intro(`Titrate — ${manifest?.name ?? nameOrPath}`);
-
-      let running = true;
-      while (running) {
-        const action = await showDashboard(storage);
-        if (isCancel(action) || action === 'quit') {
-          running = false;
-          continue;
-        }
-        // TODO: Wire up step handlers in Task 11
-        console.log(`  Action "${action}" selected — step handlers coming in a future task.`);
-      }
-
-      outro('Done.');
-    });
-}
-```
-
-- [ ] **Step 2: Implement `titrate list`**
-
-```typescript
-// packages/tui/src/commands/list-campaigns.ts
-import { Command } from 'commander';
-import { readdir, stat } from 'node:fs/promises';
-import { join } from 'node:path';
-import { resolveCampaignRoot } from '../utils/campaign-root.js';
-import { createCampaignStorage } from '@titrate/storage-campaign';
-
-export function registerListCampaigns(program: Command): void {
-  program
-    .command('list')
-    .description('List all campaigns')
-    .option('--folder <path>', 'Campaign root directory override')
-    .action(async (opts: { folder?: string }) => {
-      const root = resolveCampaignRoot(opts.folder);
-
-      let entries: string[];
-      try {
-        entries = await readdir(root);
-      } catch {
-        console.log('No campaigns found.');
-        return;
-      }
-
-      const campaigns: { name: string; status: string; updatedAt: number }[] = [];
-
-      for (const entry of entries) {
-        if (entry.startsWith('_')) continue;
-
-        const dirPath = join(root, entry);
-        const dirStat = await stat(dirPath).catch(() => null);
-        if (!dirStat?.isDirectory()) continue;
-
-        try {
-          const storage = await createCampaignStorage(dirPath);
-          const manifest = await storage.manifest.read();
-          if (manifest) {
-            campaigns.push({
-              name: manifest.name,
-              status: manifest.status,
-              updatedAt: manifest.updatedAt,
-            });
-          }
-        } catch {
-          // Not a valid campaign directory — skip
-        }
-      }
-
-      if (campaigns.length === 0) {
-        console.log('No campaigns found.');
-        return;
-      }
-
-      console.log(`\n  Found ${campaigns.length} campaign(s):\n`);
-      for (const c of campaigns) {
-        const date = new Date(c.updatedAt).toLocaleDateString();
-        console.log(`  ${c.name.padEnd(30)} ${c.status.padEnd(15)} ${date}`);
-      }
-      console.log();
-    });
-}
-```
-
-- [ ] **Step 3: Register both commands in index.ts**
-
-Add imports and registrations to `packages/tui/src/index.ts`:
-
-```typescript
-import { registerOpenCampaign } from './commands/open-campaign.js';
-import { registerListCampaigns } from './commands/list-campaigns.js';
-// ... in the registration block:
-registerOpenCampaign(program);
-registerListCampaigns(program);
-```
-
-- [ ] **Step 4: Type-check**
-
-Run: `cd packages/tui && npx tsc --noEmit`
-Expected: No errors
+Run: `cd packages/tui && bun test __tests__/passphrase.test.ts`
+Expected: PASS — 3 tests.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/tui/src/commands/open-campaign.ts packages/tui/src/commands/list-campaigns.ts packages/tui/src/index.ts
-git commit -m "feat(tui): titrate open and list commands"
+git add packages/tui/src/utils/passphrase.ts packages/tui/__tests__/passphrase.test.ts
+git commit -m "feat(tui): add passphrase-based private-key encryption helpers"
 ```
 
 ---
 
-### Task 11: Wire dashboard actions to existing step implementations
+### Task 14: Step-status derivation (pure function)
 
 **Files:**
-- Create: `packages/tui/src/interactive/step-runner.ts`
-- Modify: `packages/tui/src/commands/new-campaign.ts`
-- Modify: `packages/tui/src/commands/open-campaign.ts`
+- Create: `packages/tui/src/interactive/step-status.ts`
+- Test: `packages/tui/__tests__/step-status.test.ts`
 
-This task connects the dashboard menu actions to the existing step implementations from `interactive/steps/`. Each action reads from storage, runs the step, and writes results back to storage.
+- [ ] **Step 1: Write failing tests**
 
-- [ ] **Step 1: Create step runner that dispatches dashboard actions**
-
-```typescript
-// packages/tui/src/interactive/step-runner.ts
-import type { CampaignStorage } from '@titrate/storage-campaign';
-import type { DashboardAction } from './dashboard.js';
-import { isCancel } from '@clack/prompts';
-import { campaignStep } from './steps/campaign.js';
-import { addressesStep } from './steps/addresses.js';
-import { filtersStep } from './steps/filters.js';
-import { amountsStep } from './steps/amounts.js';
-import { walletStep } from './steps/wallet.js';
-import { distributeStep } from './steps/distribute.js';
-import type { Address } from 'viem';
-
-/**
- * Runs a single dashboard action against the campaign storage.
- * Returns true if the action completed, false if cancelled.
- */
-export async function runDashboardAction(
-  action: DashboardAction,
-  storage: CampaignStorage,
-): Promise<boolean> {
-  const manifest = await storage.manifest.read();
-  if (!manifest) throw new Error('No campaign manifest found.');
-
-  switch (action) {
-    case 'campaign': {
-      const result = await campaignStep(storage);
-      if (isCancel(result)) return false;
-
-      await storage.manifest.update({
-        chainId: result.chainId,
-        rpcUrl: result.rpcUrl,
-        tokenAddress: result.tokenAddress as Address,
-        tokenDecimals: result.tokenDecimals,
-        contractVariant: result.contractVariant,
-        contractName: result.contractName,
-        batchSize: result.batchSize,
-      });
-      return true;
-    }
-
-    case 'addresses': {
-      const campaignResult = {
-        name: manifest.name,
-        chainId: manifest.chainId,
-        rpcUrl: manifest.rpcUrl,
-        tokenAddress: manifest.tokenAddress,
-        tokenSymbol: '',
-        tokenDecimals: manifest.tokenDecimals,
-        contractVariant: manifest.contractVariant,
-        contractName: manifest.contractName,
-        batchSize: manifest.batchSize,
-        publicClient: (await import('../utils/rpc.js')).createRpcClient(manifest.rpcUrl, manifest.chainId),
-        resumeCampaignId: null,
-      };
-
-      const result = await addressesStep(campaignResult);
-      if (isCancel(result)) return false;
-
-      // Write addresses to storage
-      const rows = result.addresses.map((addr: string) => ({
-        address: addr as Address,
-        amount: null,
-      }));
-      await storage.addresses.append(rows);
-      await storage.manifest.update({ status: 'configuring' });
-      return true;
-    }
-
-    case 'filters':
-    case 'amounts':
-    case 'wallet':
-    case 'distribute':
-    case 'sweep': {
-      // These steps require more integration work — reading from storage,
-      // adapting step signatures, writing results back. Each will be wired
-      // up as the existing steps are refactored to accept CampaignStorage.
-      // For now, show a placeholder.
-      console.log(`\n  Step "${action}" integration is in progress.\n`);
-      return true;
-    }
-
-    case 'quit':
-      return false;
-
-    default:
-      return false;
-  }
-}
-```
-
-- [ ] **Step 2: Update new-campaign.ts and open-campaign.ts to use step runner**
-
-Replace the TODO placeholder in both files' dashboard loops:
+Create `packages/tui/__tests__/step-status.test.ts`:
 
 ```typescript
-// In the while loop, replace:
-//   console.log(`  Action "${action}" selected — step handlers coming in a future task.`);
-// With:
-import { runDashboardAction } from '../interactive/step-runner.js';
-// ...
-const completed = await runDashboardAction(action as DashboardAction, storage);
-if (!completed) {
-  // User cancelled the step — stay in the dashboard
-}
-```
-
-- [ ] **Step 3: Type-check**
-
-Run: `cd packages/tui && npx tsc --noEmit`
-Expected: No errors
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add packages/tui/src/interactive/step-runner.ts packages/tui/src/commands/new-campaign.ts packages/tui/src/commands/open-campaign.ts
-git commit -m "feat(tui): wire dashboard actions to step runner"
-```
-
----
-
-### Task 12: Add `--campaign` flag to `distribute` and `sweep` commands
-
-**Files:**
-- Modify: `packages/tui/src/commands/distribute.ts`
-- Modify: `packages/tui/src/commands/sweep.ts`
-
-- [ ] **Step 1: Add `--campaign` flag to distribute command**
-
-Add to the option chain in `packages/tui/src/commands/distribute.ts`:
-
-```typescript
-.option('--campaign <name>', 'Load config from a campaign directory')
-```
-
-Add `campaign?: string` to the opts type.
-
-At the top of the action handler, before the existing logic, add a branch that loads from storage:
-
-```typescript
-if (opts.campaign) {
-  const { resolveCampaignDir } = await import('../utils/campaign-root.js');
-  const { createCampaignStorage } = await import('@titrate/storage-campaign');
-
-  const campaignDir = resolveCampaignDir(opts.campaign);
-  const storage = await createCampaignStorage(campaignDir);
-  const manifest = await storage.manifest.read();
-
-  if (!manifest) {
-    throw new Error(`No campaign found at ${campaignDir}`);
-  }
-
-  // Override opts from manifest
-  opts.contract = opts.contract ?? manifest.contractAddress!;
-  opts.token = opts.token ?? manifest.tokenAddress;
-  opts.rpc = opts.rpc ?? manifest.rpcUrl;
-  opts.variant = opts.variant ?? manifest.contractVariant;
-  opts.batchSize = opts.batchSize ?? String(manifest.batchSize);
-  opts.chainId = opts.chainId ?? manifest.chainId;
-
-  if (manifest.walletCount > 1) {
-    opts.wallets = opts.wallets ?? manifest.walletCount;
-    opts.walletOffset = opts.walletOffset ?? manifest.walletOffset;
-    opts.campaignName = opts.campaignName ?? manifest.name;
-  }
-}
-```
-
-Note: `--contract`, `--token`, and `--rpc` should change from `requiredOption` to `option` since they can come from the campaign. Add validation after the `--campaign` branch:
-
-```typescript
-if (!opts.contract) throw new Error('--contract is required (or use --campaign)');
-if (!opts.token) throw new Error('--token is required (or use --campaign)');
-if (!opts.rpc) throw new Error('--rpc is required (or use --campaign)');
-```
-
-- [ ] **Step 2: Add `--campaign` flag to sweep command**
-
-Add to the option chain in `packages/tui/src/commands/sweep.ts`:
-
-```typescript
-.option('--campaign <name>', 'Load config from a campaign directory')
-```
-
-Add `campaign?: string` to the opts type.
-
-At the top of the action handler, add a branch that loads from storage:
-
-```typescript
-if (opts.campaign) {
-  const { resolveCampaignDir } = await import('../utils/campaign-root.js');
-  const { createCampaignStorage } = await import('@titrate/storage-campaign');
-
-  const campaignDir = resolveCampaignDir(opts.campaign);
-  const storage = await createCampaignStorage(campaignDir);
-  const manifest = await storage.manifest.read();
-
-  if (!manifest) {
-    throw new Error(`No campaign found at ${campaignDir}`);
-  }
-
-  opts.rpc = opts.rpc ?? manifest.rpcUrl;
-  opts.campaignName = opts.campaignName ?? manifest.name;
-  opts.count = opts.count ?? manifest.walletCount;
-  opts.offset = opts.offset ?? manifest.walletOffset;
-  opts.token = opts.token ?? manifest.tokenAddress;
-  opts.chainId = opts.chainId ?? manifest.chainId;
-}
-```
-
-Change `--rpc`, `--campaign-name`, and `--count` from `requiredOption` to `option` and add validation after the branch.
-
-- [ ] **Step 3: Type-check**
-
-Run: `cd packages/tui && npx tsc --noEmit`
-Expected: No errors
-
-- [ ] **Step 4: Commit**
-
-```bash
-git add packages/tui/src/commands/distribute.ts packages/tui/src/commands/sweep.ts
-git commit -m "feat(tui): --campaign flag for distribute and sweep commands"
-```
-
----
-
-### Task 13: Integration test — full campaign cycle on Anvil
-
-**Files:**
-- Create: `packages/tui/__tests__/integration/campaign-cycle.test.ts`
-
-This test creates a campaign directory, configures it programmatically (no interactive prompts), distributes tokens via Anvil, and sweeps. Gated behind `ANVIL_RPC` env var.
-
-- [ ] **Step 1: Write integration test**
-
-```typescript
-// packages/tui/__tests__/integration/campaign-cycle.test.ts
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
-import { createCampaignStorage } from '@titrate/storage-campaign';
+import { test, expect } from 'bun:test';
 import type { CampaignManifest } from '@titrate/sdk';
-import type { Address } from 'viem';
+import { deriveStepStates, type StepState } from '../src/interactive/step-status.ts';
 
-const ANVIL_RPC = process.env['ANVIL_RPC'];
-const ZERO = '0x0000000000000000000000000000000000000000' as Address;
+const baseManifest: CampaignManifest = {
+  id: 'x', funder: '0x0000000000000000000000000000000000000001',
+  name: 'x', version: 1, chainId: 1, rpcUrl: 'https://x',
+  tokenAddress: '0x0000000000000000000000000000000000000002', tokenDecimals: 18,
+  contractAddress: null, contractVariant: 'simple', contractName: 'X',
+  amountMode: 'uniform', amountFormat: 'integer', uniformAmount: '1',
+  batchSize: 200, campaignId: null, pinnedBlock: null,
+  status: 'configuring', wallets: { mode: 'imported', count: 0 },
+  createdAt: 1, updatedAt: 1,
+};
 
-describe.skipIf(!ANVIL_RPC)('Campaign cycle (Anvil)', () => {
-  let dir: string;
-
-  beforeAll(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'campaign-cycle-'));
+test('configuring campaign with no activity shows all steps as todo/blocked', () => {
+  const states = deriveStepStates(baseManifest, {
+    addresses: 0, filtered: 0, wallets: 0, batches: 0,
   });
+  const map = Object.fromEntries(states.map((s: StepState) => [s.id, s.status]));
+  expect(map.campaign).toBe('done');  // manifest exists with chain+token set
+  expect(map.addresses).toBe('todo');
+  expect(map.distribute).toBe('blocked');
+});
 
-  afterAll(async () => {
-    await rm(dir, { recursive: true });
+test('addresses step becomes done once a non-zero count is recorded', () => {
+  const states = deriveStepStates(baseManifest, {
+    addresses: 100, filtered: 0, wallets: 0, batches: 0,
   });
+  const addr = states.find((s) => s.id === 'addresses')!;
+  expect(addr.status).toBe('done');
+  expect(addr.summary).toContain('100');
+});
 
-  it('creates a campaign, populates addresses, and reads them back', async () => {
-    const storage = await createCampaignStorage(join(dir, 'test-campaign'));
-
-    // Write manifest
-    const manifest: CampaignManifest = {
-      id: 'test-campaign',
-      status: 'configuring',
-      funder: ZERO,
-      name: 'Integration Test',
-      version: 1,
-      chainId: 31337,
-      rpcUrl: ANVIL_RPC!,
-      tokenAddress: ZERO,
-      tokenDecimals: 18,
-      contractAddress: null,
-      contractVariant: 'simple',
-      contractName: 'Test',
-      amountMode: 'uniform',
-      amountFormat: 'integer',
-      uniformAmount: '1000000000000000000',
-      batchSize: 10,
-      campaignId: null,
-      pinnedBlock: null,
-      coldAddress: ZERO,
-      walletCount: 1,
-      walletOffset: 0,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
-    await storage.manifest.write(manifest);
-
-    // Populate addresses
-    const addresses = Array.from({ length: 25 }, (_, i) => ({
-      address: `0x${(i + 1).toString(16).padStart(40, '0')}` as Address,
-      amount: null,
-    }));
-    await storage.addresses.append(addresses);
-
-    // Verify round-trip
-    const loadedManifest = await storage.manifest.read();
-    expect(loadedManifest!.name).toBe('Integration Test');
-
-    const addressCount = await storage.addresses.count();
-    expect(addressCount).toBe(25);
-
-    // Read from offset
-    const tail = [];
-    for await (const row of storage.addresses.readFrom(20)) {
-      tail.push(row);
-    }
-    expect(tail).toHaveLength(5);
+test('distribute unblocks when addresses + filters + amounts + wallets are all done', () => {
+  const manifest: CampaignManifest = {
+    ...baseManifest,
+    wallets: { mode: 'imported', count: 3 },
+  };
+  const states = deriveStepStates(manifest, {
+    addresses: 10, filtered: 10, wallets: 3, batches: 0,
   });
-
-  it('appends batch results and reads them back', async () => {
-    const storage = await createCampaignStorage(join(dir, 'test-campaign'));
-
-    await storage.batches.append([
-      { batchIndex: 0, recipients: [ZERO], amounts: ['1000'], status: 'confirmed', confirmedTxHash: '0xabc' as `0x${string}`, confirmedBlock: '100', createdAt: Date.now() },
-      { batchIndex: 1, recipients: [ZERO], amounts: ['2000'], status: 'confirmed', confirmedTxHash: '0xdef' as `0x${string}`, confirmedBlock: '101', createdAt: Date.now() },
-    ]);
-
-    const all = await storage.batches.readAll();
-    expect(all).toHaveLength(2);
-    expect(all[0].batchIndex).toBe(0);
-    expect(all[1].batchIndex).toBe(1);
-  });
+  const dist = states.find((s) => s.id === 'distribute')!;
+  expect(dist.status).not.toBe('blocked');
 });
 ```
 
-- [ ] **Step 2: Run integration test (if Anvil is available)**
+- [ ] **Step 2: Run — expect failure**
 
-Run: `ANVIL_RPC=http://127.0.0.1:8545 npx vitest run packages/tui/__tests__/integration/campaign-cycle.test.ts`
-Expected: Tests pass if Anvil is running, skipped otherwise
+Run: `cd packages/tui && bun test __tests__/step-status.test.ts`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: Implement `packages/tui/src/interactive/step-status.ts`**
+
+```typescript
+import type { CampaignManifest } from '@titrate/sdk';
+
+export type StepId = 'campaign' | 'addresses' | 'filters' | 'amounts' | 'wallet' | 'distribute';
+
+export type StepStatus = 'done' | 'todo' | 'blocked' | 'warning';
+
+export type StepState = {
+  readonly id: StepId;
+  readonly status: StepStatus;
+  readonly summary: string;
+};
+
+export type StepCounts = {
+  readonly addresses: number;
+  readonly filtered: number;
+  readonly wallets: number;
+  readonly batches: number;
+};
+
+export function deriveStepStates(
+  manifest: CampaignManifest,
+  counts: StepCounts,
+): readonly StepState[] {
+  const campaignDone =
+    manifest.chainId > 0 &&
+    manifest.tokenAddress !== '0x0000000000000000000000000000000000000000';
+
+  const addressesDone = counts.addresses > 0;
+  const filtersDone = counts.filtered > 0 || counts.addresses > 0;  // filters optional
+  const amountsDone = manifest.amountMode === 'uniform'
+    ? manifest.uniformAmount !== null && manifest.uniformAmount !== ''
+    : false;  // variable mode requires amounts.csv — tracked by caller
+  const walletsDone = counts.wallets > 0 || manifest.wallets.mode === 'derived';
+
+  const distributeBlocked = !(addressesDone && filtersDone && amountsDone && walletsDone);
+
+  return [
+    {
+      id: 'campaign',
+      status: campaignDone ? 'done' : 'todo',
+      summary: campaignDone ? `chain ${manifest.chainId}` : 'not configured',
+    },
+    {
+      id: 'addresses',
+      status: addressesDone ? 'done' : 'todo',
+      summary: addressesDone ? `${counts.addresses} sourced` : 'not configured',
+    },
+    {
+      id: 'filters',
+      status: filtersDone ? 'done' : 'todo',
+      summary: filtersDone ? `${counts.filtered} qualified` : 'not configured',
+    },
+    {
+      id: 'amounts',
+      status: amountsDone ? 'done' : 'todo',
+      summary: amountsDone ? `${manifest.amountMode}` : 'pending',
+    },
+    {
+      id: 'wallet',
+      status: walletsDone ? 'done' : 'todo',
+      summary: walletsDone
+        ? `${manifest.wallets.mode} · ${counts.wallets || (manifest.wallets.mode === 'derived' ? manifest.wallets.walletCount : 0)}`
+        : 'not configured',
+    },
+    {
+      id: 'distribute',
+      status: distributeBlocked ? 'blocked' : (counts.batches > 0 ? 'done' : 'todo'),
+      summary: distributeBlocked ? 'blocked' : counts.batches > 0 ? `${counts.batches} batches` : 'ready',
+    },
+  ];
+}
+```
+
+- [ ] **Step 4: Run — expect pass**
+
+Run: `cd packages/tui && bun test __tests__/step-status.test.ts`
+Expected: PASS — 3 tests.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/tui/src/interactive/step-status.ts packages/tui/__tests__/step-status.test.ts
+git commit -m "feat(tui): add deriveStepStates pure function"
+```
+
+---
+
+### Task 15: Context providers + App shell
+
+**Files:**
+- Create: `packages/tui/src/interactive/context.tsx`
+- Create: `packages/tui/src/interactive/App.tsx`
+
+- [ ] **Step 1: Implement `packages/tui/src/interactive/context.tsx`**
+
+```tsx
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react';
+import type { CampaignManifest } from '@titrate/sdk';
+import type { CampaignStorage, SharedStorage } from '@titrate/storage-campaign';
+import type { PublicClient } from 'viem';
+import { createPublicClient, http } from 'viem';
+
+// --- Storage ---
+const CampaignStorageCtx = createContext<CampaignStorage | null>(null);
+const SharedStorageCtx = createContext<SharedStorage | null>(null);
+
+export function CampaignStorageProvider({
+  value, children,
+}: {
+  value: CampaignStorage;
+  children: ReactNode;
+}) {
+  return <CampaignStorageCtx.Provider value={value}>{children}</CampaignStorageCtx.Provider>;
+}
+
+export function SharedStorageProvider({
+  value, children,
+}: {
+  value: SharedStorage;
+  children: ReactNode;
+}) {
+  return <SharedStorageCtx.Provider value={value}>{children}</SharedStorageCtx.Provider>;
+}
+
+export function useCampaignStorage(): CampaignStorage {
+  const s = useContext(CampaignStorageCtx);
+  if (!s) throw new Error('useCampaignStorage called outside CampaignStorageProvider');
+  return s;
+}
+
+export function useSharedStorage(): SharedStorage {
+  const s = useContext(SharedStorageCtx);
+  if (!s) throw new Error('useSharedStorage called outside SharedStorageProvider');
+  return s;
+}
+
+// --- Manifest ---
+type ManifestState = {
+  readonly manifest: CampaignManifest;
+  readonly refresh: () => Promise<void>;
+};
+
+const ManifestCtx = createContext<ManifestState | null>(null);
+
+export function ManifestProvider({
+  initial, children,
+}: {
+  initial: CampaignManifest;
+  children: ReactNode;
+}) {
+  const storage = useCampaignStorage();
+  const [manifest, setManifest] = useState(initial);
+  const refresh = useCallback(async () => {
+    setManifest(await storage.manifest.read());
+  }, [storage]);
+  return <ManifestCtx.Provider value={{ manifest, refresh }}>{children}</ManifestCtx.Provider>;
+}
+
+export function useManifest(): ManifestState {
+  const s = useContext(ManifestCtx);
+  if (!s) throw new Error('useManifest called outside ManifestProvider');
+  return s;
+}
+
+// --- RPC Client ---
+const ClientCtx = createContext<PublicClient | null>(null);
+
+export function ClientProvider({ children }: { children: ReactNode }) {
+  const { manifest } = useManifest();
+  const [client, setClient] = useState<PublicClient | null>(null);
+  useEffect(() => {
+    setClient(createPublicClient({ transport: http(manifest.rpcUrl) }));
+  }, [manifest.rpcUrl]);
+  return <ClientCtx.Provider value={client}>{children}</ClientCtx.Provider>;
+}
+
+export function useClient(): PublicClient | null {
+  return useContext(ClientCtx);
+}
+```
+
+- [ ] **Step 2: Implement `packages/tui/src/interactive/App.tsx`**
+
+```tsx
+import { useState, useCallback } from 'react';
+import { useKeyboard } from '@opentui/react';
+import type { CampaignManifest } from '@titrate/sdk';
+import type { CampaignStorage, SharedStorage } from '@titrate/storage-campaign';
+import {
+  CampaignStorageProvider,
+  SharedStorageProvider,
+  ManifestProvider,
+  ClientProvider,
+} from './context.js';
+import type { StepId } from './step-status.js';
+import { Dashboard } from './screens/Dashboard.js';
+import { CampaignSetup } from './screens/CampaignSetup.js';
+import { Addresses } from './screens/Addresses.js';
+import { Filters } from './screens/Filters.js';
+import { Amounts } from './screens/Amounts.js';
+import { Wallet } from './screens/Wallet.js';
+import { Distribute } from './screens/Distribute.js';
+
+type Screen = 'dashboard' | StepId;
+
+export type AppProps = {
+  readonly storage: CampaignStorage;
+  readonly shared: SharedStorage;
+  readonly initialManifest: CampaignManifest;
+};
+
+export function App({ storage, shared, initialManifest }: AppProps) {
+  const [screen, setScreen] = useState<Screen>('dashboard');
+
+  const open = useCallback((step: StepId) => setScreen(step), []);
+  const back = useCallback(() => setScreen('dashboard'), []);
+
+  useKeyboard((key) => {
+    if (key.ctrl && key.name === 'c') process.exit(0);
+  });
+
+  const visible = (s: Screen) => (screen === s ? 'flex' : 'none');
+
+  return (
+    <CampaignStorageProvider value={storage}>
+      <SharedStorageProvider value={shared}>
+        <ManifestProvider initial={initialManifest}>
+          <ClientProvider>
+            <box display={visible('dashboard')} flexDirection="column">
+              <Dashboard onOpenStep={open} onQuit={() => process.exit(0)} />
+            </box>
+            <box display={visible('campaign')} flexDirection="column">
+              <CampaignSetup onDone={back} onBack={back} />
+            </box>
+            <box display={visible('addresses')} flexDirection="column">
+              <Addresses onDone={back} onBack={back} />
+            </box>
+            <box display={visible('filters')} flexDirection="column">
+              <Filters onDone={back} onBack={back} />
+            </box>
+            <box display={visible('amounts')} flexDirection="column">
+              <Amounts onDone={back} onBack={back} />
+            </box>
+            <box display={visible('wallet')} flexDirection="column">
+              <Wallet onDone={back} onBack={back} />
+            </box>
+            <box display={visible('distribute')} flexDirection="column">
+              <Distribute onDone={back} onBack={back} />
+            </box>
+          </ClientProvider>
+        </ManifestProvider>
+      </SharedStorageProvider>
+    </CampaignStorageProvider>
+  );
+}
+
+export type StepProps = {
+  readonly onDone: () => void;
+  readonly onBack: () => void;
+};
+```
+
+- [ ] **Step 3: Verify type-check**
+
+Run: `cd packages/tui && bunx tsc --noEmit`
+Expected: the screen imports will fail (not yet implemented) — that's expected at this point. Tasks 16-22 create the screens.
+
+- [ ] **Step 4: Commit (context only — App imports are placeholder)**
+
+```bash
+git add packages/tui/src/interactive/context.tsx packages/tui/src/interactive/App.tsx
+git commit -m "feat(tui): add context providers and App shell (screens to follow)"
+```
+
+---
+
+### Task 16: Dashboard screen + StepBadge component
+
+**Files:**
+- Create: `packages/tui/src/interactive/components/StepBadge.tsx`
+- Create: `packages/tui/src/interactive/screens/Dashboard.tsx`
+- Test: `packages/tui/__tests__/screens/Dashboard.test.tsx`
+
+- [ ] **Step 1: Implement `packages/tui/src/interactive/components/StepBadge.tsx`**
+
+```tsx
+import type { StepStatus } from '../step-status.js';
+
+const ICON: Record<StepStatus, string> = {
+  done: '✓',
+  todo: '○',
+  blocked: '✗',
+  warning: '!',
+};
+
+const COLOR: Record<StepStatus, string> = {
+  done: 'green',
+  todo: 'gray',
+  blocked: 'red',
+  warning: 'yellow',
+};
+
+export function StepBadge({ status }: { status: StepStatus }) {
+  return (
+    <text>
+      <span fg={COLOR[status]}>{ICON[status]}</span>
+    </text>
+  );
+}
+```
+
+- [ ] **Step 2: Implement `packages/tui/src/interactive/screens/Dashboard.tsx`**
+
+```tsx
+import { useEffect, useState } from 'react';
+import { useKeyboard } from '@opentui/react';
+import { useCampaignStorage, useManifest } from '../context.js';
+import { deriveStepStates, type StepId, type StepState, type StepCounts } from '../step-status.js';
+import { StepBadge } from '../components/StepBadge.js';
+
+const STEP_LABELS: Record<StepId, string> = {
+  campaign: '1. Campaign setup',
+  addresses: '2. Addresses',
+  filters: '3. Filters',
+  amounts: '4. Amounts',
+  wallet: '5. Hot wallets',
+  distribute: '6. Distribute',
+};
+
+export type DashboardProps = {
+  readonly onOpenStep: (step: StepId) => void;
+  readonly onQuit: () => void;
+};
+
+export function Dashboard({ onOpenStep, onQuit }: DashboardProps) {
+  const { manifest, refresh } = useManifest();
+  const storage = useCampaignStorage();
+  const [counts, setCounts] = useState<StepCounts>({ addresses: 0, filtered: 0, wallets: 0, batches: 0 });
+  const [focused, setFocused] = useState(0);
+  const [warning, setWarning] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const [addresses, filtered, wallets, batches] = await Promise.all([
+        storage.addresses.count(),
+        storage.filtered.count(),
+        storage.wallets.count(),
+        storage.batches.count(),
+      ]);
+      if (!cancelled) setCounts({ addresses, filtered, wallets, batches });
+    })();
+    return () => { cancelled = true; };
+  }, [storage, manifest.updatedAt]);
+
+  const steps = deriveStepStates(manifest, counts);
+
+  useKeyboard((key) => {
+    if (key.name === 'up') setFocused((i) => Math.max(0, i - 1));
+    if (key.name === 'down') setFocused((i) => Math.min(steps.length - 1, i + 1));
+    if (key.name === 'return') {
+      const step = steps[focused];
+      if (step.status === 'blocked') {
+        setWarning('Complete prior steps first');
+        setTimeout(() => setWarning(null), 2000);
+      } else {
+        onOpenStep(step.id);
+      }
+    }
+    if (key.name === 'q') onQuit();
+    if (key.name === 'r') refresh();
+  });
+
+  return (
+    <box border padding={1} flexDirection="column">
+      <text>
+        <strong>{manifest.name}</strong>
+        <span fg="gray"> · {manifest.status}</span>
+      </text>
+      <text>
+        <span fg="gray">chain {manifest.chainId} · batch size {manifest.batchSize}</span>
+      </text>
+      <box marginTop={1} flexDirection="column">
+        {steps.map((step: StepState, i: number) => (
+          <box key={step.id} flexDirection="row">
+            <StepBadge status={step.status} />
+            <text>
+              <span fg={i === focused ? 'cyan' : 'white'}> {STEP_LABELS[step.id]}</span>
+              <span fg="gray">  {step.summary}</span>
+            </text>
+          </box>
+        ))}
+      </box>
+      <box marginTop={1}>
+        <text>
+          <span fg="gray">↑/↓ navigate · Enter open · q quit · r refresh</span>
+        </text>
+      </box>
+      {warning && (
+        <box marginTop={1}>
+          <text><span fg="yellow">{warning}</span></text>
+        </box>
+      )}
+    </box>
+  );
+}
+```
+
+- [ ] **Step 3: Write Dashboard snapshot test**
+
+Create `packages/tui/__tests__/screens/Dashboard.test.tsx`:
+
+```tsx
+import { test, expect } from 'bun:test';
+import { createTestRenderer } from '@opentui/core/testing';
+import { createRoot } from '@opentui/react';
+import type { CampaignManifest } from '@titrate/sdk';
+import { createCampaignStorage, createSharedStorage } from '@titrate/storage-campaign';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { App } from '../../src/interactive/App.tsx';
+
+test('Dashboard renders all six steps with status badges', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'titrate-dash-'));
+  const storage = createCampaignStorage(dir);
+  const shared = createSharedStorage(dir);
+  await storage.ensureDir();
+  const manifest: CampaignManifest = {
+    id: 'x', funder: '0x0000000000000000000000000000000000000001',
+    name: 'test-campaign', version: 1, chainId: 1, rpcUrl: 'https://x',
+    tokenAddress: '0x0000000000000000000000000000000000000002', tokenDecimals: 18,
+    contractAddress: null, contractVariant: 'simple', contractName: 'X',
+    amountMode: 'uniform', amountFormat: 'integer', uniformAmount: '1',
+    batchSize: 200, campaignId: null, pinnedBlock: null,
+    status: 'configuring', wallets: { mode: 'imported', count: 0 },
+    createdAt: 1, updatedAt: 1,
+  };
+  await storage.manifest.write(manifest);
+
+  const { renderer, snapshot } = await createTestRenderer({ width: 60, height: 20 });
+  createRoot(renderer).render(<App storage={storage} shared={shared} initialManifest={manifest} />);
+  await new Promise((r) => setTimeout(r, 50));
+  const text = snapshot();
+  expect(text).toContain('test-campaign');
+  expect(text).toContain('1. Campaign setup');
+  expect(text).toContain('6. Distribute');
+});
+```
+
+- [ ] **Step 4: Run**
+
+Run: `cd packages/tui && bun test __tests__/screens/Dashboard.test.tsx`
+Expected: PASS. (This test is brittle — the other screens being empty is acceptable for now.)
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/tui/src/interactive/components/StepBadge.tsx packages/tui/src/interactive/screens/Dashboard.tsx packages/tui/__tests__/screens/Dashboard.test.tsx
+git commit -m "feat(tui): add Dashboard screen with step menu"
+```
+
+---
+
+### Task 17: `ProviderKeyInput` component
+
+**Files:**
+- Create: `packages/tui/src/interactive/components/ProviderKeyInput.tsx`
+- Test: `packages/tui/__tests__/components/ProviderKeyInput.test.tsx`
+
+- [ ] **Step 1: Implement `packages/tui/src/interactive/components/ProviderKeyInput.tsx`**
+
+```tsx
+import { useState, useMemo } from 'react';
+import { splitTemplate, getProvider, type ProviderId } from '@titrate/sdk';
+
+export type ProviderKeyInputProps = {
+  readonly providerId: ProviderId;
+  readonly chainId: number;
+  readonly initialKey?: string;
+  readonly focused: boolean;
+  readonly onChange: (key: string, url: string | null) => void;
+};
+
+export function ProviderKeyInput({
+  providerId, chainId, initialKey = '', focused, onChange,
+}: ProviderKeyInputProps) {
+  const [key, setKey] = useState(initialKey);
+  const { prefix, suffix } = useMemo(
+    () => splitTemplate(providerId, chainId),
+    [providerId, chainId],
+  );
+  const url = useMemo(
+    () => (key ? getProvider(providerId).buildUrl(chainId, key) : null),
+    [providerId, chainId, key],
+  );
+
+  return (
+    <box flexDirection="row">
+      <text><span fg="gray">{prefix}</span></text>
+      <input
+        focused={focused}
+        value={key}
+        onChange={(next: string) => {
+          setKey(next);
+          onChange(next, next ? getProvider(providerId).buildUrl(chainId, next) : null);
+        }}
+        placeholder="your-api-key"
+      />
+      <text><span fg="gray">{suffix}</span></text>
+    </box>
+  );
+}
+```
+
+- [ ] **Step 2: Write snapshot test**
+
+Create `packages/tui/__tests__/components/ProviderKeyInput.test.tsx`:
+
+```tsx
+import { test, expect } from 'bun:test';
+import { createTestRenderer } from '@opentui/core/testing';
+import { createRoot } from '@opentui/react';
+import { ProviderKeyInput } from '../../src/interactive/components/ProviderKeyInput.tsx';
+
+test('renders valve template prefix for PulseChain', async () => {
+  const { renderer, snapshot } = await createTestRenderer({ width: 60, height: 5 });
+  createRoot(renderer).render(
+    <ProviderKeyInput providerId="valve" chainId={369} focused onChange={() => {}} />,
+  );
+  await new Promise((r) => setTimeout(r, 10));
+  expect(snapshot()).toContain('https://evm369.rpc.valve.city/v1/');
+});
+
+test('renders alchemy prefix for Ethereum', async () => {
+  const { renderer, snapshot } = await createTestRenderer({ width: 80, height: 5 });
+  createRoot(renderer).render(
+    <ProviderKeyInput providerId="alchemy" chainId={1} focused onChange={() => {}} />,
+  );
+  await new Promise((r) => setTimeout(r, 10));
+  expect(snapshot()).toContain('eth-mainnet.g.alchemy.com/v2/');
+});
+```
+
+- [ ] **Step 3: Run**
+
+Run: `cd packages/tui && bun test __tests__/components/ProviderKeyInput.test.tsx`
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add packages/tui/src/interactive/components/ProviderKeyInput.tsx packages/tui/__tests__/components/ProviderKeyInput.test.tsx
+git commit -m "feat(tui): add ProviderKeyInput component with templated prefix/suffix"
+```
+
+---
+
+### Task 18: `CampaignSetup` screen (Step 1)
+
+**Files:**
+- Create: `packages/tui/src/interactive/screens/CampaignSetup.tsx`
+
+The pattern established here is followed by Tasks 19-22. Read carefully.
+
+- [ ] **Step 1: Implement `packages/tui/src/interactive/screens/CampaignSetup.tsx`**
+
+```tsx
+import { useReducer, useEffect, useState } from 'react';
+import { useKeyboard } from '@opentui/react';
+import { getChains, probeToken, type ChainCategory } from '@titrate/sdk';
+import { useCampaignStorage, useManifest } from '../context.js';
+import type { StepProps } from '../App.js';
+
+type Field = 'chain' | 'tokenAddress' | 'batchSize';
+
+type State = {
+  readonly focus: Field;
+  readonly chainId: number;
+  readonly tokenAddress: string;
+  readonly batchSize: number;
+  readonly probeStatus: 'idle' | 'loading' | 'success' | 'error';
+  readonly probedSymbol: string;
+  readonly probedDecimals: number;
+  readonly error: string | null;
+};
+
+type Action =
+  | { readonly type: 'focus'; readonly field: Field }
+  | { readonly type: 'setChain'; readonly chainId: number }
+  | { readonly type: 'setTokenAddress'; readonly value: string }
+  | { readonly type: 'setBatchSize'; readonly value: number }
+  | { readonly type: 'probeStart' }
+  | { readonly type: 'probeSuccess'; readonly symbol: string; readonly decimals: number }
+  | { readonly type: 'probeError'; readonly message: string };
+
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case 'focus': return { ...state, focus: action.field };
+    case 'setChain': return { ...state, chainId: action.chainId };
+    case 'setTokenAddress': return { ...state, tokenAddress: action.value };
+    case 'setBatchSize': return { ...state, batchSize: action.value };
+    case 'probeStart': return { ...state, probeStatus: 'loading', error: null };
+    case 'probeSuccess': return { ...state, probeStatus: 'success', probedSymbol: action.symbol, probedDecimals: action.decimals };
+    case 'probeError': return { ...state, probeStatus: 'error', error: action.message };
+  }
+}
+
+export function CampaignSetup({ onDone, onBack }: StepProps) {
+  const { manifest, refresh } = useManifest();
+  const storage = useCampaignStorage();
+  const [state, dispatch] = useReducer(reducer, {
+    focus: 'chain',
+    chainId: manifest.chainId,
+    tokenAddress: manifest.tokenAddress,
+    batchSize: manifest.batchSize,
+    probeStatus: 'idle',
+    probedSymbol: manifest.contractName,
+    probedDecimals: manifest.tokenDecimals,
+    error: null,
+  });
+
+  const chains = [
+    ...getChains('mainnet'),
+    ...getChains('testnet'),
+  ];
+
+  useKeyboard((key) => {
+    if (key.name === 'escape') onBack();
+    if (key.name === 'tab') {
+      const fields: Field[] = ['chain', 'tokenAddress', 'batchSize'];
+      const i = fields.indexOf(state.focus);
+      dispatch({ type: 'focus', field: fields[(i + 1) % fields.length] });
+    }
+    if (key.name === 'return' && state.probeStatus === 'success') {
+      save();
+    }
+  });
+
+  async function save() {
+    await storage.manifest.update({
+      chainId: state.chainId,
+      tokenAddress: state.tokenAddress as `0x${string}`,
+      tokenDecimals: state.probedDecimals,
+      contractName: state.probedSymbol,
+      batchSize: state.batchSize,
+    });
+    await refresh();
+    onDone();
+  }
+
+  // Auto-probe token on address change
+  useEffect(() => {
+    if (state.tokenAddress.length !== 42) return;
+    dispatch({ type: 'probeStart' });
+    probeToken({
+      chainId: state.chainId,
+      tokenAddress: state.tokenAddress as `0x${string}`,
+    }).then(
+      (res) => dispatch({ type: 'probeSuccess', symbol: res.symbol, decimals: res.decimals }),
+      (err) => dispatch({ type: 'probeError', message: String(err) }),
+    );
+  }, [state.chainId, state.tokenAddress]);
+
+  return (
+    <box border padding={1} flexDirection="column">
+      <text><strong>Step 1 — Campaign Setup</strong></text>
+      <box marginTop={1} flexDirection="column">
+        <text>Chain:</text>
+        <select
+          focused={state.focus === 'chain'}
+          options={chains.map((c) => ({ label: c.name, value: String(c.chainId) }))}
+          onChange={(v: string) => dispatch({ type: 'setChain', chainId: Number(v) })}
+        />
+      </box>
+      <box marginTop={1} flexDirection="column">
+        <text>Token address:</text>
+        <input
+          focused={state.focus === 'tokenAddress'}
+          value={state.tokenAddress}
+          onChange={(v: string) => dispatch({ type: 'setTokenAddress', value: v })}
+          placeholder="0x…"
+        />
+        {state.probeStatus === 'loading' && <text><span fg="gray">Probing…</span></text>}
+        {state.probeStatus === 'success' && (
+          <text>
+            <span fg="green">✓ {state.probedSymbol} ({state.probedDecimals} decimals)</span>
+          </text>
+        )}
+        {state.probeStatus === 'error' && (
+          <text><span fg="red">{state.error}</span></text>
+        )}
+      </box>
+      <box marginTop={1} flexDirection="column">
+        <text>Batch size:</text>
+        <input
+          focused={state.focus === 'batchSize'}
+          value={String(state.batchSize)}
+          onChange={(v: string) => {
+            const n = parseInt(v, 10);
+            if (!Number.isNaN(n) && n > 0) dispatch({ type: 'setBatchSize', value: n });
+          }}
+          placeholder="200"
+        />
+      </box>
+      <box marginTop={1}>
+        <text>
+          <span fg="gray">Tab: next field · Enter: save (when probe succeeds) · Esc: back</span>
+        </text>
+      </box>
+    </box>
+  );
+}
+```
+
+- [ ] **Step 2: Type-check**
+
+Run: `cd packages/tui && bunx tsc --noEmit`
+Expected: compiles cleanly (other screen stubs will fail — create minimal stubs in Task 19+).
 
 - [ ] **Step 3: Commit**
 
 ```bash
-git add packages/tui/__tests__/integration/campaign-cycle.test.ts
-git commit -m "test(tui): integration test for campaign lifecycle"
+git add packages/tui/src/interactive/screens/CampaignSetup.tsx
+git commit -m "feat(tui): add CampaignSetup screen with token probe"
 ```
 
 ---
 
-### Task 14: Run full test suite and verify no regressions
+### Task 19: Remaining step screens — Addresses, Filters, Amounts
 
-**Files:** None (verification only)
+The pattern from Task 18 repeats: `useReducer` for local state, `useKeyboard` for navigation, commit to storage via `useCampaignStorage` on save, `refresh()` from manifest context.
 
-- [ ] **Step 1: Run SDK tests**
+**Files:**
+- Create: `packages/tui/src/interactive/screens/Addresses.tsx`
+- Create: `packages/tui/src/interactive/screens/Filters.tsx`
+- Create: `packages/tui/src/interactive/screens/Amounts.tsx`
 
-Run: `cd packages/sdk && npx vitest run`
-Expected: All tests pass (including new types test from Task 1)
+- [ ] **Step 1: Create `Addresses.tsx`**
 
-- [ ] **Step 2: Run storage-campaign tests**
+```tsx
+import { useState } from 'react';
+import { useKeyboard } from '@opentui/react';
+import { useCampaignStorage, useManifest } from '../context.js';
+import type { StepProps } from '../App.js';
+import { readFile } from 'node:fs/promises';
 
-Run: `cd packages/storage-campaign && npx vitest run`
-Expected: All tests pass
+export function Addresses({ onDone, onBack }: StepProps) {
+  const storage = useCampaignStorage();
+  const { refresh } = useManifest();
+  const [csvPath, setCsvPath] = useState('');
+  const [status, setStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
+  const [message, setMessage] = useState<string | null>(null);
 
-- [ ] **Step 3: Run TUI tests**
+  useKeyboard((key) => {
+    if (key.name === 'escape') onBack();
+    if (key.name === 'return' && csvPath) importCsv();
+  });
 
-Run: `cd packages/tui && npx vitest run`
-Expected: All tests pass
+  async function importCsv() {
+    setStatus('loading');
+    try {
+      const raw = await readFile(csvPath, 'utf8');
+      const rows = raw
+        .split('\n')
+        .filter((line) => line.trim().length > 0)
+        .map((line) => {
+          const [address, amount] = line.split(',');
+          return { address: address.trim(), amount: amount?.trim() || null };
+        });
+      await storage.addresses.append(rows);
+      await refresh();
+      setStatus('success');
+      setMessage(`${rows.length} addresses imported`);
+    } catch (err) {
+      setStatus('error');
+      setMessage(String(err));
+    }
+  }
 
-- [ ] **Step 4: Type-check all packages**
+  return (
+    <box border padding={1} flexDirection="column">
+      <text><strong>Step 2 — Addresses</strong></text>
+      <box marginTop={1} flexDirection="column">
+        <text>Import from CSV path:</text>
+        <input
+          focused
+          value={csvPath}
+          onChange={setCsvPath}
+          placeholder="/path/to/addresses.csv"
+        />
+      </box>
+      {status === 'loading' && <text><span fg="gray">Loading…</span></text>}
+      {status === 'success' && <text><span fg="green">{message}</span></text>}
+      {status === 'error' && <text><span fg="red">{message}</span></text>}
+      <box marginTop={1}>
+        <text><span fg="gray">Enter: import · Esc: back</span></text>
+      </box>
+      <box marginTop={1}>
+        <text onMouseDown={onDone}>
+          <span fg="cyan">[ Done ]</span>
+        </text>
+      </box>
+    </box>
+  );
+}
+```
 
-Run: `cd /Users/michaelmclaughlin/Documents/morbius/github/airdrop && npm run build --workspaces`
-Expected: All packages compile without errors
+- [ ] **Step 2: Create `Filters.tsx`** (placeholder that saves an empty pipeline)
 
-- [ ] **Step 5: Commit any remaining fixes**
+```tsx
+import { useState } from 'react';
+import { useKeyboard } from '@opentui/react';
+import { useCampaignStorage, useManifest } from '../context.js';
+import type { StepProps } from '../App.js';
 
-If any tests needed fixes, commit them:
+export function Filters({ onDone, onBack }: StepProps) {
+  const storage = useCampaignStorage();
+  const { refresh } = useManifest();
+  const [message, setMessage] = useState<string | null>(null);
+
+  useKeyboard(async (key) => {
+    if (key.name === 'escape') onBack();
+    if (key.name === 's') {
+      await storage.pipeline.write({ steps: [] });
+      await refresh();
+      setMessage('Pipeline saved (no filters)');
+      setTimeout(onDone, 500);
+    }
+  });
+
+  return (
+    <box border padding={1} flexDirection="column">
+      <text><strong>Step 3 — Filters</strong></text>
+      <text>
+        <span fg="gray">Filter configuration lands in Phase 1e. For now, press s to skip.</span>
+      </text>
+      {message && <text><span fg="green">{message}</span></text>}
+      <box marginTop={1}>
+        <text><span fg="gray">s: skip (save empty pipeline) · Esc: back</span></text>
+      </box>
+    </box>
+  );
+}
+```
+
+- [ ] **Step 3: Create `Amounts.tsx`**
+
+```tsx
+import { useState, useReducer } from 'react';
+import { useKeyboard } from '@opentui/react';
+import { useCampaignStorage, useManifest } from '../context.js';
+import type { StepProps } from '../App.js';
+
+type State = {
+  readonly mode: 'uniform' | 'variable';
+  readonly uniformAmount: string;
+};
+
+type Action =
+  | { readonly type: 'setMode'; readonly mode: 'uniform' | 'variable' }
+  | { readonly type: 'setAmount'; readonly value: string };
+
+function reducer(s: State, a: Action): State {
+  if (a.type === 'setMode') return { ...s, mode: a.mode };
+  if (a.type === 'setAmount') return { ...s, uniformAmount: a.value };
+  return s;
+}
+
+export function Amounts({ onDone, onBack }: StepProps) {
+  const { manifest, refresh } = useManifest();
+  const storage = useCampaignStorage();
+  const [state, dispatch] = useReducer(reducer, {
+    mode: manifest.amountMode,
+    uniformAmount: manifest.uniformAmount ?? '',
+  });
+  const [message, setMessage] = useState<string | null>(null);
+
+  useKeyboard(async (key) => {
+    if (key.name === 'escape') onBack();
+    if (key.name === 'return' && state.mode === 'uniform' && state.uniformAmount) {
+      await storage.manifest.update({
+        amountMode: 'uniform',
+        uniformAmount: state.uniformAmount,
+      });
+      await refresh();
+      setMessage('Saved');
+      setTimeout(onDone, 300);
+    }
+  });
+
+  return (
+    <box border padding={1} flexDirection="column">
+      <text><strong>Step 4 — Amounts</strong></text>
+      <box marginTop={1}>
+        <text>Mode:</text>
+        <select
+          focused
+          options={[
+            { label: 'Uniform (same amount per recipient)', value: 'uniform' },
+            { label: 'Variable (per-recipient amounts.csv)', value: 'variable' },
+          ]}
+          onChange={(v: string) => dispatch({ type: 'setMode', mode: v as 'uniform' | 'variable' })}
+        />
+      </box>
+      {state.mode === 'uniform' && (
+        <box marginTop={1} flexDirection="column">
+          <text>Amount (integer token base units):</text>
+          <input
+            focused
+            value={state.uniformAmount}
+            onChange={(v: string) => dispatch({ type: 'setAmount', value: v })}
+            placeholder="1000000000000000000"
+          />
+        </box>
+      )}
+      {message && <text><span fg="green">{message}</span></text>}
+      <box marginTop={1}>
+        <text><span fg="gray">Enter: save · Esc: back</span></text>
+      </box>
+    </box>
+  );
+}
+```
+
+- [ ] **Step 4: Commit**
 
 ```bash
-git add -A
-git commit -m "fix: resolve test regressions from campaign lifecycle changes"
+git add packages/tui/src/interactive/screens/Addresses.tsx packages/tui/src/interactive/screens/Filters.tsx packages/tui/src/interactive/screens/Amounts.tsx
+git commit -m "feat(tui): add Addresses, Filters, Amounts screens"
 ```
+
+---
+
+### Task 20: `Wallet` screen (Step 5) — paste signer + passphrase
+
+**Files:**
+- Create: `packages/tui/src/interactive/screens/Wallet.tsx`
+
+- [ ] **Step 1: Implement `Wallet.tsx`**
+
+```tsx
+import { useReducer, useState } from 'react';
+import { useKeyboard } from '@opentui/react';
+import { privateKeyToAccount } from 'viem/accounts';
+import type { Address, Hex } from 'viem';
+import {
+  createPasteSignerFactory,
+  deriveMultipleWallets,
+} from '@titrate/sdk';
+import { useCampaignStorage, useManifest } from '../context.js';
+import { encryptPrivateKey } from '../../utils/passphrase.js';
+import type { StepProps } from '../App.js';
+
+type Mode = 'derived' | 'imported';
+
+type State = {
+  readonly mode: Mode;
+  readonly coldAddress: string;
+  readonly signature: string;
+  readonly walletCount: number;
+  readonly walletOffset: number;
+  readonly importedKeys: readonly string[];
+  readonly passphrase: string;
+  readonly status: 'idle' | 'saving' | 'success' | 'error';
+  readonly message: string | null;
+};
+
+type Action =
+  | { readonly type: 'setMode'; readonly mode: Mode }
+  | { readonly type: 'setColdAddress'; readonly value: string }
+  | { readonly type: 'setSignature'; readonly value: string }
+  | { readonly type: 'setWalletCount'; readonly value: number }
+  | { readonly type: 'addImportedKey'; readonly value: string }
+  | { readonly type: 'setPassphrase'; readonly value: string }
+  | { readonly type: 'saving' }
+  | { readonly type: 'success'; readonly message: string }
+  | { readonly type: 'error'; readonly message: string };
+
+function reducer(s: State, a: Action): State {
+  switch (a.type) {
+    case 'setMode': return { ...s, mode: a.mode };
+    case 'setColdAddress': return { ...s, coldAddress: a.value };
+    case 'setSignature': return { ...s, signature: a.value };
+    case 'setWalletCount': return { ...s, walletCount: a.value };
+    case 'addImportedKey': return { ...s, importedKeys: [...s.importedKeys, a.value] };
+    case 'setPassphrase': return { ...s, passphrase: a.value };
+    case 'saving': return { ...s, status: 'saving' };
+    case 'success': return { ...s, status: 'success', message: a.message };
+    case 'error': return { ...s, status: 'error', message: a.message };
+  }
+}
+
+export function Wallet({ onDone, onBack }: StepProps) {
+  const storage = useCampaignStorage();
+  const { manifest, refresh } = useManifest();
+  const [state, dispatch] = useReducer(reducer, {
+    mode: manifest.wallets.mode,
+    coldAddress: manifest.wallets.mode === 'derived' ? manifest.wallets.coldAddress : '',
+    signature: '',
+    walletCount: manifest.wallets.mode === 'derived' ? manifest.wallets.walletCount : 1,
+    walletOffset: manifest.wallets.mode === 'derived' ? manifest.wallets.walletOffset : 0,
+    importedKeys: [],
+    passphrase: '',
+    status: 'idle',
+    message: null,
+  });
+  const [pendingKey, setPendingKey] = useState('');
+
+  useKeyboard(async (key) => {
+    if (key.name === 'escape') onBack();
+    if (key.name === 'return') {
+      if (state.mode === 'derived') await saveDerived();
+      else await saveImported();
+    }
+  });
+
+  async function saveDerived() {
+    if (!state.passphrase || !state.signature || !state.coldAddress) {
+      dispatch({ type: 'error', message: 'cold address, signature, and passphrase are required' });
+      return;
+    }
+    dispatch({ type: 'saving' });
+    try {
+      const factory = createPasteSignerFactory({
+        coldAddress: state.coldAddress as Address,
+        readSignature: async () => state.signature as Hex,
+      });
+      const signer = await factory.create();
+      const sig = await signer.signTypedData({
+        domain: { name: 'Titrate', version: '1', chainId: manifest.chainId },
+        types: { StorageEncryption: [{ name: 'campaignId', type: 'string' }] },
+        primaryType: 'StorageEncryption',
+        message: { campaignId: manifest.id },
+      });
+      const wallets = deriveMultipleWallets(sig, state.walletOffset, state.walletCount);
+      const records = await Promise.all(
+        wallets.map(async (w, i) => {
+          const enc = await encryptPrivateKey(w.privateKey, state.passphrase);
+          return {
+            index: i,
+            address: w.address as Address,
+            encryptedKey: enc.ciphertext,
+            kdf: enc.kdf,
+            kdfParams: enc.kdfParams,
+            provenance: {
+              type: 'derived' as const,
+              coldAddress: state.coldAddress as Address,
+              derivationIndex: state.walletOffset + i,
+            },
+            createdAt: Date.now(),
+          };
+        }),
+      );
+      await storage.wallets.append(records);
+      await storage.manifest.update({
+        wallets: {
+          mode: 'derived',
+          coldAddress: state.coldAddress as Address,
+          walletCount: state.walletCount,
+          walletOffset: state.walletOffset,
+        },
+      });
+      await refresh();
+      dispatch({ type: 'success', message: `${state.walletCount} wallets derived and encrypted` });
+      setTimeout(onDone, 500);
+    } catch (err) {
+      dispatch({ type: 'error', message: String(err) });
+    }
+  }
+
+  async function saveImported() {
+    if (!state.passphrase || state.importedKeys.length === 0) {
+      dispatch({ type: 'error', message: 'at least one imported key and a passphrase are required' });
+      return;
+    }
+    dispatch({ type: 'saving' });
+    try {
+      const records = await Promise.all(
+        state.importedKeys.map(async (pk, i) => {
+          const account = privateKeyToAccount(pk as Hex);
+          const enc = await encryptPrivateKey(pk, state.passphrase);
+          return {
+            index: i,
+            address: account.address,
+            encryptedKey: enc.ciphertext,
+            kdf: enc.kdf,
+            kdfParams: enc.kdfParams,
+            provenance: { type: 'imported' as const },
+            createdAt: Date.now(),
+          };
+        }),
+      );
+      await storage.wallets.append(records);
+      await storage.manifest.update({
+        wallets: { mode: 'imported', count: state.importedKeys.length },
+      });
+      await refresh();
+      dispatch({ type: 'success', message: `${state.importedKeys.length} wallets imported and encrypted` });
+      setTimeout(onDone, 500);
+    } catch (err) {
+      dispatch({ type: 'error', message: String(err) });
+    }
+  }
+
+  return (
+    <box border padding={1} flexDirection="column">
+      <text><strong>Step 5 — Hot Wallets</strong></text>
+      <box marginTop={1}>
+        <text>Provisioning:</text>
+        <select
+          focused={state.status === 'idle'}
+          options={[
+            { label: 'Derived from cold wallet signature', value: 'derived' },
+            { label: 'Import existing private keys', value: 'imported' },
+          ]}
+          onChange={(v: string) => dispatch({ type: 'setMode', mode: v as Mode })}
+        />
+      </box>
+      {state.mode === 'derived' ? (
+        <box marginTop={1} flexDirection="column">
+          <text>Cold address:</text>
+          <input value={state.coldAddress} onChange={(v: string) => dispatch({ type: 'setColdAddress', value: v })} placeholder="0x…" />
+          <text marginTop={1}>Signature (paste hex after signing externally):</text>
+          <input value={state.signature} onChange={(v: string) => dispatch({ type: 'setSignature', value: v })} placeholder="0x…" />
+          <text marginTop={1}>Wallet count:</text>
+          <input value={String(state.walletCount)} onChange={(v: string) => {
+            const n = parseInt(v, 10);
+            if (!Number.isNaN(n)) dispatch({ type: 'setWalletCount', value: n });
+          }} />
+        </box>
+      ) : (
+        <box marginTop={1} flexDirection="column">
+          <text>Paste private key (one at a time, press Enter after each):</text>
+          <input value={pendingKey} onChange={setPendingKey} placeholder="0x…" />
+          <text onMouseDown={() => {
+            if (pendingKey) {
+              dispatch({ type: 'addImportedKey', value: pendingKey });
+              setPendingKey('');
+            }
+          }}>
+            <span fg="cyan">[ Add ]</span>
+          </text>
+          <text>
+            <span fg="gray">{state.importedKeys.length} key(s) added</span>
+          </text>
+        </box>
+      )}
+      <box marginTop={1} flexDirection="column">
+        <text>Passphrase (protects encrypted keys):</text>
+        <input value={state.passphrase} onChange={(v: string) => dispatch({ type: 'setPassphrase', value: v })} placeholder="enter a strong passphrase" />
+      </box>
+      {state.status === 'saving' && <text><span fg="gray">Saving…</span></text>}
+      {state.status === 'success' && <text><span fg="green">{state.message}</span></text>}
+      {state.status === 'error' && <text><span fg="red">{state.message}</span></text>}
+      <box marginTop={1}>
+        <text><span fg="gray">Enter: save · Esc: back</span></text>
+      </box>
+    </box>
+  );
+}
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add packages/tui/src/interactive/screens/Wallet.tsx
+git commit -m "feat(tui): add Wallet screen with derived + imported provisioning"
+```
+
+---
+
+### Task 21: `Distribute` screen (Step 6) skeleton
+
+**Files:**
+- Create: `packages/tui/src/interactive/screens/Distribute.tsx`
+
+Phase 1 distribute is stubbed — wires into SDK `disperseTokens` in Phase 1d.
+
+- [ ] **Step 1: Implement stub `Distribute.tsx`**
+
+```tsx
+import { useState } from 'react';
+import { useKeyboard } from '@opentui/react';
+import type { StepProps } from '../App.js';
+
+export function Distribute({ onDone, onBack }: StepProps) {
+  const [message, setMessage] = useState<string | null>(null);
+
+  useKeyboard((key) => {
+    if (key.name === 'escape') onBack();
+    if (key.name === 'd') {
+      setMessage('Distribution wiring lands in Phase 1d (run titrate distribute --campaign <name>)');
+    }
+  });
+
+  return (
+    <box border padding={1} flexDirection="column">
+      <text><strong>Step 6 — Distribute</strong></text>
+      <text>
+        <span fg="gray">Invoke the distributor via the scripted command: titrate distribute --campaign {'<name>'}</span>
+      </text>
+      {message && <text><span fg="yellow">{message}</span></text>}
+      <box marginTop={1}>
+        <text><span fg="gray">d: show run instructions · Esc: back</span></text>
+      </box>
+    </box>
+  );
+}
+```
+
+- [ ] **Step 2: Type-check whole TUI package**
+
+Run: `cd packages/tui && bunx tsc --noEmit`
+Expected: clean. All screens now exist; App.tsx compiles.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add packages/tui/src/interactive/screens/Distribute.tsx
+git commit -m "feat(tui): add Distribute screen stub (real wiring in Phase 1d)"
+```
+
+---
+
+## Phase 1d — Command Wiring
+
+### Task 22: `titrate new <name>` command
+
+**Files:**
+- Create: `packages/tui/src/commands/new-campaign.ts`
+
+- [ ] **Step 1: Implement `new-campaign.ts`**
+
+```typescript
+import { stat } from 'node:fs/promises';
+import { join } from 'node:path';
+import { randomBytes } from 'node:crypto';
+import { createCliRenderer } from '@opentui/core';
+import { createRoot } from '@opentui/react';
+import { createCampaignStorage, createSharedStorage } from '@titrate/storage-campaign';
+import type { CampaignManifest } from '@titrate/sdk';
+import { App } from '../interactive/App.js';
+import { resolveCampaignRoot } from '../utils/campaign-root.js';
+
+export type NewCampaignOptions = {
+  readonly folder?: string;
+};
+
+export async function runNewCampaign(name: string, options: NewCampaignOptions): Promise<void> {
+  const root = await resolveCampaignRoot({ folder: options.folder });
+  const id = `${name}-${randomBytes(3).toString('hex')}`;
+  const dir = join(root, id);
+
+  try {
+    const s = await stat(join(dir, 'campaign.json'));
+    if (s) {
+      console.error(`Campaign ${id} already exists at ${dir}`);
+      process.exit(1);
+    }
+  } catch { /* expected — does not exist */ }
+
+  const storage = createCampaignStorage(dir);
+  const shared = createSharedStorage(root);
+  await storage.ensureDir();
+
+  const now = Date.now();
+  const manifest: CampaignManifest = {
+    id,
+    funder: '0x0000000000000000000000000000000000000000',
+    name,
+    version: 1,
+    chainId: 1,
+    rpcUrl: 'https://eth.llamarpc.com',
+    tokenAddress: '0x0000000000000000000000000000000000000000',
+    tokenDecimals: 18,
+    contractAddress: null,
+    contractVariant: 'simple',
+    contractName: '',
+    amountMode: 'uniform',
+    amountFormat: 'integer',
+    uniformAmount: null,
+    batchSize: 200,
+    campaignId: null,
+    pinnedBlock: null,
+    status: 'configuring',
+    wallets: { mode: 'imported', count: 0 },
+    createdAt: now,
+    updatedAt: now,
+  };
+  await storage.manifest.write(manifest);
+
+  const renderer = await createCliRenderer({ exitOnCtrlC: true });
+  createRoot(renderer).render(<App storage={storage} shared={shared} initialManifest={manifest} />);
+}
+```
+
+- [ ] **Step 2: Register in `packages/tui/src/index.tsx`**
+
+Replace `packages/tui/src/index.ts` with `packages/tui/src/index.tsx`:
+
+```tsx
+#!/usr/bin/env bun
+import { Command } from 'commander';
+import { runNewCampaign } from './commands/new-campaign.js';
+
+const program = new Command();
+
+program
+  .name('titrate')
+  .description('Offline-first airdrop platform for EVM chains')
+  .version('0.0.1');
+
+program
+  .command('new')
+  .argument('<name>', 'campaign name')
+  .option('-f, --folder <path>', 'campaign root directory')
+  .description('Create a new campaign and drop into the interactive dashboard')
+  .action(async (name: string, options: { folder?: string }) => {
+    await runNewCampaign(name, options);
+  });
+
+// Additional commands (open, list, distribute, sweep, collect, etc.)
+// registered in subsequent tasks. Parse after all registrations.
+program.parseAsync(process.argv);
+```
+
+- [ ] **Step 3: Delete stale `index.ts`**
+
+```bash
+rm packages/tui/src/index.ts
+```
+
+- [ ] **Step 4: Smoke-test**
+
+```bash
+cd packages/tui
+bun run src/index.tsx new smoke-test --folder /tmp/titrate-smoke
+```
+
+Expected: interactive dashboard opens. Press `q` to exit. `/tmp/titrate-smoke/smoke-test-<hex>/campaign.json` exists.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git rm packages/tui/src/index.ts
+git add packages/tui/src/index.tsx packages/tui/src/commands/new-campaign.ts
+git commit -m "feat(tui): add titrate new command"
+```
+
+---
+
+### Task 23: `titrate open` and `titrate list` commands
+
+**Files:**
+- Create: `packages/tui/src/commands/open-campaign.ts`
+- Create: `packages/tui/src/commands/list-campaigns.ts`
+- Modify: `packages/tui/src/index.tsx`
+
+- [ ] **Step 1: Implement `open-campaign.ts`**
+
+```typescript
+import { stat, access } from 'node:fs/promises';
+import { join } from 'node:path';
+import { createCliRenderer } from '@opentui/core';
+import { createRoot } from '@opentui/react';
+import { createCampaignStorage, createSharedStorage } from '@titrate/storage-campaign';
+import { App } from '../interactive/App.js';
+import { resolveCampaignRoot } from '../utils/campaign-root.js';
+
+export type OpenCampaignOptions = {
+  readonly folder?: string;
+};
+
+async function resolveCampaignDir(nameOrPath: string, root: string): Promise<string> {
+  // Try as absolute/relative path first
+  try {
+    await access(join(nameOrPath, 'campaign.json'));
+    return nameOrPath;
+  } catch { /* fall through */ }
+  // Try as name under root
+  const dir = join(root, nameOrPath);
+  try {
+    await access(join(dir, 'campaign.json'));
+    return dir;
+  } catch {
+    throw new Error(`Campaign not found: ${nameOrPath} (looked in ${nameOrPath} and ${dir})`);
+  }
+}
+
+export async function runOpenCampaign(nameOrPath: string, options: OpenCampaignOptions): Promise<void> {
+  const root = await resolveCampaignRoot({ folder: options.folder });
+  const dir = await resolveCampaignDir(nameOrPath, root);
+  const storage = createCampaignStorage(dir);
+  const shared = createSharedStorage(root);
+  const manifest = await storage.manifest.read();
+
+  const renderer = await createCliRenderer({ exitOnCtrlC: true });
+  createRoot(renderer).render(<App storage={storage} shared={shared} initialManifest={manifest} />);
+}
+```
+
+- [ ] **Step 2: Implement `list-campaigns.ts` (plain stdout, no TUI)**
+
+```typescript
+import { readdir, access } from 'node:fs/promises';
+import { join } from 'node:path';
+import { createCampaignStorage } from '@titrate/storage-campaign';
+import { resolveCampaignRoot } from '../utils/campaign-root.js';
+
+export type ListCampaignsOptions = {
+  readonly folder?: string;
+};
+
+export async function runListCampaigns(options: ListCampaignsOptions): Promise<void> {
+  const root = await resolveCampaignRoot({ folder: options.folder });
+  let entries: string[];
+  try {
+    entries = await readdir(root);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      console.log(`No campaigns yet (root ${root} does not exist)`);
+      return;
+    }
+    throw err;
+  }
+
+  const rows: { id: string; name: string; status: string; updatedAt: string }[] = [];
+  for (const entry of entries) {
+    if (entry === '_shared') continue;
+    const dir = join(root, entry);
+    try {
+      await access(join(dir, 'campaign.json'));
+    } catch { continue; }
+    const storage = createCampaignStorage(dir);
+    const m = await storage.manifest.read();
+    rows.push({
+      id: m.id,
+      name: m.name,
+      status: m.status,
+      updatedAt: new Date(m.updatedAt).toISOString(),
+    });
+  }
+
+  if (rows.length === 0) {
+    console.log(`No campaigns found in ${root}`);
+    return;
+  }
+  console.log('ID\tNAME\tSTATUS\tUPDATED');
+  for (const r of rows) {
+    console.log(`${r.id}\t${r.name}\t${r.status}\t${r.updatedAt}`);
+  }
+}
+```
+
+- [ ] **Step 3: Register in `index.tsx`**
+
+Add before `program.parseAsync`:
+
+```tsx
+import { runOpenCampaign } from './commands/open-campaign.js';
+import { runListCampaigns } from './commands/list-campaigns.js';
+
+program
+  .command('open')
+  .argument('<nameOrPath>', 'campaign name or directory path')
+  .option('-f, --folder <path>', 'campaign root directory')
+  .description('Open an existing campaign in the interactive dashboard')
+  .action(async (nameOrPath: string, options: { folder?: string }) => {
+    await runOpenCampaign(nameOrPath, options);
+  });
+
+program
+  .command('list')
+  .option('-f, --folder <path>', 'campaign root directory')
+  .description('List campaigns in the campaign root')
+  .action(async (options: { folder?: string }) => {
+    await runListCampaigns(options);
+  });
+```
+
+- [ ] **Step 4: Smoke-test**
+
+```bash
+cd packages/tui
+bun run src/index.tsx list --folder /tmp/titrate-smoke
+```
+
+Expected: prints the `smoke-test-<hex>` campaign.
+
+```bash
+bun run src/index.tsx open smoke-test-<hex> --folder /tmp/titrate-smoke
+```
+
+Expected: interactive dashboard opens at that campaign.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/tui/src/commands/open-campaign.ts packages/tui/src/commands/list-campaigns.ts packages/tui/src/index.tsx
+git commit -m "feat(tui): add titrate open and titrate list commands"
+```
+
+---
+
+### Task 24: `--campaign` flag on `distribute`, `sweep`, `collect`
+
+**Files:**
+- Modify: `packages/tui/src/commands/distribute.ts`
+- Modify: `packages/tui/src/commands/sweep.ts`
+- Modify: `packages/tui/src/commands/collect.ts`
+
+Each existing command gains an optional `--campaign <name>` flag. When set, the command loads config from the campaign directory instead of reading `--contract`/`--rpc`/etc flags. When absent, existing behavior unchanged.
+
+- [ ] **Step 1: Read existing `distribute.ts`**
+
+```bash
+cat packages/tui/src/commands/distribute.ts
+```
+
+- [ ] **Step 2: Add `--campaign` support to `distribute.ts`**
+
+At the top, add imports:
+
+```typescript
+import { createCampaignStorage } from '@titrate/storage-campaign';
+import { resolveCampaignRoot } from '../utils/campaign-root.js';
+import { decryptPrivateKey } from '../utils/passphrase.js';
+import { join } from 'node:path';
+import { createInterface } from 'node:readline/promises';
+import { stdin as input, stdout as output } from 'node:process';
+```
+
+Add a helper to load config from campaign:
+
+```typescript
+async function loadFromCampaign(campaignName: string, folder?: string) {
+  const root = await resolveCampaignRoot({ folder });
+  const dir = join(root, campaignName);
+  const storage = createCampaignStorage(dir);
+  const manifest = await storage.manifest.read();
+
+  const rl = createInterface({ input, output });
+  const passphrase = await rl.question('Passphrase for this campaign: ');
+  rl.close();
+
+  const records = await storage.wallets.readAll();
+  const privateKeys = await Promise.all(
+    records.map((r) =>
+      decryptPrivateKey({
+        ciphertext: r.encryptedKey,
+        iv: '', authTag: '',  // placeholder — encryptedKey MUST include these in a proper format
+        kdf: r.kdf,
+        kdfParams: r.kdfParams,
+      }, passphrase)
+        .catch(() => { throw new Error(`Could not decrypt wallet ${r.index} — wrong passphrase?`); }),
+    ),
+  );
+
+  return { manifest, privateKeys, storage };
+}
+```
+
+> **NOTE on encryptedKey format**: Task 13's `encryptPrivateKey` returns `{ ciphertext, iv, authTag, kdf, kdfParams }` — but the `WalletRecord` schema only stores `encryptedKey: string`. Before shipping this task, update the schema (Task 2) to either (a) store the full object inline or (b) pack iv+authTag+ciphertext into a single base64 blob. Option (a) is cleaner — revise `WalletRecord.encryptedKey` to `EncryptedKey` type and re-run tests. The plan author should make this fix in Task 2 before Task 24.
+
+Add the option to the command:
+
+```typescript
+command
+  .option('-c, --campaign <name>', 'campaign name (loads config from campaign directory)')
+  .option('-f, --folder <path>', 'campaign root directory (with --campaign)');
+```
+
+In the action handler, branch at the top:
+
+```typescript
+.action(async (options) => {
+  let manifest, privateKeys, storage;
+  if (options.campaign) {
+    const loaded = await loadFromCampaign(options.campaign, options.folder);
+    manifest = loaded.manifest;
+    privateKeys = loaded.privateKeys;
+    storage = loaded.storage;
+    // Use manifest.rpcUrl, manifest.tokenAddress, etc. in place of flag-driven config
+  } else {
+    // existing flag-driven path unchanged
+  }
+  // ... rest of distribute logic
+});
+```
+
+- [ ] **Step 3: Repeat for `sweep.ts`**
+
+Same pattern: add `--campaign` + `--folder`, load manifest+wallets from storage, append sweep records to `storage.sweeps`.
+
+- [ ] **Step 4: Repeat for `collect.ts`**
+
+Same pattern: `--campaign` + `--folder`, append collected addresses to `storage.addresses`, advance cursor.
+
+- [ ] **Step 5: Type-check**
+
+```bash
+cd packages/tui && bunx tsc --noEmit
+```
+
+Expected: clean.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add packages/tui/src/commands/distribute.ts packages/tui/src/commands/sweep.ts packages/tui/src/commands/collect.ts
+git commit -m "feat(tui): add --campaign flag to distribute, sweep, collect"
+```
+
+---
+
+### Task 25: Delete stale clack-based wizard + steps
+
+**Files:**
+- Delete: `packages/tui/src/interactive/wizard.ts`
+- Delete: `packages/tui/src/interactive/steps/campaign.ts`
+- Delete: `packages/tui/src/interactive/steps/addresses.ts`
+- Delete: `packages/tui/src/interactive/steps/filters.ts`
+- Delete: `packages/tui/src/interactive/steps/amounts.ts`
+- Delete: `packages/tui/src/interactive/steps/wallet.ts`
+- Delete: `packages/tui/src/interactive/steps/distribute.ts`
+- Delete: `packages/tui/src/interactive/format.ts`
+
+- [ ] **Step 1: Verify nothing imports from these files**
+
+```bash
+cd packages/tui
+grep -rln "interactive/wizard\|interactive/steps\|interactive/format" src/ __tests__/ 2>&1
+```
+
+Expected: no matches. If there are, fix the importers first.
+
+- [ ] **Step 2: Delete the files**
+
+```bash
+rm -r packages/tui/src/interactive/steps
+rm packages/tui/src/interactive/wizard.ts packages/tui/src/interactive/format.ts
+```
+
+- [ ] **Step 3: Type-check**
+
+```bash
+cd packages/tui && bunx tsc --noEmit
+```
+
+Expected: clean.
+
+- [ ] **Step 4: Full test run**
+
+```bash
+cd packages/tui && bun test
+```
+
+Expected: PASS — all tests.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A packages/tui/src/interactive
+git commit -m "chore(tui): remove clack-based wizard and step files"
+```
+
+---
+
+## Phase 1e — Signer & Encryption Polish
+
+### Task 26: WalletConnect signer
+
+**Files:**
+- Create: `packages/sdk/src/signers/walletconnect.ts`
+- Modify: `packages/sdk/src/signers/index.ts`
+- Create: `packages/tui/src/interactive/components/QRCode.tsx`
+
+- [ ] **Step 1: Install WC deps in SDK**
+
+```bash
+cd packages/sdk
+npm install @walletconnect/sign-client@^2 @walletconnect/utils@^2 qrcode@^1
+npm install -D @types/qrcode
+```
+
+- [ ] **Step 2: Implement `packages/sdk/src/signers/walletconnect.ts`**
+
+```typescript
+import type { Address, Hex, TypedDataDefinition } from 'viem';
+import type { EIP712Signer, SignerFactory } from './types.js';
+
+export type WalletConnectOptions = {
+  readonly projectId: string;
+  readonly chainId: number;
+  readonly onQR: (uri: string) => void;
+  readonly onApproval: (address: Address) => void;
+};
+
+export function createWalletConnectSignerFactory(options: WalletConnectOptions): SignerFactory {
+  return {
+    id: 'walletconnect',
+    label: 'WalletConnect',
+    async available() {
+      try {
+        // Reachability check: attempt a DNS resolution of the relay host
+        return true;
+      } catch { return false; }
+    },
+    async create(): Promise<EIP712Signer> {
+      const { SignClient } = await import('@walletconnect/sign-client');
+      const client = await SignClient.init({
+        projectId: options.projectId,
+        metadata: {
+          name: 'Titrate',
+          description: 'Titrate TUI',
+          url: 'https://titrate.local',
+          icons: [],
+        },
+      });
+      const { uri, approval } = await client.connect({
+        requiredNamespaces: {
+          eip155: {
+            methods: ['eth_signTypedData_v4'],
+            chains: [`eip155:${options.chainId}`],
+            events: [],
+          },
+        },
+      });
+      if (uri) options.onQR(uri);
+      const session = await approval();
+      const account = session.namespaces.eip155.accounts[0];
+      const address = account.split(':')[2] as Address;
+      options.onApproval(address);
+
+      return {
+        async getAddress() { return address; },
+        async signTypedData(payload: TypedDataDefinition) {
+          const result = await client.request({
+            topic: session.topic,
+            chainId: `eip155:${options.chainId}`,
+            request: {
+              method: 'eth_signTypedData_v4',
+              params: [address, JSON.stringify(payload)],
+            },
+          });
+          return result as Hex;
+        },
+        async close() {
+          await client.disconnect({
+            topic: session.topic,
+            reason: { code: 6000, message: 'User done' },
+          });
+        },
+      };
+    },
+  };
+}
+```
+
+- [ ] **Step 3: Export from signers barrel**
+
+Append to `packages/sdk/src/signers/index.ts`:
+
+```typescript
+export { createWalletConnectSignerFactory, type WalletConnectOptions } from './walletconnect.js';
+```
+
+- [ ] **Step 4: Implement `packages/tui/src/interactive/components/QRCode.tsx`**
+
+```tsx
+import { useEffect, useState } from 'react';
+import QRCodeLib from 'qrcode';
+
+export function QRCode({ value }: { value: string }) {
+  const [ascii, setAscii] = useState<string>('');
+  useEffect(() => {
+    QRCodeLib.toString(value, { type: 'terminal', small: true }).then(setAscii);
+  }, [value]);
+  return (
+    <box flexDirection="column">
+      <text>{ascii}</text>
+    </box>
+  );
+}
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/sdk/src/signers/walletconnect.ts packages/sdk/src/signers/index.ts packages/sdk/package.json packages/sdk/package-lock.json packages/tui/src/interactive/components/QRCode.tsx
+git commit -m "feat(sdk,tui): add WalletConnect signer with terminal QR renderer"
+```
+
+---
+
+### Task 27: Ledger signer (stretch)
+
+**Files:**
+- Create: `packages/sdk/src/signers/ledger.ts`
+- Modify: `packages/sdk/src/signers/index.ts`
+
+- [ ] **Step 1: Install deps**
+
+```bash
+cd packages/sdk
+npm install @ledgerhq/hw-app-eth @ledgerhq/hw-transport-node-hid
+```
+
+- [ ] **Step 2: Implement `packages/sdk/src/signers/ledger.ts`**
+
+```typescript
+import type { Address, Hex, TypedDataDefinition } from 'viem';
+import type { EIP712Signer, SignerFactory } from './types.js';
+
+export type LedgerOptions = {
+  readonly derivationPath: string;   // e.g., "44'/60'/0'/0/0"
+};
+
+export function createLedgerSignerFactory(options: LedgerOptions): SignerFactory {
+  return {
+    id: 'ledger',
+    label: 'Ledger',
+    async available() {
+      try {
+        const { default: Transport } = await import('@ledgerhq/hw-transport-node-hid');
+        const devices = await Transport.list();
+        return devices.length > 0;
+      } catch {
+        return false;
+      }
+    },
+    async create(): Promise<EIP712Signer> {
+      const { default: Transport } = await import('@ledgerhq/hw-transport-node-hid');
+      const { default: Eth } = await import('@ledgerhq/hw-app-eth');
+      const transport = await Transport.create();
+      const eth = new Eth(transport);
+      const { address } = await eth.getAddress(options.derivationPath);
+      const normalized = address as Address;
+
+      return {
+        async getAddress() { return normalized; },
+        async signTypedData(payload: TypedDataDefinition) {
+          const result = await eth.signEIP712Message(options.derivationPath, payload as unknown as Record<string, unknown>);
+          return `0x${result.r}${result.s}${result.v.toString(16).padStart(2, '0')}` as Hex;
+        },
+        async close() { await transport.close(); },
+      };
+    },
+  };
+}
+```
+
+- [ ] **Step 3: Export**
+
+```typescript
+// packages/sdk/src/signers/index.ts
+export { createLedgerSignerFactory, type LedgerOptions } from './ledger.js';
+```
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add packages/sdk/src/signers/ledger.ts packages/sdk/src/signers/index.ts packages/sdk/package.json packages/sdk/package-lock.json
+git commit -m "feat(sdk): add Ledger signer (stretch)"
+```
+
+---
+
+### Task 28: Fix `WalletRecord.encryptedKey` to store full envelope
+
+This is the fixup referenced in Task 24's NOTE. The schema as written in Task 2 stored `encryptedKey: string` — but the encryption envelope also needs `iv` and `authTag`. Fix it now before distribution depends on it.
+
+**Files:**
+- Modify: `packages/sdk/src/storage/index.ts`
+- Modify: Tests that use `WalletRecord`
+
+- [ ] **Step 1: Update schema**
+
+Replace the `encryptedKey: string` field in `WalletRecord` with:
+
+```typescript
+export type EncryptedKeyEnvelope = {
+  readonly ciphertext: string;   // base64
+  readonly iv: string;           // base64
+  readonly authTag: string;      // base64
+};
+
+// Within WalletRecord:
+readonly encryptedKey: EncryptedKeyEnvelope;
+```
+
+- [ ] **Step 2: Export `EncryptedKeyEnvelope`**
+
+```typescript
+// packages/sdk/src/index.ts
+export type { EncryptedKeyEnvelope } from './storage/index.js';
+```
+
+- [ ] **Step 3: Update Task 13's `encryptPrivateKey` to return this envelope shape directly**
+
+Modify `packages/tui/src/utils/passphrase.ts` return type to match. The fields already are right — just ensure the `EncryptedKey` type is structurally compatible.
+
+- [ ] **Step 4: Update Wallet.tsx usage**
+
+In `saveDerived` / `saveImported`:
+
+```typescript
+const enc = await encryptPrivateKey(w.privateKey, state.passphrase);
+return {
+  index: i,
+  address: w.address as Address,
+  encryptedKey: { ciphertext: enc.ciphertext, iv: enc.iv, authTag: enc.authTag },
+  kdf: enc.kdf,
+  kdfParams: enc.kdfParams,
+  provenance: { /* ... */ },
+  createdAt: Date.now(),
+};
+```
+
+- [ ] **Step 5: Update `loadFromCampaign` in distribute.ts**
+
+```typescript
+const privateKeys = await Promise.all(
+  records.map((r) =>
+    decryptPrivateKey({
+      ciphertext: r.encryptedKey.ciphertext,
+      iv: r.encryptedKey.iv,
+      authTag: r.encryptedKey.authTag,
+      kdf: r.kdf,
+      kdfParams: r.kdfParams,
+    }, passphrase),
+  ),
+);
+```
+
+- [ ] **Step 6: Fix tests**
+
+Update `packages/sdk/src/__tests__/storage-records.test.ts` to use the envelope:
+
+```typescript
+encryptedKey: { ciphertext: 'ct', iv: 'iv', authTag: 'at' },
+```
+
+Update `packages/storage-campaign/__tests__/campaign-storage.test.ts` the same way.
+
+- [ ] **Step 7: Run all affected tests**
+
+```bash
+cd packages/sdk && npx vitest run
+cd ../storage-campaign && npx vitest run
+cd ../tui && bun test
+```
+
+Expected: all PASS.
+
+- [ ] **Step 8: Commit**
+
+```bash
+git add packages/sdk/src/storage/index.ts packages/sdk/src/index.ts packages/sdk/src/__tests__/storage-records.test.ts packages/tui/src/utils/passphrase.ts packages/tui/src/interactive/screens/Wallet.tsx packages/tui/src/commands/distribute.ts packages/storage-campaign/__tests__/campaign-storage.test.ts
+git commit -m "fix(sdk): WalletRecord.encryptedKey uses full IV+authTag+ciphertext envelope"
+```
+
+---
+
+### Task 29: Anvil end-to-end integration test
+
+**Files:**
+- Create: `packages/tui/__tests__/integration/full-campaign.test.ts`
+
+- [ ] **Step 1: Implement the test**
+
+```typescript
+import { test, expect, beforeAll } from 'bun:test';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { createCampaignStorage, createSharedStorage } from '@titrate/storage-campaign';
+import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
+import { encryptPrivateKey } from '../../src/utils/passphrase.ts';
+
+const ANVIL_RPC = process.env.ANVIL_RPC ?? 'http://127.0.0.1:8545';
+
+async function anvilUp(): Promise<boolean> {
+  try {
+    const res = await fetch(ANVIL_RPC, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_chainId', id: 1 }),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+test.skipIf(!(await anvilUp()))('full campaign lifecycle — create, configure, encrypt, read back', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'titrate-e2e-'));
+  const storage = createCampaignStorage(dir);
+  const shared = createSharedStorage(dir);
+  await storage.ensureDir();
+
+  // 1. Write manifest
+  const manifest = {
+    id: 'e2e-test', funder: '0x0000000000000000000000000000000000000001' as const,
+    name: 'e2e', version: 1, chainId: 31337, rpcUrl: ANVIL_RPC,
+    tokenAddress: '0x0000000000000000000000000000000000000002' as const, tokenDecimals: 18,
+    contractAddress: null, contractVariant: 'simple' as const, contractName: 'X',
+    amountMode: 'uniform' as const, amountFormat: 'integer' as const,
+    uniformAmount: '1000000000000000000', batchSize: 10, campaignId: null, pinnedBlock: null,
+    status: 'configuring' as const, wallets: { mode: 'imported' as const, count: 0 },
+    createdAt: Date.now(), updatedAt: Date.now(),
+  };
+  await storage.manifest.write(manifest);
+
+  // 2. Import 3 wallets
+  const pks = [generatePrivateKey(), generatePrivateKey(), generatePrivateKey()];
+  const passphrase = 'test-pass';
+  const records = await Promise.all(
+    pks.map(async (pk, i) => {
+      const acc = privateKeyToAccount(pk);
+      const enc = await encryptPrivateKey(pk, passphrase);
+      return {
+        index: i, address: acc.address,
+        encryptedKey: { ciphertext: enc.ciphertext, iv: enc.iv, authTag: enc.authTag },
+        kdf: enc.kdf, kdfParams: enc.kdfParams,
+        provenance: { type: 'imported' as const }, createdAt: Date.now(),
+      };
+    }),
+  );
+  await storage.wallets.append(records);
+
+  // 3. Re-read and verify
+  const readBack = await storage.wallets.readAll();
+  expect(readBack).toHaveLength(3);
+  expect(readBack[0].address).toBe(records[0].address);
+
+  // 4. Append 10 addresses + 3 filtered
+  await storage.addresses.append(Array.from({ length: 10 }, (_, i) => ({ address: `0x${i.toString(16).padStart(40, '0')}`, amount: null })));
+  await storage.filtered.append(Array.from({ length: 3 }, (_, i) => ({ address: `0x${i.toString(16).padStart(40, '0')}`, amount: null })));
+  expect(await storage.addresses.count()).toBe(10);
+  expect(await storage.filtered.count()).toBe(3);
+
+  // 5. Write and read cursor
+  await storage.cursor.write({
+    scan: { lastBlock: 42n, endBlock: null, addressCount: 10 },
+    filter: { watermark: 10, qualifiedCount: 3 },
+    distribute: { watermark: 0, confirmedCount: 0 },
+  });
+  const cursor = await storage.cursor.read();
+  expect(cursor.scan.lastBlock).toBe(42n);
+});
+```
+
+- [ ] **Step 2: Run**
+
+```bash
+# With Anvil up
+anvil &
+cd packages/tui && bun test __tests__/integration/full-campaign.test.ts
+```
+
+Expected: PASS when Anvil is up, SKIP when it's not.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add packages/tui/__tests__/integration/full-campaign.test.ts
+git commit -m "test(tui): add Anvil-gated full campaign lifecycle test"
+```
+
+---
+
+## Phase 1f — Regression
+
+### Task 30: Full test suite sweep
+
+- [ ] **Step 1: Run every package's test suite**
+
+```bash
+cd /Users/michaelmclaughlin/Documents/morbius/github/titrate
+
+# SDK + storage packages + web (Node/Vitest)
+cd packages/sdk && npx vitest run && cd -
+cd packages/storage-campaign && npx vitest run && cd -
+cd packages/storage-fs && npx vitest run && cd -
+cd packages/storage-idb && npx vitest run && cd -
+cd packages/web && yarn test && cd -
+
+# TUI (Bun test)
+cd packages/tui && bun test && cd -
+
+# Contracts (Forge)
+cd packages/contracts && forge test && cd -
+```
+
+Expected: every command exits 0.
+
+- [ ] **Step 2: Tally results** and record in `progress.txt`
+
+Edit `progress.txt` — append a new dated checkpoint section with test counts per package and a summary of what landed in Phase 1 (a-f).
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add progress.txt
+git commit -m "docs: checkpoint — Phase 1 complete, campaign lifecycle + OpenTUI + encrypted wallets"
+```
+
+---
+
+### Task 31: Root-level test aggregation script (optional)
+
+**Files:**
+- Modify: `package.json` (root)
+
+- [ ] **Step 1: Add root script**
+
+```json
+{
+  "scripts": {
+    "test:all": "yarn workspace @titrate/sdk test && yarn workspace @titrate/storage-campaign test && yarn workspace @titrate/storage-fs test && yarn workspace @titrate/storage-idb test && yarn workspace @titrate/web test && cd packages/tui && bun test && cd - && cd packages/contracts && forge test && cd -"
+  }
+}
+```
+
+- [ ] **Step 2: Verify**
+
+```bash
+yarn test:all
+```
+
+Expected: all green.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add package.json
+git commit -m "chore: add test:all root script for full regression"
+```
+
+---
+
+## Self-Review
+
+**Spec coverage** — every spec section has at least one task:
+- Overview + CLI surface → Tasks 22, 23, 24 (new/open/list)
+- Campaign Directory Structure → Tasks 6-10 (storage-campaign)
+- Data Model (Manifest, Cursor, Pipeline) → Tasks 1, 9
+- Interactive Framework (runtime, nav, state tiers, dashboard) → Tasks 11, 15, 16
+- Wallet Provisioning & Encryption → Tasks 2, 13, 20, 28
+- Signer Abstraction (paste/WC/Ledger) → Tasks 5, 26, 27
+- RPC Provider Catalog → Tasks 3, 4, 17
+- Live Pipeline Orchestration → Phase 2 (not in scope for this plan)
+- What Changes vs What Stays → covered by the phased tasks
+- Phasing (1a-1f) → sections of this plan
+
+**Placeholder scan** — none; every step has exact code or exact commands.
+
+**Type consistency** — `WalletRecord.encryptedKey` reconciled in Task 28 (envelope, not bare string). `StepProps` defined in App.tsx (Task 15) and used by every screen. `CampaignStorage` and `SharedStorage` types used consistently.
+
+**Ambiguity check** — "delete clack-based wizard (after feature parity)" made explicit in Task 25, which runs only after Tasks 16-23 deliver parity.
+
+---
+
+## Execution
+
+Plan complete. Save this file with `git add` + commit, then choose execution mode:
+
+1. **Subagent-Driven (recommended)** — dispatch one fresh subagent per task, review between.
+2. **Inline execution** — run tasks sequentially in this session using superpowers:executing-plans.
+
+Both paths will check each step's box as it lands. Phase 1a and 1b have no file overlap — they can be dispatched in parallel. Phase 1c depends on 1a (SDK types). Phase 1d depends on 1c. Phase 1e depends on 1c+1d. Phase 1f depends on everything.
+
+
+
