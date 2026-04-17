@@ -59,7 +59,7 @@ export function deriveStepStates(
       id: 'wallet',
       status: walletsDone ? 'done' : 'todo',
       summary: walletsDone
-        ? `${manifest.wallets.mode} · ${counts.wallets || (manifest.wallets.mode === 'derived' ? manifest.wallets.count : 0)}`
+        ? `${manifest.wallets.mode} · ${counts.wallets || (manifest.wallets.mode === 'derived' ? manifest.wallets.walletCount : manifest.wallets.count)}`
         : 'not configured',
     },
     {
