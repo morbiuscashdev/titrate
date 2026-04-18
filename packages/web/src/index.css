@@ -1,9 +1,149 @@
 @import "tailwindcss";
 
-/* Class-based dark mode for ThemeProvider (adds .dark to <html>) */
+/* Class-based dark variant kept for backwards compat with existing
+ * components that use `dark:` utilities and the legacy ThemeProvider
+ * that toggles a `.dark` class on <html>. The new brand system uses
+ * `data-theme="dark"` for its own surface cascade (see below). Both
+ * coexist during the migration. */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Dual-mode body background */
+/* ---- Brand tokens ---- */
+@theme {
+  /* Ink scale (operator surfaces) */
+  --color-ink-950: #0b0d10;
+  --color-ink-900: #12151a;
+  --color-ink-800: #1f2328;
+  --color-ink-700: #30363d;
+  --color-ink-500: #7d8590;
+  --color-ink-100: #e6edf3;
+
+  /* Cream scale (brutalist light surfaces) */
+  --color-cream-50: #fefce8;
+  --color-cream-100: #faf7dd;
+  --color-cream-200: #f5f0c2;
+  --color-cream-700: #555555;
+  --color-cream-900: #171717;
+
+  /* Brand pink */
+  --color-pink-400: #f06ba3;
+  --color-pink-500: #d63384;
+  --color-pink-600: #b02473;
+  --color-pink-700: #8c1a5b;
+
+  /* Semantic (operator only) */
+  --color-ok: #3fb950;
+  --color-warn: #d29922;
+  --color-err: #f85149;
+  --color-info: #58a6ff;
+
+  /* Brutalist chips */
+  --color-chip-yellow: #facc15;
+  --color-chip-green: #86efac;
+  --color-chip-pink: #fda4af;
+
+  /* Font families */
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+  --font-serif: "IBM Plex Serif", ui-serif, Georgia, serif;
+
+  /* Motion */
+  --default-transition-duration: 150ms;
+  --default-transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ---- Light/dark brutalist surface cascade ---- */
+[data-theme="light"] {
+  --bg-page: var(--color-cream-50);
+  --bg-card: #ffffff;
+  --fg-primary: var(--color-cream-900);
+  --fg-muted: var(--color-cream-700);
+  --edge: var(--color-cream-900);
+  --shadow-color: var(--color-cream-900);
+  --accent-inline: var(--color-pink-600);
+  --mark-color: var(--color-pink-500);
+}
+[data-theme="dark"] {
+  --bg-page: var(--color-ink-950);
+  --bg-card: var(--color-ink-900);
+  --fg-primary: var(--color-ink-100);
+  --fg-muted: var(--color-ink-500);
+  --edge: var(--color-ink-100);
+  --shadow-color: var(--color-ink-100);
+  --accent-inline: var(--color-pink-400);
+  --mark-color: var(--color-pink-400);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg-page: var(--color-ink-950);
+    --bg-card: var(--color-ink-900);
+    --fg-primary: var(--color-ink-100);
+    --fg-muted: var(--color-ink-500);
+    --edge: var(--color-ink-100);
+    --shadow-color: var(--color-ink-100);
+    --accent-inline: var(--color-pink-400);
+    --mark-color: var(--color-pink-400);
+  }
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    --bg-page: var(--color-cream-50);
+    --bg-card: #ffffff;
+    --fg-primary: var(--color-cream-900);
+    --fg-muted: var(--color-cream-700);
+    --edge: var(--color-cream-900);
+    --shadow-color: var(--color-cream-900);
+    --accent-inline: var(--color-pink-600);
+    --mark-color: var(--color-pink-500);
+  }
+}
+
+/* ---- Component mode cascade ---- */
+[data-mode="brutalist"] {
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 2px;
+  --radius-pill: 9999px;
+  --shadow-sm: 2px 2px 0 var(--shadow-color);
+  --shadow-md: 4px 4px 0 var(--shadow-color);
+  --shadow-lg: 6px 6px 0 var(--shadow-color);
+  --border-width: 2px;
+  --border-heavy: 3px;
+  --border-color: var(--edge);
+}
+[data-mode="operator"] {
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-pill: 9999px;
+  --shadow-sm: 0 1px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.5);
+  --border-width: 1px;
+  --border-heavy: 1px;
+  --border-color: var(--color-ink-700);
+}
+
+/* ---- Global reset / body ---- */
+html, body { height: 100%; }
 body {
-  @apply bg-white dark:bg-gray-950 text-gray-900 dark:text-white;
+  font-family: var(--font-sans);
+  background: var(--bg-page, var(--color-cream-50));
+  color: var(--fg-primary, var(--color-cream-900));
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ---- Block caret (operator input cursor) ---- */
+@keyframes caret-blink { 0%, 50% { opacity: 1; } 51%, 100% { opacity: 0; } }
+.block-caret { animation: caret-blink 1s steps(2, end) infinite; }
+
+/* ---- Reduced-motion overrides ---- */
+@media (prefers-reduced-motion: reduce) {
+  [data-motion="press-translate"] { transform: none !important; }
+  [data-motion="modal-translate"] { transform: none !important; }
+  [data-motion="toast-slide"] { transform: none !important; }
+  [data-motion="skeleton-shimmer"] { animation: none !important; background-position: 50% 50% !important; }
+  .block-caret { animation: none !important; opacity: 1 !important; }
 }
