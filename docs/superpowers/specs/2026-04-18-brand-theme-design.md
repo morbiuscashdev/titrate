@@ -22,8 +22,8 @@ Define one palette, one typography system, one mark, and two appearance modes �
 ## Non-goals
 
 - Animation beyond the button press-translate in brutalist mode. No motion system yet.
-- A dark-mode variant of the brutalist marketing layer. Brutalist is light-only by design.
 - A light-mode variant of the operator panels. Operator is dark-only by design.
+- A dark-mode variant of the TUI. The terminal is dark-only.
 - Illustration style, custom iconography beyond the ∫ mark, or marketing photography direction.
 - Accessibility beyond WCAG AA contrast verification on the chosen palette. Full AA+ audit is a follow-on.
 - Localization of typography (CJK fallback stacks, RTL layout). Deferred.
@@ -45,13 +45,65 @@ Replaces the earlier **"offline-first airdrop platform"** which was factually wr
 
 ## Logo / mark
 
-The mark is the Unicode integral sign **∫ (U+222B)** rendered in pink-500 (`#d63384`). No custom SVG required — it's a single glyph that renders at 11px (TUI keybind label) through 200px (marketing hero) in IBM Plex Mono.
+The mark is a **custom SVG titration curve** — angular `_/` path (flat low plateau, diagonal rise, flat high plateau) with a hollow equivalence-point circle at the inflection. Rendered in `pink-500` on light surfaces, `pink-400` on dark.
 
-- **Rationale**: integration as continuous accumulation mirrors titration as continuous addition. Semantic match, visual match (tall narrow S-curve), and renders everywhere Plex Mono exists.
-- **Sibling candidates** (not the default, but allowed for future iteration without a rebrand): **∮ (U+222E)** contour integral — has a built-in equivalence-point dot; **ʃ (U+0283)** IPA esh — smaller x-height form that can live inside the wordmark as `t·ʃ·trate`.
-- **Wordmark**: ∫ rendered in pink-500, followed by the word `titrate` in IBM Plex Sans 800 at -0.02em letter-spacing. The mark and wordmark sit on the same baseline in navs; in heroes, the mark is 1.8× the wordmark's x-height.
-- **Single-char slot** (CLI prompt, favicon if rendered as emoji, narrow contexts): ∫ alone in pink.
-- **No lockup variants**, no tagline-baked logo, no wordmark-only version. The ∫ must always appear — it's the mark, the wordmark supplements it.
+### Rationale
+
+A real titration curve has three mandatory visual parts: the buffer region (flat bottom), the equivalence point (the rise with a marker on the inflection), and the post-equivalence plateau (flat top). No Unicode glyph captures this structure — `∫` is a compact stroke, `∮` includes a circle but the overall shape doesn't read as a curve. A small SVG asset gives total control over plateau length, rise steepness, circle radius, and stroke weight while staying crisp at any size.
+
+### Geometry
+
+```xml
+<svg viewBox="0 0 170 150" xmlns="http://www.w3.org/2000/svg">
+  <path d="M 14 120 L 65 120 L 95 30 L 156 30"
+        stroke="currentColor" stroke-width="12"
+        stroke-linecap="square" stroke-linejoin="miter" fill="none" />
+  <circle cx="80" cy="75" r="22" fill="none"
+          stroke="currentColor" stroke-width="8" />
+</svg>
+```
+
+- `viewBox` 170×150 units; aspect ratio `~1.13:1`.
+- Path: flat from `(14,120)` to `(65,120)` (low plateau), diagonal to `(95,30)` (steep rise), flat to `(156,30)` (high plateau). `stroke-linecap="square"` and `stroke-linejoin="miter"` preserve the crisp `_/` corners.
+- Equivalence-point circle: center `(80,75)` on the diagonal midpoint, radius 22, stroke-width 8, no fill. Large hollow circle chosen specifically because it survives shrinking to nav-bar scale (~22px); smaller or filled variants close to a blob at that size.
+- `currentColor` lets the containing element set the pink variant via `color: var(--pink-500)` on light surfaces or `color: var(--pink-400)` on dark.
+
+### File locations
+
+- `packages/web/public/mark.svg` — canonical asset, used inline in nav / hero components.
+- `packages/web/public/favicon.svg` — 32×32 version with `cream-50` page-like background and 2px `cream-900` border (a brutalist tile) for browser tab.
+- `packages/web/public/og-image.png` — 1200×630 social card rendered at build time from the SVG.
+
+### Rendering fallbacks
+
+The SVG can't render in a terminal. The mark therefore lives in three forms:
+
+1. **Canonical SVG** — all web surfaces (brutalist light, brutalist dark, operator panels embedded in web).
+2. **TUI single-glyph** — `∫` (U+222B) in Plex Mono or the terminal's mono fallback. Used in nav bars, single-line contexts, keybind labels.
+3. **TUI splash (ASCII)** — three-line banner using `_/●` + wordmark, rendered at TUI startup:
+   ```
+            _____
+           /
+          ●
+    _____/
+
+    titrate   sovereign airdrop tooling
+   ```
+
+The mark is structurally the same across all three (flat plateau → rise → plateau + eq-point marker), just in different rendering idioms.
+
+### Wordmark
+
+SVG mark + `titrate` in IBM Plex Sans 800 at -0.02em letter-spacing.
+
+- **In navs**: SVG at `38×32px` sits next to `titrate` at ~22px. Mark baseline aligns with wordmark baseline.
+- **In heroes**: SVG at 150px (or larger), wordmark at 48px. Mark is ~3× the wordmark x-height. On brutalist surfaces, the SVG sits inside a `2px cream-900` bordered tile with `6px 6px 0` offset shadow (the marketing hero treatment).
+
+### Lockup rules
+
+- The mark must always appear with the wordmark — no solo wordmark ("titrate" alone).
+- The wordmark may appear without the mark only in title-of-page contexts where the mark has already established brand within the same view (e.g., browser tab).
+- No tagline-baked logo variants. The `sovereign airdrop tooling` tag is separate copy that can sit below the wordmark in heroes but is never locked into the mark.
 
 ## Mode assignment rule
 
@@ -158,6 +210,75 @@ Borrowed from GitHub primer for readability against ink surfaces. Do not use the
 | `--chip-pink` | `#fda4af` | "Deploy anywhere" verb chip, err pill |
 
 Used exclusively on brutalist pill backgrounds (2px cream-900 border wraps them). Never on operator A surfaces.
+
+## Dark brutalist (marketing dark mode)
+
+Brutalist has two surface variants: the default **light brutalist** (cream surfaces) and a **dark brutalist** that honors `prefers-color-scheme: dark` (or a manual toggle). This is a variant, not a new mode — same layouts, same components, same offset-shadow idioms, same typography. Only the surface tokens invert.
+
+### Token inversion
+
+| Role | Light brutalist | Dark brutalist |
+|---|---|---|
+| Page background | `cream-50` `#fefce8` | `ink-950` `#0b0d10` |
+| Card background | `white` `#ffffff` | `ink-900` `#12151a` |
+| Primary text | `cream-900` `#171717` | `ink-100` `#e6edf3` |
+| Muted text | `cream-700` `#555555` | `ink-500` `#7d8590` |
+| Border color (2px & 3px) | `cream-900` | `ink-100` |
+| Offset shadow color | `cream-900` | `ink-100` |
+| Primary CTA background | `pink-600` (unchanged — passes AA on both) |
+| Primary CTA hover | `pink-700` (unchanged) |
+| Verb chip backgrounds | `chip-yellow` / `chip-green` / `chip-pink` (unchanged) |
+| Verb chip text | `cream-900` (unchanged) |
+| Verb chip border | `cream-900` 2px | `ink-100` 2px |
+| Inline text accent (addresses, block numbers) | `pink-600` (4.5:1 on cream) | `pink-400` (6.9:1 on ink) |
+| Focus shadow color | `pink-500` (unchanged — passes 3:1 on both) |
+
+### Implementation
+
+Dark brutalist is opt-in via OS preference or a manual toggle stored in `localStorage`. The `data-theme` attribute on the document root selects the active variant:
+
+```css
+[data-theme="light"] {
+  --bg-page: var(--color-cream-50);
+  --bg-card: white;
+  --fg-primary: var(--color-cream-900);
+  --fg-muted: var(--color-cream-700);
+  --edge: var(--color-cream-900);
+  --shadow-color: var(--color-cream-900);
+  --accent-inline: var(--color-pink-600);
+  --mark-color: var(--color-pink-500);
+}
+
+[data-theme="dark"] {
+  --bg-page: var(--color-ink-950);
+  --bg-card: var(--color-ink-900);
+  --fg-primary: var(--color-ink-100);
+  --fg-muted: var(--color-ink-500);
+  --edge: var(--color-ink-100);
+  --shadow-color: var(--color-ink-100);
+  --accent-inline: var(--color-pink-400);
+  --mark-color: var(--color-pink-400);
+}
+
+/* Default to OS preference if no explicit theme is set */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    /* use the dark values above */
+  }
+}
+```
+
+A tiny inline script in `index.html` runs before React hydrates and sets `document.documentElement.dataset.theme` based on `localStorage['theme']` (explicit user choice) or `matchMedia('(prefers-color-scheme: dark)').matches` (OS fallback). Prevents flash of wrong theme on page load.
+
+### What does NOT gain a dark variant
+
+- **Operator A** stays dark-only. No light-mode operator panel. The min/max principle — operator is the dark workbench, period.
+- **TUI** stays dark-only.
+- **Semantic colors** (`ok`, `warn`, `err`, `info`) don't change between brutalist light/dark — they're operator-layer tokens that only appear inside embedded operator panels, which are always dark.
+
+### Seam rule in dark brutalist
+
+Operator-A panels embedded inside a dark-brutalist chassis use a **2px `ink-100` outer border** + **4px `ink-100` offset shadow** (mirrors the `cream-900` framing rule from light brutalist). Panel interior stays `ink-950` bg as always — the operator mode doesn't care which brutalist variant wraps it.
 
 ## Typography
 
@@ -488,6 +609,40 @@ In `packages/web/src/index.css`:
   .block-caret { animation: none !important; opacity: 1 !important; }
 }
 
+/* Brutalist light/dark surface tokens (honor OS preference unless overridden) */
+[data-theme="light"] {
+  --bg-page: var(--color-cream-50);
+  --bg-card: #ffffff;
+  --fg-primary: var(--color-cream-900);
+  --fg-muted: var(--color-cream-700);
+  --edge: var(--color-cream-900);
+  --shadow-color: var(--color-cream-900);
+  --accent-inline: var(--color-pink-600);
+  --mark-color: var(--color-pink-500);
+}
+[data-theme="dark"] {
+  --bg-page: var(--color-ink-950);
+  --bg-card: var(--color-ink-900);
+  --fg-primary: var(--color-ink-100);
+  --fg-muted: var(--color-ink-500);
+  --edge: var(--color-ink-100);
+  --shadow-color: var(--color-ink-100);
+  --accent-inline: var(--color-pink-400);
+  --mark-color: var(--color-pink-400);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --bg-page: var(--color-ink-950);
+    --bg-card: var(--color-ink-900);
+    --fg-primary: var(--color-ink-100);
+    --fg-muted: var(--color-ink-500);
+    --edge: var(--color-ink-100);
+    --shadow-color: var(--color-ink-100);
+    --accent-inline: var(--color-pink-400);
+    --mark-color: var(--color-pink-400);
+  }
+}
+
 /* Mode tokens scoped to data-mode ancestors */
 [data-mode="brutalist"] {
   --radius-sm: 0; --radius-md: 0; --radius-lg: 0; --radius-xl: 2px; --radius-pill: 9999px;
@@ -530,17 +685,17 @@ Every component imports from `@/components/ui`. Page-level files (`CampaignList.
 
 ### Favicon and logo assets
 
-- Favicon: render ∫ at 32×32 with a cream-50 background and 2px cream-900 border (a brutalist tile) as SVG, fall back to PNG. Inline `<link rel="icon">` in `index.html`.
-- Marketing hero mark: ∫ in pink-500, Plex Mono 200/200, sitting in a cream-50 tile with a 3px cream-900 border and 6px offset shadow.
-- Social card (OpenGraph): 1200×630, cream-50 background, ∫ + wordmark centered, one-liner below. Generated statically; not dynamic per-page.
+- **Favicon**: the canonical `mark.svg` (titration curve + hollow eq-point circle) placed inside a cream-50 tile with a 2px cream-900 border — a brutalist mini-poster. Served at 32×32, plus a PNG fallback for browsers without SVG favicon support. Inlined via `<link rel="icon" type="image/svg+xml" href="/mark-tile.svg">` + `<link rel="icon" type="image/png" href="/mark-tile.png" sizes="32x32">`.
+- **Marketing hero mark**: `mark.svg` at 150px (or larger) in `pink-500` (light) or `pink-400` (dark), inside a cream-50 / ink-900 tile with `border-heavy` (3px) and `6px 6px 0` offset shadow.
+- **Social card (OpenGraph)**: 1200×630, `mark.svg` + wordmark centered, one-liner below. Generated statically at build time from the SVG and the one-liner text. Light variant only — social previews in link cards don't respect user OS preference.
 
 ## Open questions / deferred
 
 1. **Accessibility audit**: ~~palette has been chosen for aesthetic balance, not verified against WCAG AA~~. **Resolved 2026-04-18**: contrast measured across every token pair. Operator A clean throughout (ink-100/ink-950 16.4:1, ink-500/ink-900 5.00:1, all semantic colors 5.5–7.5:1). Brutalist B clean (cream-900/cream-50 17.3:1, cream-700/cream-100 muted-on-striped 6.93:1, all chip backgrounds 9.5–12.7:1). Only failure was `white on pink-500` at 4.48:1 for button-label use; resolved by promoting `pink-600` (6.14:1) to text-on-fill duty and adding `pink-700` (8.66:1) for hover. The role split is described in the Color Palette section. We can claim WCAG AA on every text pairing in the spec.
-2. **Dark-mode marketing**: explicitly out of scope. If we later need it (e.g., for a docs site that needs to match a user's system preference), it gets its own spec — not a retrofit of brutalist colors onto ink surfaces.
+2. **Dark-mode marketing**: ~~explicitly out of scope~~. **Resolved 2026-04-18**: in scope. Shipped as the "Dark brutalist" surface variant — see the Dark brutalist section above. Honors `prefers-color-scheme: dark` + a manual toggle stored in `localStorage`. Operator-A and TUI remain dark-only; only brutalist gains a light/dark pair.
 3. **Animation system**: ~~button press-translate is defined~~. **Resolved 2026-04-18**: full Motion section added covering 3 durations, 3 easings, and a 6-primitive catalog (button hover, button press, focus gain, modal enter, toast slide, skeleton shimmer). Block-caret blink specified as a special case. Reduced-motion rule keeps essential transitions (focus, fade, color change) and cuts decorative ones (translate, infinite loops, blink). Off-limits list prevents drift. See the Motion section.
-4. **Component library testing**: visual regression (e.g., Chromatic) is not set up. Snapshot tests via Vitest + Testing Library are sufficient for MVP; visual regression is a follow-on if the component library stabilizes.
-5. **TUI font**: we assume Plex Mono is available or the terminal's mono fallback is acceptable. If user reports render as "boxes" for the ∫, we'll need to detect and substitute a plain `S` prefix. Not worth solving preemptively.
+4. **Component library testing**: ~~visual regression (e.g., Chromatic) is not set up~~. **Resolved 2026-04-18**: deferred. Snapshot tests via Vitest + Testing Library are sufficient for MVP. Visual regression becomes worthwhile once the library has ~15–20 stable components where human review can no longer reliably catch regressions; revisit at that point with its own spec.
+5. **TUI font**: ~~we assume Plex Mono is available or the terminal's mono fallback is acceptable~~. **Resolved 2026-04-18**: not worth preemptive detection. The TUI splash uses a three-line ASCII `_/●` banner (no glyph dependency) and inline contexts fall back to the Unicode `∫` (U+222B, widely supported). If a user reports either as a tofu box we add a runtime detection + plain-`S` substitution at that point.
 
 ## Out of scope for this spec
 
