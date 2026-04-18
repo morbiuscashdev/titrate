@@ -190,6 +190,71 @@ IBM Plex Sans and IBM Plex Mono — same designer (Mike Abbink / Bold Monday), a
 - **Uppercase labels** — Plex Mono 11/14 at 0.15em letter-spacing. Used for nav items in brutalist, section dividers in operator, form labels in both.
 - **Never mix weights within a single paragraph**. Bold for emphasis is fine inline; font-weight shifts within a single sentence are not.
 
+## Motion
+
+Motion is tightly scoped — a dev tool for sovereignty-minded operators should feel calm and deliberate, not playful. Six total primitives, three durations, three easings. No parallax, no spring physics, no scroll-reveal, no stagger. If a use case emerges that needs something beyond this catalog, it's a spec amendment.
+
+### Tokens
+
+| Token | Value | Use |
+|---|---|---|
+| `--duration-fast` | 80ms | Focus-gain, caret blink, small state swaps |
+| `--duration-base` | 150ms | Button press, toast/modal enter, panel expand |
+| `--duration-slow` | 240ms | Marketing hero enter (rare — used sparingly) |
+| `--ease-out-standard` | `cubic-bezier(0.22, 1, 0.36, 1)` | Default; virtually everything operator |
+| `--ease-out-snap` | `cubic-bezier(0, 0.55, 0.45, 1)` | Brutalist button press-translate only |
+| `--ease-linear` | `linear` | Skeleton shimmer, caret blink |
+
+### Catalog
+
+Every animation in the product must be one of these six. Anything else is a spec violation.
+
+1. **Button hover (brutalist)** — translate `(1px, 1px)`, shadow shrinks 3→2px. `duration-fast` `ease-out-snap`.
+2. **Button press (brutalist)** — translate `(3px, 3px)`, shadow collapses 3→0. `duration-fast` `ease-out-snap`. On release, reverses to hover state.
+3. **Focus gain (any focusable element)** — box-shadow / outline color transition. `duration-fast` `ease-out-standard`. Applies to both operator and brutalist focus treatments.
+4. **Modal / drawer enter** — opacity `0→1` + translate-up 4px. `duration-base` `ease-out-standard`. Exit reverses with opacity only (no downward translate — avoids dismissal feeling like a fall).
+5. **Toast slide** — translate from nearest edge (top-right for ok/info, bottom-center for err) + opacity `0→1`. `duration-base` `ease-out-standard`. Auto-dismiss at 4s unless toast type is `err` (persistent until manually dismissed).
+6. **Skeleton shimmer (operator-only)** — background-position linear gradient loop across a translucent ink-800 → ink-700 → ink-800 stripe. 1200ms `ease-linear` infinite. Used for batch-table and log-stream data-loading placeholders. Never used in brutalist chassis (brutalist shows static "loading…" label instead).
+
+### Block caret (special case)
+
+The operator-A input's terminal block caret blinks at 1Hz via a pure CSS `steps(2)` animation:
+
+```css
+@keyframes caret-blink { 0%, 50% { opacity: 1 } 51%, 100% { opacity: 0 } }
+.block-caret { animation: caret-blink 1s steps(2, end) infinite; }
+```
+
+This is a decorative-but-informative animation (signals "cursor position is here") — treated as essential for focus feedback but non-essential as *motion*. The reduced-motion rule (below) turns blink into solid.
+
+### Reduced motion (`prefers-reduced-motion: reduce`)
+
+The rule: **keep essential motion; cut decorative and looping motion**. Users with vestibular sensitivities should still understand the interface, but nothing should trigger motion sickness or cognitive load.
+
+**Preserved under reduced-motion:**
+- Focus-gain transitions (color changes — users need to know what's focused).
+- Modal / toast opacity fade (so elements don't appear out of thin air, which is disorienting).
+- Color transitions on hover / state change (convey meaning).
+
+**Modified under reduced-motion:**
+- Button press-translate → **removed** (translate and shadow-shift dropped; the pink-500 → pink-700 color change alone signals the press).
+- Modal / drawer translate-up component → **removed** (opacity fade only, no movement).
+- Toast slide → **removed** (opacity fade only; toast appears in place).
+- Skeleton shimmer → **static** (infinite loop stops; gradient freezes at its middle frame, no motion).
+- Block caret blink → **solid** (pink block stays visible continuously; cursor still marks position but does not blink).
+
+**Durations unchanged** under reduced-motion — slow fades aren't the problem; transforms and infinite loops are.
+
+### Off-limits (will not ship without a spec amendment)
+
+- Parallax scroll effects
+- Scroll-triggered reveal animations
+- Spring / bounce physics (overshoot, settle)
+- Stagger-cascade entry animations
+- Entrance animations triggered by viewport intersection
+- Any animation over 300ms (including `duration-slow` which caps at 240ms)
+- Auto-playing video / marquee / carousel
+
 ## Tokens
 
 Design tokens are defined per mode. Both token sets ship as CSS custom properties; Tailwind v4 theme layer maps them into utility classes.
@@ -266,7 +331,8 @@ Every component ships in both modes. Files colocate: `packages/web/src/component
 **Operator A**:
 - Text / select / textarea: ink-900 bg, ink-100 text, ink-700 1px border, 6px radius, 7×12 padding.
 - Placeholder: ink-500.
-- Focus: pink-500 border + `0 0 0 3px rgba(214,51,132,.2)` glow (the one place pink wins over info-blue for focus, because inputs are where the brand "owns" the active field).
+- Focus: `box-shadow: 0 0 0 3px var(--pink-500)` solid outset (border color unchanged). Box-shadow doesn't reflow the input; border stays ink-700 at all states. This is the one place the focus indicator is pink — inputs are where the brand "owns" the active field. Contrast `pink-500`/`ink-950` = **4.32:1**, passes WCAG 2.1 AA 1.4.11 Non-text Contrast (≥3:1).
+- **Block caret**: when focused, the default thin caret is replaced by a `pink-500` solid block (roughly `0.6ch × line-height`) that blinks at 1Hz (500ms on / 500ms off). Reads as a terminal cursor. Implementation: custom React input hides the native caret (`caret-color: transparent`) and renders an absolutely-positioned block element at the insertion point; fallback for textarea/contenteditable or environments where cursor tracking is unreliable is plain `caret-color: var(--pink-500)` (native caret, pink-colored).
 - Checkbox accent-color: pink-500.
 
 **Brutalist B**:
@@ -328,9 +394,9 @@ Every component ships in both modes. Files colocate: `packages/web/src/component
 
 ### Focus states
 
-- **Operator A interactive chrome** (buttons, links, nav): 2px info-blue (`--info`) outline, 1px offset. Never remove; never replace without visible alternative.
-- **Operator A form inputs**: 3px pink-500 soft glow (details in Inputs above). Distinguishes "I am editing this field" from "I am navigating this page."
-- **Brutalist B**: shadow changes color from cream-900 to pink-500. Same 3px offset. The shadow-as-focus-ring is brutalist's signature.
+- **Operator A interactive chrome** (buttons, links, nav): 2px info-blue (`--info`) outline, 1px offset. Contrast `info`/`ink-950` = **7.74:1**. Never remove; never replace without visible alternative.
+- **Operator A form inputs**: 3px solid pink-500 outset box-shadow (no border change) + pink-500 blinking block caret. Distinguishes "I am editing this field" from "I am navigating this page."
+- **Brutalist B**: shadow changes color from cream-900 to pink-500. Same 3px offset. Contrast `pink-500`/`cream-50` = **4.34:1**. The shadow-as-focus-ring is brutalist's signature.
 
 Tab order follows DOM order; skip-link at top of web pages navigates straight to the main panel.
 
@@ -402,6 +468,24 @@ In `packages/web/src/index.css`:
   /* Font families */
   --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+
+  /* Motion */
+  --duration-fast: 80ms;
+  --duration-base: 150ms;
+  --duration-slow: 240ms;
+  --ease-out-standard: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-out-snap: cubic-bezier(0, 0.55, 0.45, 1);
+  --ease-linear: linear;
+}
+
+/* Reduced-motion overrides — see Motion § Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  /* Transforms and infinite loops become static; fades and color transitions preserved */
+  [data-motion="press-translate"] { transform: none !important; }
+  [data-motion="modal-translate"] { transform: none !important; }
+  [data-motion="toast-slide"] { transform: none !important; }
+  [data-motion="skeleton-shimmer"] { animation: none !important; background-position: 50% 50% !important; }
+  .block-caret { animation: none !important; opacity: 1 !important; }
 }
 
 /* Mode tokens scoped to data-mode ancestors */
@@ -454,7 +538,7 @@ Every component imports from `@/components/ui`. Page-level files (`CampaignList.
 
 1. **Accessibility audit**: ~~palette has been chosen for aesthetic balance, not verified against WCAG AA~~. **Resolved 2026-04-18**: contrast measured across every token pair. Operator A clean throughout (ink-100/ink-950 16.4:1, ink-500/ink-900 5.00:1, all semantic colors 5.5–7.5:1). Brutalist B clean (cream-900/cream-50 17.3:1, cream-700/cream-100 muted-on-striped 6.93:1, all chip backgrounds 9.5–12.7:1). Only failure was `white on pink-500` at 4.48:1 for button-label use; resolved by promoting `pink-600` (6.14:1) to text-on-fill duty and adding `pink-700` (8.66:1) for hover. The role split is described in the Color Palette section. We can claim WCAG AA on every text pairing in the spec.
 2. **Dark-mode marketing**: explicitly out of scope. If we later need it (e.g., for a docs site that needs to match a user's system preference), it gets its own spec — not a retrofit of brutalist colors onto ink surfaces.
-3. **Animation system**: button press-translate is defined. Other interactions (modal enter/exit, toast slide, skeleton loaders, panel expand/collapse) are undefined and should be decided per-feature for now. If a pattern emerges, upgrade to a separate motion spec.
+3. **Animation system**: ~~button press-translate is defined~~. **Resolved 2026-04-18**: full Motion section added covering 3 durations, 3 easings, and a 6-primitive catalog (button hover, button press, focus gain, modal enter, toast slide, skeleton shimmer). Block-caret blink specified as a special case. Reduced-motion rule keeps essential transitions (focus, fade, color change) and cuts decorative ones (translate, infinite loops, blink). Off-limits list prevents drift. See the Motion section.
 4. **Component library testing**: visual regression (e.g., Chromatic) is not set up. Snapshot tests via Vitest + Testing Library are sufficient for MVP; visual regression is a follow-on if the component library stabilizes.
 5. **TUI font**: we assume Plex Mono is available or the terminal's mono fallback is acceptable. If user reports render as "boxes" for the ∫, we'll need to detect and substitute a plain `S` prefix. Not worth solving preemptively.
 
