@@ -34,12 +34,18 @@ export default defineConfig({
     }),
   ],
   resolve: {
-    alias: {
-      'node:fs': nodeShim,
-      'node:path': nodeShim,
-      'node:url': nodeShim,
-      'node:crypto': nodeShim,
-    },
+    // More-specific aliases must come first: 'node:fs' matches 'node:fs/promises'
+    // as a prefix, so without listing 'node:fs/promises' above it, rollup tries
+    // to resolve `node-builtins.js/promises` as a sub-path.
+    alias: [
+      { find: 'node:fs/promises', replacement: nodeShim },
+      { find: 'node:readline/promises', replacement: nodeShim },
+      { find: 'node:readline', replacement: nodeShim },
+      { find: 'node:fs', replacement: nodeShim },
+      { find: 'node:path', replacement: nodeShim },
+      { find: 'node:url', replacement: nodeShim },
+      { find: 'node:crypto', replacement: nodeShim },
+    ],
   },
   build: {
     rollupOptions: {
