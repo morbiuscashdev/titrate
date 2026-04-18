@@ -124,11 +124,19 @@ All colors are defined as CSS custom properties in `packages/web/src/index.css`.
 
 | Token | Hex | Use |
 |---|---|---|
-| `--pink-400` | `#f06ba3` | Operator accent (∫ mark, links, inline highlights) |
-| `--pink-500` | `#d63384` | Primary CTA background, brutalist mark, focus color |
-| `--pink-600` | `#b02473` | Primary CTA hover |
+| `--pink-400` | `#f06ba3` | Operator accent (∫ mark on dark, inline highlights, tx hashes, addresses) |
+| `--pink-500` | `#d63384` | Brand mark (∫ on light surfaces), focus-ring shadow, non-text accents only |
+| `--pink-600` | `#b02473` | Primary CTA background, inline accents on light surfaces, text-role pink |
+| `--pink-700` | `#8c1a5b` | Primary CTA hover |
 
-The 500 is the *one* brand color. 400 appears on dark surfaces where 500 would be too saturated against ink; 600 is the hover-darken.
+The 500 is the *one* brand color — it owns the mark. But it measures **4.48:1** against white, which fails WCAG AA for normal text. So text-on-pink (button labels, inline accents on light surfaces) uses 600 (**6.14:1**, AA clear) and the hover-darken becomes 700 (**8.66:1**). Role split:
+
+- **Non-text pink** (∫ mark at any size, input focus-ring shadow, graphical-object usages): `pink-500`. All pass the 3:1 UI threshold.
+- **Text-on-pink fills** (button labels, pill backgrounds where text sits on pink): `pink-600`. Passes 4.5:1.
+- **Pink as text on light** (inline `0x…` snippets, highlighted labels): `pink-600`. Passes 4.5:1 against cream-50 / white.
+- **Pink as text on dark**: `pink-400` (passes 6.92:1 against ink-950).
+
+This split lets us claim WCAG AA compliance on every text pairing in the spec.
 
 ### Semantic (operator A only)
 
@@ -237,7 +245,7 @@ Every component ships in both modes. Files colocate: `packages/web/src/component
 ### Buttons
 
 **Operator A**:
-- `primary`: pink-500 bg, white text, 6px radius, 1px transparent border. Hover: pink-600 bg.
+- `primary`: pink-600 bg, white text, 6px radius, 1px transparent border. Hover: pink-700 bg.
 - `secondary`: ink-800 bg, ink-100 text, ink-700 border. Hover: ink-700 bg, ink-500 border.
 - `ghost`: transparent bg, ink-100 text. Hover: ink-800 bg.
 - `danger`: transparent bg, err text, ink-700 border. Hover: `rgba(248,81,73,.1)` bg, err border.
@@ -245,7 +253,7 @@ Every component ships in both modes. Files colocate: `packages/web/src/component
 - Focus: info-blue 2px outline, 1px offset.
 
 **Brutalist B**:
-- `primary`: pink-500 bg, white text, 2px cream-900 border, 3px offset cream-900 shadow.
+- `primary`: pink-600 bg, white text, 2px cream-900 border, 3px offset cream-900 shadow. Pressed: hover pink-700.
 - `secondary`: cream-100 bg, cream-900 text, 2px cream-900 border, 3px offset shadow.
 - `ghost`: cream-50 bg, cream-900 text, 2px cream-900 border, 3px offset shadow.
 - Sizes: `sm` 11/10px font, 4×10 padding, 2px offset shadow. `md` 14/10px, 10×18, 3px offset shadow.
@@ -378,6 +386,7 @@ In `packages/web/src/index.css`:
   --color-pink-400: #f06ba3;
   --color-pink-500: #d63384;
   --color-pink-600: #b02473;
+  --color-pink-700: #8c1a5b;
 
   /* Semantic */
   --color-ok: #3fb950;
@@ -443,7 +452,7 @@ Every component imports from `@/components/ui`. Page-level files (`CampaignList.
 
 ## Open questions / deferred
 
-1. **Accessibility audit**: palette has been chosen for aesthetic balance, not verified against WCAG AA across every token pair. Needs a pass before any public release — especially cream-700 on cream-100 (which is the brutalist muted-on-striped-row case).
+1. **Accessibility audit**: ~~palette has been chosen for aesthetic balance, not verified against WCAG AA~~. **Resolved 2026-04-18**: contrast measured across every token pair. Operator A clean throughout (ink-100/ink-950 16.4:1, ink-500/ink-900 5.00:1, all semantic colors 5.5–7.5:1). Brutalist B clean (cream-900/cream-50 17.3:1, cream-700/cream-100 muted-on-striped 6.93:1, all chip backgrounds 9.5–12.7:1). Only failure was `white on pink-500` at 4.48:1 for button-label use; resolved by promoting `pink-600` (6.14:1) to text-on-fill duty and adding `pink-700` (8.66:1) for hover. The role split is described in the Color Palette section. We can claim WCAG AA on every text pairing in the spec.
 2. **Dark-mode marketing**: explicitly out of scope. If we later need it (e.g., for a docs site that needs to match a user's system preference), it gets its own spec — not a retrofit of brutalist colors onto ink surfaces.
 3. **Animation system**: button press-translate is defined. Other interactions (modal enter/exit, toast slide, skeleton loaders, panel expand/collapse) are undefined and should be decided per-feature for now. If a pattern emerges, upgrade to a separate motion spec.
 4. **Component library testing**: visual regression (e.g., Chromatic) is not set up. Snapshot tests via Vitest + Testing Library are sufficient for MVP; visual regression is a follow-on if the component library stabilizes.
