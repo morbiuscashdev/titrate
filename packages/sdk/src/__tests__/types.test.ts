@@ -1,9 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, expectTypeOf } from 'vitest';
 import type {
   CampaignManifest,
   CampaignStatus,
   WalletProvisioning,
   PipelineCursor,
+  StageStatus,
+  StageControl,
 } from '../types.js';
 import type { Address } from 'viem';
 
@@ -59,6 +61,10 @@ describe('CampaignManifest', () => {
       wallets: { mode: 'imported', count: 0 },
       createdAt: Date.now(),
       updatedAt: Date.now(),
+      startBlock: null,
+      endBlock: null,
+      autoStart: false,
+      control: { scan: 'running', filter: 'running', distribute: 'running' },
     };
     expect(manifest.status).toBe('configuring');
     expect(manifest.wallets.mode).toBe('imported');
@@ -68,11 +74,42 @@ describe('CampaignManifest', () => {
 describe('PipelineCursor', () => {
   it('tracks watermarks for all three stages', () => {
     const cursor: PipelineCursor = {
-      scan: { lastBlock: 18_000_000n, endBlock: null, addressCount: 0 },
+      scan: { lastBlock: 18_000_000n, addressCount: 0 },
       filter: { watermark: 0, qualifiedCount: 0 },
       distribute: { watermark: 0, confirmedCount: 0 },
     };
-    expect(cursor.scan.endBlock).toBeNull();
     expect(typeof cursor.scan.lastBlock).toBe('bigint');
+    expect(cursor.scan.addressCount).toBe(0);
+  });
+});
+
+describe('StageStatus', () => {
+  it('is a literal union of running | paused', () => {
+    expectTypeOf<StageStatus>().toEqualTypeOf<'running' | 'paused'>();
+  });
+});
+
+describe('StageControl', () => {
+  it('has readonly scan / filter / distribute fields, each StageStatus', () => {
+    const c: StageControl = { scan: 'running', filter: 'paused', distribute: 'running' };
+    expectTypeOf(c.scan).toEqualTypeOf<StageStatus>();
+    expectTypeOf(c.filter).toEqualTypeOf<StageStatus>();
+    expectTypeOf(c.distribute).toEqualTypeOf<StageStatus>();
+  });
+});
+
+describe('CampaignManifest (Phase 2)', () => {
+  it('requires startBlock / endBlock / autoStart / control fields with exact types', () => {
+    expectTypeOf<CampaignManifest['startBlock']>().toEqualTypeOf<bigint | null>();
+    expectTypeOf<CampaignManifest['endBlock']>().toEqualTypeOf<bigint | null>();
+    expectTypeOf<CampaignManifest['autoStart']>().toEqualTypeOf<boolean>();
+    expectTypeOf<CampaignManifest['control']>().toEqualTypeOf<StageControl>();
+  });
+});
+
+describe('PipelineCursor (no endBlock)', () => {
+  it('scan section has only lastBlock and addressCount', () => {
+    type ScanKeys = keyof PipelineCursor['scan'];
+    expectTypeOf<ScanKeys>().toEqualTypeOf<'lastBlock' | 'addressCount'>();
   });
 });

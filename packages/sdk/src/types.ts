@@ -26,7 +26,7 @@ export type BatchAttempt = {
   readonly maxFeePerGas: bigint;
   readonly maxPriorityFeePerGas: bigint;
   readonly timestamp: number;
-  readonly outcome: 'confirmed' | 'replaced' | 'reverted' | 'dropped';
+  readonly outcome: BatchAttemptOutcome;
 };
 
 export type BatchResult = {
@@ -102,6 +102,20 @@ export type ContractArtifact = {
   readonly bytecode: Hex;
 };
 
+export type StageStatus = 'running' | 'paused';
+
+export type StageControl = {
+  readonly scan: StageStatus;
+  readonly filter: StageStatus;
+  readonly distribute: StageStatus;
+};
+
+export const DEFAULT_STAGE_CONTROL: StageControl = {
+  scan: 'running',
+  filter: 'running',
+  distribute: 'running',
+};
+
 export type CampaignStatus =
   | 'configuring'
   | 'ready'
@@ -128,12 +142,17 @@ export type CampaignManifest = CampaignConfig & {
   readonly wallets: WalletProvisioning;
   readonly createdAt: number;
   readonly updatedAt: number;
+
+  // Phase 2 additions — all declarative.
+  readonly startBlock: bigint | null;   // null = chain head at creation time
+  readonly endBlock: bigint | null;     // null = follow head forever
+  readonly autoStart: boolean;          // default false
+  readonly control: StageControl;       // default: all 'running'
 };
 
 export type PipelineCursor = {
   readonly scan: {
     readonly lastBlock: bigint;
-    readonly endBlock: bigint | null;
     readonly addressCount: number;
   };
   readonly filter: {
@@ -152,4 +171,54 @@ export type AppSettings = {
     readonly alchemy?: string;
     readonly infura?: string;
   };
+};
+
+export type BatchAttemptOutcome =
+  | 'pending'
+  | 'confirmed'
+  | 'replaced'
+  | 'reverted'
+  | 'dropped';
+
+export type BatchAttemptRecord = {
+  readonly txHash: Hex;
+  readonly nonce: number;
+  readonly maxFeePerGas: string;          // decimal bigint
+  readonly maxPriorityFeePerGas: string;  // decimal bigint
+  readonly broadcastAt: number;
+  readonly outcome: BatchAttemptOutcome;
+  readonly confirmedBlock: string | null; // decimal bigint
+  readonly reason?: string;
+};
+
+export type PipelineHistoryKind =
+  | 'initial'
+  | 'add'
+  | 'replace'
+  | 'external-add'
+  | 'external-replace'
+  | 'revert';
+
+export type PipelineHistoryEntry = {
+  readonly timestamp: number;
+  readonly kind: PipelineHistoryKind;
+  readonly prior: readonly PipelineStep[] | null;
+  readonly next: readonly PipelineStep[];
+  readonly watermarkBefore: number;
+  readonly watermarkAfter: number;
+  readonly qualifiedCountBefore: number;
+  readonly qualifiedCountAfter: number;
+  readonly source: 'ui' | 'external-fs';
+  readonly userChoice?: 'add' | 'replace' | 'revert';
+};
+
+export type LoopId = 'scanner' | 'filter' | 'distributor';
+
+export type LoopErrorEntry = {
+  readonly timestamp: number;
+  readonly loop: LoopId;
+  readonly phase: string;
+  readonly message: string;
+  readonly stack?: string;
+  readonly context?: Record<string, unknown>;
 };

@@ -1,9 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, expectTypeOf } from 'vitest';
 import type {
   WalletRecord,
   BatchRecord,
   SweepRecord,
 } from '../storage/index.js';
+import type {
+  BatchAttemptRecord,
+  PipelineHistoryEntry,
+  LoopErrorEntry,
+} from '../index.js';
 import type { Address, Hex } from 'viem';
 
 describe('WalletRecord', () => {
@@ -45,6 +50,7 @@ describe('BatchRecord', () => {
       recipients: ['0x0000000000000000000000000000000000000001' as Address],
       amounts: ['1000000000000000000'],
       status: 'confirmed',
+      attempts: [],
       confirmedTxHash: '0xabc' as Hex,
       confirmedBlock: '18000000',
       createdAt: Date.now(),
@@ -65,5 +71,65 @@ describe('SweepRecord', () => {
       createdAt: Date.now(),
     };
     expect(record.error).toBeNull();
+  });
+});
+
+describe('BatchAttemptRecord', () => {
+  it('uses string-encoded bigint fields', () => {
+    const r: BatchAttemptRecord = {
+      txHash: '0xabc',
+      nonce: 0,
+      maxFeePerGas: '1000000000',
+      maxPriorityFeePerGas: '500000000',
+      broadcastAt: Date.now(),
+      outcome: 'pending',
+      confirmedBlock: null,
+    };
+    expectTypeOf(r.maxFeePerGas).toEqualTypeOf<string>();
+    expectTypeOf(r.confirmedBlock).toEqualTypeOf<string | null>();
+  });
+
+  it('allows outcome=pending', () => {
+    const r: BatchAttemptRecord = {
+      txHash: '0xabc', nonce: 0,
+      maxFeePerGas: '0', maxPriorityFeePerGas: '0',
+      broadcastAt: 0, outcome: 'pending', confirmedBlock: null,
+    };
+    expect(r.outcome).toBe('pending');
+  });
+});
+
+describe('BatchRecord attempts', () => {
+  it('has attempts array', () => {
+    expectTypeOf<BatchRecord>().toHaveProperty('attempts');
+  });
+});
+
+describe('PipelineHistoryEntry', () => {
+  it('has kind, prior, next, watermark-before/after, qualified-before/after, source', () => {
+    const e: PipelineHistoryEntry = {
+      timestamp: 0,
+      kind: 'initial',
+      prior: null,
+      next: [],
+      watermarkBefore: 0,
+      watermarkAfter: 0,
+      qualifiedCountBefore: 0,
+      qualifiedCountAfter: 0,
+      source: 'ui',
+    };
+    expect(e.kind).toBe('initial');
+  });
+});
+
+describe('LoopErrorEntry', () => {
+  it('captures loop + phase + message + optional context', () => {
+    const e: LoopErrorEntry = {
+      timestamp: 0,
+      loop: 'scanner',
+      phase: 'fetch-block',
+      message: 'boom',
+    };
+    expect(e.loop).toBe('scanner');
   });
 });

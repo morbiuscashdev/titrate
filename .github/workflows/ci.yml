@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [master]
+  push:
+    branches: [master]
+
+# Cancel in-progress runs for the same PR/branch when a new commit lands.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Build · Type-check · Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Enable Corepack (Yarn 4)
+        run: corepack enable
+
+      - name: Cache Yarn (Berry)
+        uses: actions/cache@v4
+        with:
+          path: |
+            .yarn/cache
+            .yarn/install-state.gz
+          key: ${{ runner.os }}-yarn-${{ hashFiles('yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Set up Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: Install dependencies (Yarn)
+        run: yarn install --immutable
+
+      # Build (in workspace-dependency order — SDK first, then storage-*, then
+      # leaf consumers). Each npx tsc emits the package's dist/, which the
+      # next package reads via workspace resolution.
+
+      - name: Build SDK
+        run: cd packages/sdk && npx tsc
+
+      - name: Build storage-campaign
+        run: cd packages/storage-campaign && npx tsc
+
+      - name: Build storage-fs
+        run: cd packages/storage-fs && npx tsc
+
+      - name: Build storage-idb
+        run: cd packages/storage-idb && npx tsc
+
+      - name: Build contracts (Foundry)
+        run: cd packages/contracts && forge build --sizes
+
+      # Type-check (lint proxy). Web + TUI have no emit step beyond their own
+      # bundler, so explicit --noEmit catches drift.
+
+      - name: Type-check web
+        run: cd packages/web && npx tsc --noEmit
+
+      - name: Type-check TUI
+        run: cd packages/tui && npx tsc --noEmit
+
+      # Tests — full regression across every package.
+
+      - name: Run full regression
+        run: yarn test:all

@@ -7,10 +7,23 @@ export type CursorStore = {
   readonly update: (patch: Partial<PipelineCursor>) => Promise<void>;
 };
 
-type CursorOnDisk = {
+// On-disk shape for Phase 2+ writes. scan.endBlock moved to the manifest
+// in Phase 2 Task 2; CursorOnDiskLegacy handles files written before that.
+type CursorOnDiskNew = {
   readonly scan: {
     readonly lastBlock: string;
-    readonly endBlock: string | null;
+    readonly addressCount: number;
+  };
+  readonly filter: { readonly watermark: number; readonly qualifiedCount: number };
+  readonly distribute: { readonly watermark: number; readonly confirmedCount: number };
+};
+
+// Legacy Phase 1 shape. fromDisk() reads this but ignores scan.endBlock,
+// completing the forward migration on first read.
+type CursorOnDiskLegacy = {
+  readonly scan: {
+    readonly lastBlock: string;
+    readonly endBlock?: string | null;
     readonly addressCount: number;
   };
   readonly filter: { readonly watermark: number; readonly qualifiedCount: number };
@@ -18,16 +31,15 @@ type CursorOnDisk = {
 };
 
 const ZERO_CURSOR: PipelineCursor = {
-  scan: { lastBlock: 0n, endBlock: null, addressCount: 0 },
+  scan: { lastBlock: 0n, addressCount: 0 },
   filter: { watermark: 0, qualifiedCount: 0 },
   distribute: { watermark: 0, confirmedCount: 0 },
 };
 
-function toDisk(c: PipelineCursor): CursorOnDisk {
+function toDisk(c: PipelineCursor): CursorOnDiskNew {
   return {
     scan: {
       lastBlock: c.scan.lastBlock.toString(),
-      endBlock: c.scan.endBlock === null ? null : c.scan.endBlock.toString(),
       addressCount: c.scan.addressCount,
     },
     filter: c.filter,
@@ -35,11 +47,10 @@ function toDisk(c: PipelineCursor): CursorOnDisk {
   };
 }
 
-function fromDisk(d: CursorOnDisk): PipelineCursor {
+function fromDisk(d: CursorOnDiskLegacy): PipelineCursor {
   return {
     scan: {
       lastBlock: BigInt(d.scan.lastBlock),
-      endBlock: d.scan.endBlock === null ? null : BigInt(d.scan.endBlock),
       addressCount: d.scan.addressCount,
     },
     filter: d.filter,
@@ -52,7 +63,7 @@ export function createCursorStore(path: string): CursorStore {
     async read() {
       try {
         const raw = await readFile(path, 'utf8');
-        return fromDisk(JSON.parse(raw) as CursorOnDisk);
+        return fromDisk(JSON.parse(raw) as CursorOnDiskLegacy);
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code === 'ENOENT') return ZERO_CURSOR;
         throw err;

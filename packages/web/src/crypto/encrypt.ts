@@ -3,7 +3,13 @@ import { keccak256 } from 'viem';
 export async function deriveEncryptionKey(signature: string): Promise<CryptoKey> {
   const hash = keccak256(signature as `0x${string}`);
   const keyBytes = hexToBytes(hash.slice(2));
-  return crypto.subtle.importKey('raw', keyBytes.buffer as ArrayBuffer, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+  // Pass the Uint8Array directly; its `.buffer` can fail Node 20's native
+  // SubtleCrypto instanceof check when tests run in jsdom (cross-realm
+  // ArrayBuffer). TypedArrays use brand checks that work across realms.
+  // Cast to Uint8Array<ArrayBuffer> because TS 5.7 widens the default to
+  // `Uint8Array<ArrayBufferLike>` which includes SharedArrayBuffer;
+  // hexToBytes allocates a fresh non-shared ArrayBuffer.
+  return crypto.subtle.importKey('raw', keyBytes as Uint8Array<ArrayBuffer>, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
 }
 
 export async function encrypt(plaintext: string, key: CryptoKey): Promise<string> {

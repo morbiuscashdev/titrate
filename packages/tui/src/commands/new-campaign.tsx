@@ -50,6 +50,10 @@ export async function runNewCampaign(name: string, options: NewCampaignOptions):
     wallets: { mode: 'imported', count: 0 },
     createdAt: now,
     updatedAt: now,
+    startBlock: null,
+    endBlock: null,
+    autoStart: false,
+    control: { scan: 'running', filter: 'running', distribute: 'running' },
   };
   await storage.manifest.write(manifest);
 

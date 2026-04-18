@@ -11,8 +11,9 @@ const PLAINTEXT_SETTINGS = new Set(['theme']);
  * - `wallets`: `hotAddress` and `coldAddress` encrypted
  * - `appSettings`: all values encrypted except keys in `PLAINTEXT_SETTINGS` (e.g. "theme")
  *
- * Pass-through stores (no encryption):
- * - `campaigns`, `addressSets`, `addresses`, `batches`, `pipelineConfigs`
+ * Pass-through stores (no encryption — no sensitive data):
+ * - `campaigns`, `addressSets`, `addresses`, `batches`, `pipelineConfigs`,
+ *   `pipelineHistory` (loop lifecycle events), `errors` (loop error log)
  */
 export function createEncryptedStorage(storage: Storage, key: CryptoKey): Storage {
   return {
@@ -21,10 +22,15 @@ export function createEncryptedStorage(storage: Storage, key: CryptoKey): Storag
     addresses: storage.addresses,
     batches: storage.batches,
     pipelineConfigs: storage.pipelineConfigs,
+    pipelineHistory: storage.pipelineHistory,
+    errors: storage.errors,
 
     chainConfigs: createEncryptedChainConfigStore(storage.chainConfigs, key),
     wallets: createEncryptedWalletStore(storage.wallets, key),
     appSettings: createEncryptedAppSettingsStore(storage.appSettings, key),
+
+    ...(storage.acquireLock ? { acquireLock: storage.acquireLock } : {}),
+    ...(storage.releaseLock ? { releaseLock: storage.releaseLock } : {}),
   };
 }
 

@@ -18,10 +18,20 @@ export type {
   ContractArtifact,
   CampaignStatus,
   WalletProvisioning,
+  StageStatus,
+  StageControl,
   CampaignManifest,
   PipelineCursor,
   AppSettings,
+  BatchAttemptOutcome,
+  BatchAttemptRecord,
+  PipelineHistoryKind,
+  PipelineHistoryEntry,
+  LoopId,
+  LoopErrorEntry,
 } from './types.js';
+
+export { DEFAULT_STAGE_CONTROL } from './types.js';
 
 // Chains
 export { SUPPORTED_CHAINS, getChains, getChainConfig, getExplorerApiUrl } from './chains/index.js';
@@ -242,3 +252,9 @@ export type { CacheKey, CacheEntry, CacheStore, CacheConfig, Cache, MemoryCache 
 
 // Signers
 export * from './signers/index.js';
+
+// Pipeline loops
+export * from './pipeline/loops/index.js';
+
+// Batch attempt transform helpers
+export { batchAttemptToRecord, batchAttemptFromRecord } from './utils/batch-attempt.js';

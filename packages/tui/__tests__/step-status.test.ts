@@ -11,6 +11,8 @@ const baseManifest: CampaignManifest = {
   batchSize: 200, campaignId: null, pinnedBlock: null,
   status: 'configuring', wallets: { mode: 'imported', count: 0 },
   createdAt: 1, updatedAt: 1,
+  startBlock: null, endBlock: null, autoStart: false,
+  control: { scan: 'running', filter: 'running', distribute: 'running' },
 };
 
 test('configuring campaign with no activity shows most steps as todo/blocked', () => {
