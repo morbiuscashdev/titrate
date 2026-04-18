@@ -1,11 +1,11 @@
 @import "tailwindcss";
 
-/* Class-based dark variant kept for backwards compat with existing
- * components that use `dark:` utilities and the legacy ThemeProvider
- * that toggles a `.dark` class on <html>. The new brand system uses
- * `data-theme="dark"` for its own surface cascade (see below). Both
- * coexist during the migration. */
-@custom-variant dark (&:where(.dark, .dark *));
+/* `dark:` utility variant — fires on either of the two theme systems:
+ * 1. Legacy `.dark` class on <html> (set by providers/ThemeProvider)
+ * 2. New `data-theme="dark"` attribute (set by theme/useTheme + pre-hydration)
+ * Bridging both here means existing components using `dark:` utilities
+ * keep working regardless of which toggle the user interacts with. */
+@custom-variant dark (&:where(.dark, .dark *, [data-theme="dark"], [data-theme="dark"] *));
 
 /* ---- Brand tokens ---- */
 @theme {
