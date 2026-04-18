@@ -22,6 +22,20 @@ const appSettingsStub: AppSettingsStore = {
   delete: () => Promise.reject(new Error(NOT_IMPLEMENTED)),
 };
 
+// Phase 2 loop stores live in storage-campaign (per-campaign directory),
+// not here. storage-fs is the legacy root-level filesystem adapter; it
+// satisfies the Storage type shape with rejecting stubs so no production
+// path silently falls through to them.
+const pipelineHistoryStub: Storage['pipelineHistory'] = {
+  append: () => Promise.reject(new Error(NOT_IMPLEMENTED)),
+  readAll: () => Promise.reject(new Error(NOT_IMPLEMENTED)),
+};
+
+const errorsStub: Storage['errors'] = {
+  append: () => Promise.reject(new Error(NOT_IMPLEMENTED)),
+  readAll: () => Promise.reject(new Error(NOT_IMPLEMENTED)),
+};
+
 /**
  * Creates a filesystem-backed Storage instance. All data is persisted under
  * the provided `baseDir`. Each store uses its own subdirectory.
@@ -39,5 +53,7 @@ export function createFileStorage(baseDir: string): Storage {
     pipelineConfigs: createPipelineConfigStore(baseDir),
     chainConfigs: chainConfigsStub,
     appSettings: appSettingsStub,
+    pipelineHistory: pipelineHistoryStub,
+    errors: errorsStub,
   };
 }
