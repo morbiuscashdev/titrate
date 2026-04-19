@@ -1,91 +1,70 @@
 # Titrate — Progress Checkpoint
 
-## Date: 2026-04-18 (evening)
+## Date: 2026-04-18 (late evening, post-brand-migrations session)
 
 ## Current state
 
-- **Branch:** `master` · HEAD `167c816` (Merge PR #3 from `feat/brand-theme`)
-- **Open PRs:** none. Both PR #2 (Phase 2) and PR #3 (brand/theme + library + seed migration) merged to master.
-- **Working tree:** clean.
-- **CI:** `.github/workflows/ci.yml` green on master. Corepack-before-cache fix already applied. Full regression under ~2.5 min.
-- **Local Node:** v24 (laptop). CI runs Node 20 via `actions/setup-node@v4`. We've burned in the cross-realm/crypto/TypedArray diffs.
-- **Policy for further migration work:** user has authorized direct-to-master merges for small focused page/component migrations going forward (feedback memory saved).
+- **Branch:** `master` · HEAD `6e6bbce` (Merge PR #12: step-flow AppShell + TimelineRail).
+- **Open PRs:** none. PRs #5–#12 all merged to master in a single session.
+- **Working tree:** clean (only `.remember/tmp/save-session.pid` shows as modified, as always).
+- **CI:** `.github/workflows/ci.yml` green on master across the full PR chain.
+- **Regression:** 1,406 tests across the workspace (unchanged from prior checkpoint — web 665, SDK 541 + 51 skipped, etc.).
+- **Policy in effect:** small focused brand/theme migration PRs merge direct-to-master via quick PR → CI green → squash-merge. `feedback_direct-to-master.md` memory captures scope.
 
-## Shipped on master since last checkpoint
+## Shipped on master this session
 
-### PR #2 — Phase 2 live pipeline (merged `f0be968`)
-- Phase 2a foundation + Phase 2b pure loop algorithms
-- SDK types extended (`StageControl`, `BatchAttemptRecord`, `PipelineHistoryEntry`, `LoopErrorEntry`), `BatchAttempt.outcome` widened to include `pending`, `endBlock` dropped from `PipelineCursor.scan` (now manifest-declarative).
-- storage-campaign: `pipeline-history-store`, `errors-store`, `lock-store` (PID-based stale detection).
-- storage-idb: schema bumped v2→v3, parallel `pipelineHistory` + `errors` stores, `acquireLock` via Web Locks API.
-- `packages/sdk/src/pipeline/loops/`: `createScannerLoop`, `createFilterLoop`, `createDistributorLoop`, `reconcileBatches` (6 edge cases), `EventBus`, `ControlSignal`, `computeDrainStatus`, `selectWallet`, `retroactiveReapply`, `classifyPipelineChange`.
-- Full pipeline + reconciliation-on-restart + retroactive re-apply integration tests.
-- Phase 2c/2d/2e (TUI orchestrator + web GUI parity + Anvil-gated e2e + error surfacing polish) remain as follow-on work.
+All eight PRs follow the same cut-branch → migrate → test → PR → CI → squash-merge rhythm.
 
-### PR #3 — Brand & theme rollout (merged `167c816`)
+### Page migrations (PRs #5, #6, #7)
 
-**Design artifacts:**
-- `docs/superpowers/specs/2026-04-18-brand-theme-design.md` — full brand spec. Five open questions resolved inline.
-- `docs/superpowers/plans/2026-04-18-brand-theme-rollout.md` — 32-task implementation plan with complete code in every step.
+- **PR #5 `f8d79ec` — HomePage chrome.** Wrap campaigns dashboard in `ModeProvider[brutalist]`; swap New Campaign button + archived toggle for `Button` primitives; brand h1 typography. CampaignCard + hover icon actions stayed — they migrated later in PR #8.
+- **PR #6 `7ac14e1` — SettingsPage.** Wrap in `ModeProvider[brutalist]`; swap six form inputs for `Input` primitive (`(optional)` moves to `hint` prop); wrap config form in `Card`; replace Add Chain / Save / Cancel / Delete / Export Campaigns with `Button` primitives; config-list typography moved to brand tokens (`fg-primary`/`fg-muted`/`edge`). Import Campaigns retains `<label>`-wrapping-hidden-input pattern but adopts brutalist tokens. ChainSelector + EncryptedField + lock-warning banner preserved as-is. All 6 existing tests continue to pass.
+- **PR #7 `265d1c5` — CampaignPage mode-aware step host.** CampaignPage is a thin step orchestrator — real migration lives in per-step components + legacy step-flow AppShell. This PR wraps the active step in `<ModeProvider mode={stepMode}>` keyed on `activeStepId`: distribute = operator, all other steps = brutalist. Step components can now branch via `useMode()` as they migrate without each one needing its own provider. Plus: fallback text (`No campaign selected`, `Loading campaign…`) moved to brand tokens.
 
-**Brand decisions locked:**
-- One-liner: **"Titrate — Sovereign airdrop tooling. Sign cold, run local, deploy anywhere."** Replaces the inaccurate "offline-first" framing.
-- Logo: custom SVG titration curve — angular `_/` path (flat low plateau → diagonal rise → flat high plateau) with a hollow equivalence-point circle at the inflection. `viewBox` 170×150, stroke-width 12 path, hollow circle r=22 stroke-8. Large hollow chosen because it survives shrinking to 22px nav scale. TUI falls back to `∫` (U+222B); terminal splash uses the three-line ASCII `_/●` banner.
-- Palette: ink (ops surfaces), cream (brutalist surfaces), `pink-400/500/600/700` (role-split: 500 non-text/mark, 600 text-on-fill + CTA, 400 on-dark, 700 hover). All text pairings pass WCAG AA 1.4.3 + 1.4.11.
-- Typography: IBM Plex Sans + Plex Mono + Plex Serif (Google Fonts).
-- Mode split: TUI = operator-A always, dark-only. Web GUI = brutalist-B for decisions (landing, setup, summaries, settings), operator-A for observation (live pipeline, batch tables, logs, diagnostics) — embedded `OperatorPanel` wraps the latter with a 2px + 4px offset seam inside brutalist chrome.
-- Dark-mode marketing in scope as the "Dark brutalist" surface variant, honors `prefers-color-scheme: dark` + manual toggle via `data-theme` attribute.
-- Motion: 3 durations (80/150/240ms) × 3 easings × 6-primitive catalog + reduced-motion rule that cuts decorative motion while preserving focus, fades, and color transitions.
+### Component migrations (PRs #8, #9, #10, #11, #12)
 
-**Code shipped:**
-- `packages/web/public/mark.svg` (canonical), `mark-tile.svg` (favicon — pink mark in cream tile).
-- `packages/web/src/index.css` — Tailwind v4 `@theme` layer with full token set, `[data-theme="light|dark"]` + `[data-mode="brutalist|operator"]` cascades, motion tokens + keyframes + reduced-motion overrides. Bridges legacy `.dark` class and new `data-theme="dark"` in the `dark:` variant so legacy components keep working alongside the new system.
-- `packages/web/src/theme/` — `set-theme.ts` (pre-hydration), `useTheme.ts` (light/dark toggle with OS sync + localStorage), `useMode.tsx` (ModeProvider context + useMode hook), `index.ts` barrel.
-- `packages/web/index.html` — inline pre-hydration `<script>` sets `data-theme` before React mounts (no FOUC); CSP loosened with `'unsafe-inline'` for that one script; IBM Plex Sans/Mono/Serif linked; favicon swapped to `mark-tile.svg`.
-- `packages/web/src/components/ui/` — 16-primitive brand library: `Mark`, `Wordmark`, `Button`, `BlockCaret`, `Input`, `Textarea`, `Select`, `Checkbox`, `Pill`, `Chip`, `Card`, `StatCard`, `DataTable`, `OperatorPanel`, `AppShell`, `ThemeToggle` + barrel. Every component has a `.test.tsx` alongside. All components are mode-aware via `useMode()` and render different JSX per mode.
-- `packages/tui/src/theme/` — ANSI-256 `colors.ts`, Unicode `symbols.ts` (∫, •, ✓, ✗, ○, ›), ASCII `splash.ts` (three-line `_/●` banner), `index.ts`. Tests live in `packages/tui/__tests__/theme/` per the existing `bunfig.toml` convention.
-- **TUI splash wired**: `packages/tui/src/index.tsx` prints the pink curve + `∫ titrate sovereign airdrop tooling` banner on `--help` / `--version` / no-args. Description updated to the new one-liner.
-- **LandingPage migrated**: full brutalist-B demo using `Wordmark`(hero), three verb `Chip`s, `Card` grid for "how it works" + principles, `Button` primary CTA, `ThemeToggle` in corner.
-- **Header migrated**: brand `Mark` next to "Titrate" wordmark on every non-landing page; new `ThemeToggle` replaces the legacy one.
-- **HashRouter**: `packages/web/src/App.tsx` swapped from `BrowserRouter` to `HashRouter` — app now serves from any subpath (github.io, IPFS, local file URL) without server-side routing rewrites.
+- **PR #8 `cb0c1c0` — CampaignCard.** Swap ad-hoc ring/bg chrome for `Card` primitive (brutalist shadow + edge border). Retype name (font-sans extrabold) + meta row (font-mono fg-muted) + progress label (uppercase mono). Progress track: `edge/40` outer, `pink-500` inner. Brutalist hover press (1px translate + shadow reduction). Stabilize 3 progress-bar tests via `data-progress-bar` attribute (was brittle on `.bg-blue-500` class).
+- **PR #9 `7c6f88b` — WelcomeCard.** Wrap empty-state in `ModeProvider[brutalist]`. Replace StepCards' chrome with `Card` primitive. Retype title/subtitle/step titles/descriptions with brand tokens. Swap blue-circle numbered badges for mono `01`/`02`/`03`/`04` labels in pink-600 (matches LandingPage "How it works" aesthetic). CTA → `Button variant="primary" size="lg"`. All 4 tests preserved.
+- **PR #10 `5a03362` — StatusBadge.** Mode-aware now: brutalist renders filled chip-green/yellow/pink pills with hard 2px edge; operator renders tinted pills with `--color-ok`/`--color-err`/`--color-info` at 10% alpha. Five statuses (pending/active/complete/error/locked) map to semantic tones in both modes. Publishes `data-status` attribute — tests swap from `className.toContain('green')`-style assertions (the color literals no longer exist in the source). Consumers (CampaignCard, BatchStatusCard) pick up new styling automatically — external API unchanged.
+- **PR #11 `861f9ac` — WalletBadge.** Header-embedded widget, visible on every non-landing page. Shell: `bg-card` + `edge/40` border (cascades via `[data-theme]` for light/dark). Address: `font-mono` at `fg-primary`. Chain: uppercase mono caption at `fg-muted`. Connected dot: `--color-ok`. Perry-mode indicator retoned from purple (not in brand palette) to `--color-warn`. Mode-agnostic — Header has no `ModeProvider` wrapping it, and the chosen tokens resolve via theme cascade rather than mode cascade.
+- **PR #12 `6e6bbce` — Step-flow AppShell + TimelineRail.** Legacy step-flow chrome for CampaignPage's sidebar + mobile progress bar. Rail dots adopt the brand's titration-point motif: complete = filled pink-500, active = hollow pink-500 ring with 20%-alpha halo (mirrors brand mark's equivalence-point circle), locked = hollow edge/40 outline. Connector lines: `edge/30`. Step labels: `font-mono` at `fg-primary` with `pink-600` hover. Focus ring uses `--color-info`. Mobile segmented bar: `pink-500` / `pink-500 @60%` / `edge/20`. `data-status` attribute on each dot for stable test selectors.
 
-**Regression as of merge:** 1,406 tests green (sdk 541 + 51 skipped · storage-fs 18 · storage-idb 46 · storage-campaign 48 · web 665 · TUI 39 · contracts 49). `yarn build` clean. `npx tsc --noEmit` clean across web + TUI.
+## Remaining work
 
-### Incidental fixes landed in PR #3 (needed to make fresh-checkout CI work)
+### Component migrations (long tail, still direct-to-master)
 
-- `fix(ci)`: Corepack enable before Yarn cache (setup-node@v4's `cache: yarn` was invoking global Yarn 1.22 which fails against `packageManager: yarn@4.14.0`). Split into separate `corepack enable` + manual `actions/cache@v4` on `.yarn/cache` + `install-state.gz`.
-- `fix(storage-fs)`: implement Phase 2 `Storage` shape (rejecting stubs for `pipelineHistory` + `errors`).
-- `fix(web)`: pass through Phase 2 stores in `createEncryptedStorage` (no encryption needed; no sensitive data in history/errors).
-- `fix(tui)`: add `startBlock`, `endBlock`, `autoStart`, `control` to stale `CampaignManifest` literals in `step-status.test.ts` and `new-campaign.tsx`.
-- `fix(web/crypto)`: pass TypedArray directly to `SubtleCrypto.importKey` — Node 20 in jsdom rejects `.buffer` cross-realm; Node 24 was lenient. Cast to `Uint8Array<ArrayBuffer>`.
-- `fix(web)`: shim `node:fs/promises` + `node:readline` in the Vite alias (Phase 2's `retroactive.ts` uses them; CI's `yarn build` caught the gap that `yarn test` / `yarn typecheck` didn't).
+Authorized-and-policy-approved per `feedback_direct-to-master.md`. Each is its own small PR. Batch further PRs the same way.
 
-## Remaining work (not started)
+- **Step components (7 files)** under `packages/web/src/steps/`: `CampaignStep`, `AddressesStep`, `FiltersStep`, `AmountsStep`, `WalletStep`, `RequirementsStep`, `DistributeStep`. These are the meat of the campaign flow. Thanks to PR #7, each step already sits inside a correctly-moded `ModeProvider` — consumers just need to use `useMode()` + brand primitives. `DistributeStep` is the only one in operator mode.
+- **BatchStatusCard** (uses StatusBadge already migrated; also imports from legacy styling).
+- **BatchTimeline** (step-like vertical timeline, observer-leaning — likely operator).
+- **AddressTable** (table — consider `DataTable` primitive).
+- **PipelineStepEditor** (decision-leaning — brutalist).
+- **InterventionModal** (modal chrome — whole modal pattern could get brutalist treatment).
+- **EncryptedField** (uses own micro-chrome; small touch).
+- **ChainSelector** (presets grid — `Chip`-friendly).
+- **Header** (`components/Header.tsx` — still legacy gray-200/gray-800 chrome; nav bar migration is a good single-PR target).
+- **CampaignCardSkeleton** (match CampaignCard's new chrome).
+- **ErrorBoundary**, **ReloadPrompt**, **ToastProvider** renderers (small polish).
+- ~40 more scattered: `InlineEdit`, `Skeleton`, `TokenSelector`, `AmountInput`, various step-internal widgets.
 
-### Further brand/theme migrations (direct-to-master policy authorized)
-
-Work left to migrate to the new primitive library. Each is a standalone PR-sized unit that should land on master without batching into a big migration PR:
-
-- `packages/web/src/pages/HomePage.tsx` → swap `CampaignCard` grid for `Card`/`DataTable`; adopt `Button` for actions.
-- `packages/web/src/pages/SettingsPage.tsx` → replace ad-hoc inputs with `Input` / `Select` / `Checkbox`.
-- `packages/web/src/pages/CampaignPage.tsx` → wrap batch-table and live-status sections in `OperatorPanel`; migrate tables to the operator variant of `DataTable`.
-- Per-component migrations: `WelcomeCard`, `CampaignCard`, `BatchStatusCard`, `BatchTimeline`, `AddressTable`, `PipelineStepEditor`, `WalletBadge`, `InterventionModal`, etc. (~58 legacy components). Each can migrate as its consuming page gets touched.
-
-### Phase 2c/2d/2e follow-on (separate from brand work)
+### Phase 2 follow-on (separate from brand work)
 
 - **Phase 2c** — TUI `PipelineOrchestrator` wired into the React tree, LIVE dashboard panel, keyboard bindings (space / s / f / d / g / S / e / b / q), viewer-mode for second session.
 - **Phase 2d** — Web GUI orchestrator parity (same loop abstractions, Web Locks API instead of `.pipeline.lock`).
 - **Phase 2e** — Anvil-gated e2e + error-surfacing polish.
 
-### Open deferred items from the brand spec
-
-- Accessibility audit beyond WCAG AA — AAA passes not attempted.
-- Visual regression testing (Chromatic / Percy) — deferred until library has ~15-20 stable components; snapshot tests (Vitest + Testing Library) are what ship now.
-- TUI font fallback for terminals where Plex Mono isn't available and `∫` renders as tofu — not solving preemptively.
-
 ## Session notes
 
-- CI went red five times on PR #2 unwinding staleness-masked bugs; each made the branch actually buildable by anyone, not just this machine. Local `yarn test` passes on stale `dist/`, `yarn build` catches more. Consider adding a `Build web` step to the CI workflow.
-- Subagent-driven-development skill was briefly used for Task 1 of the brand rollout (~6 subagent dispatches). The two-stage review produced a false positive because the plan was prescriptive. Switched to hybrid inline execution for the other 31 tasks, dispatching subagents only when judgement was needed. Ratio felt right.
-- Visual companion server (superpowers:brainstorming) used heavily for the brand brainstorm. Last active session at `.superpowers/brainstorm/27143-1776544216/`.
-- Never committed directly to master during this session — every change went through PR #2 or PR #3. Going forward the user has authorized direct-to-master for small migrations; `feedback_direct-to-master.md` memory captures the policy.
+- Pattern holds: push branch → `gh pr create` → `gh run watch` → `gh pr merge --squash --delete-branch`. `gh pr merge` post-merge pull fails on the session-pid dirty file every time; stash / pull / drop is the stock recipe. Reproducible enough it could be scripted.
+- One transient vitest flake during PR #12 (ran 96 s vs normal 12 s — resource contention). Clean on rerun. Kept a note in the PR body; not worth gating work on.
+- CI annotations still warn about Node 20 actions being deprecated Sep 2026. Not urgent.
+- Eight PRs merged in one session with consistent discipline: every PR has a test plan, typecheck, regression, build. None of the 665 web tests broke. The pattern that made this possible was normalizing brittle class-string assertions to `data-*` attributes in two places (`CampaignCard`, `StatusBadge`) — future token changes won't need test updates.
+
+## What to do next session
+
+Pick any bullet from "Component migrations (long tail)" and follow the same rhythm. Suggested order:
+1. **Step components** — biggest visual surface, `ModeProvider` already wired per-step via PR #7.
+2. **Header migration** — same everywhere, visible on every page.
+3. **BatchStatusCard / BatchTimeline / AddressTable** — distribution-view polish.
+4. The rest as they come up in consuming pages.
