@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { union, intersect, difference, symmetricDifference } from '@titrate/sdk';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
+import { Button, Card, Select } from './ui';
 import type { Address } from 'viem';
 
 type SetInfo = {
@@ -18,6 +19,10 @@ const OPERATION_LABELS: Record<Operation, string> = {
   difference: 'Difference (A - B)',
   symmetricDifference: 'Symmetric Diff (A \u25B3 B)',
 };
+
+const TOGGLE_BASE = 'rounded-none border-2 px-3 py-1.5 font-mono text-xs font-bold uppercase tracking-[0.12em] transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[1px] focus-visible:outline-[color:var(--color-info)]';
+const TOGGLE_ACTIVE = 'bg-[color:var(--color-pink-500)] text-white border-[color:var(--color-pink-500)]';
+const TOGGLE_INACTIVE = 'bg-[color:var(--bg-card)] text-[color:var(--fg-muted)] border-[color:var(--edge)] hover:text-[color:var(--fg-primary)]';
 
 /**
  * Panel for combining address sets using set operations.
@@ -38,7 +43,6 @@ export function SetOperationsPanel() {
     readonly errorMessage: string | null;
   }>({ status: 'idle', count: 0, errorMessage: null });
 
-  // Load available sets
   useEffect(() => {
     if (!storage || !activeCampaign) return;
     void (async () => {
@@ -77,7 +81,6 @@ export function SetOperationsPanel() {
           break;
       }
 
-      // Save as a new derived set
       if (resultAddresses.length > 0 && activeCampaign) {
         const setId = crypto.randomUUID();
         const nameA = sets.find((s) => s.id === setA)?.name ?? 'A';
@@ -98,7 +101,6 @@ export function SetOperationsPanel() {
           })),
         );
 
-        // Refresh sets list
         const updatedSets = await storage.addressSets.getByCampaign(activeCampaign.id);
         setSets(updatedSets.map((s) => ({ id: s.id, name: s.name, addressCount: s.addressCount })));
       }
@@ -115,85 +117,68 @@ export function SetOperationsPanel() {
 
   if (sets.length < 2) return null;
 
+  const setOptions = [
+    { value: '', label: 'Select...' },
+    ...sets.map((s) => ({ value: s.id, label: `${s.name} (${s.addressCount})` })),
+  ];
+
   return (
-    <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800 space-y-4">
-      <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Set Operations</h3>
+    <Card className="space-y-4">
+      <h3 className="font-sans text-sm font-extrabold tracking-tight text-[color:var(--fg-primary)]">Set Operations</h3>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Set A */}
-        <div>
-          <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">Set A</label>
-          <select
-            value={setA ?? ''}
-            onChange={(e) => setSetA(e.target.value || null)}
-            aria-label="Select address set A"
-            className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none"
-          >
-            <option value="">Select...</option>
-            {sets.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} ({s.addressCount})
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* Set B */}
-        <div>
-          <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">Set B</label>
-          <select
-            value={setB ?? ''}
-            onChange={(e) => setSetB(e.target.value || null)}
-            aria-label="Select address set B"
-            className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none"
-          >
-            <option value="">Select...</option>
-            {sets.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name} ({s.addressCount})
-              </option>
-            ))}
-          </select>
-        </div>
+        <Select
+          label="Set A"
+          aria-label="Select address set A"
+          value={setA ?? ''}
+          onChange={(e) => setSetA(e.target.value || null)}
+          options={setOptions}
+        />
+        <Select
+          label="Set B"
+          aria-label="Select address set B"
+          value={setB ?? ''}
+          onChange={(e) => setSetB(e.target.value || null)}
+          options={setOptions}
+        />
       </div>
 
       {/* Operation selector */}
       <div className="flex flex-wrap gap-2">
-        {(Object.keys(OPERATION_LABELS) as Operation[]).map((op) => (
-          <button
-            key={op}
-            type="button"
-            onClick={() => setOperation(op)}
-            className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 ${
-              operation === op
-                ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30'
-                : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-700'
-            }`}
-          >
-            {OPERATION_LABELS[op]}
-          </button>
-        ))}
+        {(Object.keys(OPERATION_LABELS) as Operation[]).map((op) => {
+          const active = operation === op;
+          return (
+            <button
+              key={op}
+              type="button"
+              onClick={() => setOperation(op)}
+              aria-pressed={active}
+              className={`${TOGGLE_BASE} ${active ? TOGGLE_ACTIVE : TOGGLE_INACTIVE}`}
+            >
+              {OPERATION_LABELS[op]}
+            </button>
+          );
+        })}
       </div>
 
       {/* Execute */}
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
+      <div className="flex items-center gap-3 flex-wrap">
+        <Button
+          variant="primary"
           onClick={handleCompute}
           disabled={!setA || !setB || result.status === 'computing'}
-          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
         >
           {result.status === 'computing' ? 'Computing...' : 'Apply'}
-        </button>
+        </Button>
         {result.status === 'done' && (
-          <span className="text-sm text-green-600 dark:text-green-400">
+          <span className="font-mono text-sm text-[color:var(--color-ok)]">
             {result.count.toLocaleString()} addresses in result
           </span>
         )}
         {result.status === 'error' && (
-          <span className="text-sm text-red-400">{result.errorMessage}</span>
+          <span className="font-mono text-sm text-[color:var(--color-err)]">{result.errorMessage}</span>
         )}
       </div>
-    </div>
+    </Card>
   );
 }
