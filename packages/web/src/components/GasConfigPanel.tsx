@@ -44,7 +44,14 @@ export function percentToFeeBumpWad(percent: string): bigint {
 const SPEED_OPTIONS = ['slow', 'medium', 'fast'] as const;
 
 const INPUT_CLASS =
-  'bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm w-full focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500';
+  'w-full rounded-md bg-[color:var(--color-ink-900)] text-[color:var(--color-ink-100)] border border-[color:var(--color-ink-700)] font-mono px-3 py-1.5 text-sm focus:outline-none focus:shadow-[0_0_0_3px_var(--color-pink-500)] placeholder:text-[color:var(--color-ink-500)]';
+
+const SMALL_LABEL = 'block font-mono text-[11px] uppercase tracking-[0.1em] text-[color:var(--color-ink-500)] mb-1.5';
+const SECTION_HEADING = 'font-mono text-sm font-semibold text-[color:var(--color-ink-100)]';
+
+const SPEED_BASE = 'flex-1 rounded-md px-3 py-1.5 font-mono text-sm text-center transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[1px] focus-visible:outline-[color:var(--color-info)]';
+const SPEED_ACTIVE = 'bg-[color:var(--color-pink-600)] text-white';
+const SPEED_INACTIVE = 'bg-[color:var(--color-ink-800)] text-[color:var(--color-ink-100)] border border-[color:var(--color-ink-700)] hover:border-[color:var(--color-ink-500)]';
 
 /**
  * Collapsible advanced gas settings panel for the distribution step.
@@ -92,16 +99,16 @@ export function GasConfigPanel({ config, onChange }: GasConfigPanelProps) {
   );
 
   return (
-    <div className="rounded-lg ring-1 ring-gray-200 dark:ring-gray-800 overflow-hidden">
+    <div className="rounded-lg border border-[color:var(--color-ink-800)] overflow-hidden">
       <button
         type="button"
         onClick={toggle}
         aria-expanded={isOpen}
-        className="flex w-full items-center justify-between px-4 py-3 text-sm font-medium text-gray-900 dark:text-white bg-gray-50 dark:bg-gray-900 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+        className="flex w-full items-center justify-between px-4 py-3 font-mono text-sm font-semibold text-[color:var(--color-ink-100)] bg-[color:var(--color-ink-900)] hover:bg-[color:var(--color-ink-800)] transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[1px] focus-visible:outline-[color:var(--color-info)]"
       >
         <span>Advanced Gas Settings</span>
         <svg
-          className={`h-4 w-4 text-gray-500 dark:text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`}
+          className={`h-4 w-4 text-[color:var(--color-ink-500)] transition-transform ${isOpen ? 'rotate-180' : ''}`}
           fill="none"
           viewBox="0 0 24 24"
           strokeWidth={2}
@@ -112,62 +119,60 @@ export function GasConfigPanel({ config, onChange }: GasConfigPanelProps) {
       </button>
 
       {isOpen && (
-        <div className="border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 p-4 space-y-5">
+        <div className="border-t border-[color:var(--color-ink-800)] bg-[color:var(--color-ink-900)]/60 p-4 space-y-5">
           {/* Gas Speed */}
           <fieldset className="space-y-3">
-            <legend className="text-sm font-medium text-gray-900 dark:text-white">Gas Speed</legend>
+            <legend className={SECTION_HEADING}>Gas Speed</legend>
 
             <div className="space-y-2">
-              <label className="text-xs text-gray-500 dark:text-gray-400">Headroom</label>
+              <label className={SMALL_LABEL}>Headroom</label>
               <div className="flex gap-2" role="radiogroup" aria-label="Headroom speed">
-                {SPEED_OPTIONS.map((speed) => (
-                  <button
-                    key={`headroom-${speed}`}
-                    type="button"
-                    role="radio"
-                    aria-checked={config.headroom === speed}
-                    onClick={() => updateField('headroom', speed)}
-                    className={`flex-1 rounded-lg px-3 py-1.5 text-sm text-center transition-colors ring-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                      config.headroom === speed
-                        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-500/30'
-                        : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-300 ring-gray-200 dark:ring-gray-700 hover:ring-gray-300 dark:hover:ring-gray-600'
-                    }`}
-                  >
-                    {speed}
-                  </button>
-                ))}
+                {SPEED_OPTIONS.map((speed) => {
+                  const active = config.headroom === speed;
+                  return (
+                    <button
+                      key={`headroom-${speed}`}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => updateField('headroom', speed)}
+                      className={`${SPEED_BASE} ${active ? SPEED_ACTIVE : SPEED_INACTIVE}`}
+                    >
+                      {speed}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
             <div className="space-y-2">
-              <label className="text-xs text-gray-500 dark:text-gray-400">Priority</label>
+              <label className={SMALL_LABEL}>Priority</label>
               <div className="flex gap-2" role="radiogroup" aria-label="Priority speed">
-                {SPEED_OPTIONS.map((speed) => (
-                  <button
-                    key={`priority-${speed}`}
-                    type="button"
-                    role="radio"
-                    aria-checked={config.priority === speed}
-                    onClick={() => updateField('priority', speed)}
-                    className={`flex-1 rounded-lg px-3 py-1.5 text-sm text-center transition-colors ring-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                      config.priority === speed
-                        ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 ring-blue-500/30'
-                        : 'bg-gray-50 dark:bg-gray-900 text-gray-600 dark:text-gray-300 ring-gray-200 dark:ring-gray-700 hover:ring-gray-300 dark:hover:ring-gray-600'
-                    }`}
-                  >
-                    {speed}
-                  </button>
-                ))}
+                {SPEED_OPTIONS.map((speed) => {
+                  const active = config.priority === speed;
+                  return (
+                    <button
+                      key={`priority-${speed}`}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => updateField('priority', speed)}
+                      className={`${SPEED_BASE} ${active ? SPEED_ACTIVE : SPEED_INACTIVE}`}
+                    >
+                      {speed}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </fieldset>
 
           {/* Fee Caps */}
           <div className="space-y-3">
-            <h4 className="text-sm font-medium text-gray-900 dark:text-white">Fee Caps</h4>
+            <h4 className={SECTION_HEADING}>Fee Caps</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label htmlFor="max-base-fee" className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">
+                <label htmlFor="max-base-fee" className={SMALL_LABEL}>
                   Max Base Fee
                 </label>
                 <div className="relative">
@@ -180,13 +185,13 @@ export function GasConfigPanel({ config, onChange }: GasConfigPanelProps) {
                     onChange={handleTextChange('maxBaseFeeGwei')}
                     className={`${INPUT_CLASS} pr-14`}
                   />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-gray-500 pointer-events-none">
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-xs text-[color:var(--color-ink-500)] pointer-events-none">
                     gwei
                   </span>
                 </div>
               </div>
               <div>
-                <label htmlFor="max-priority-fee" className="text-xs text-gray-500 dark:text-gray-400 mb-1 block">
+                <label htmlFor="max-priority-fee" className={SMALL_LABEL}>
                   Max Priority Fee
                 </label>
                 <div className="relative">
@@ -199,7 +204,7 @@ export function GasConfigPanel({ config, onChange }: GasConfigPanelProps) {
                     onChange={handleTextChange('maxPriorityFeeGwei')}
                     className={`${INPUT_CLASS} pr-14`}
                   />
-                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-gray-500 pointer-events-none">
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-xs text-[color:var(--color-ink-500)] pointer-events-none">
                     gwei
                   </span>
                 </div>
@@ -209,7 +214,7 @@ export function GasConfigPanel({ config, onChange }: GasConfigPanelProps) {
 
           {/* Cost Limit */}
           <div className="space-y-2">
-            <label htmlFor="max-total-gas-cost" className="text-sm font-medium text-gray-900 dark:text-white block">
+            <label htmlFor="max-total-gas-cost" className={SECTION_HEADING + ' block'}>
               Cost Limit
             </label>
             <div className="relative">
@@ -222,7 +227,7 @@ export function GasConfigPanel({ config, onChange }: GasConfigPanelProps) {
                 onChange={handleTextChange('maxTotalGasCostEth')}
                 className={`${INPUT_CLASS} pr-12`}
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-gray-500 pointer-events-none">
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-xs text-[color:var(--color-ink-500)] pointer-events-none">
                 ETH
               </span>
             </div>
@@ -230,7 +235,7 @@ export function GasConfigPanel({ config, onChange }: GasConfigPanelProps) {
 
           {/* Fee Bump */}
           <div className="space-y-2">
-            <label htmlFor="fee-bump-percent" className="text-sm font-medium text-gray-900 dark:text-white block">
+            <label htmlFor="fee-bump-percent" className={SECTION_HEADING + ' block'}>
               Fee Bump
             </label>
             <div className="relative">
@@ -243,18 +248,18 @@ export function GasConfigPanel({ config, onChange }: GasConfigPanelProps) {
                 onChange={handleTextChange('feeBumpPercent')}
                 className={`${INPUT_CLASS} pr-8`}
               />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 dark:text-gray-500 pointer-events-none">
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 font-mono text-xs text-[color:var(--color-ink-500)] pointer-events-none">
                 %
               </span>
             </div>
-            <p className="text-xs text-gray-500 dark:text-gray-400">
+            <p className="font-mono text-xs text-[color:var(--color-ink-500)]">
               Percentage increase applied when replacing a stuck transaction.
             </p>
           </div>
 
           {/* Pipelining */}
           <div className="space-y-2">
-            <label htmlFor="nonce-window" className="text-sm font-medium text-gray-900 dark:text-white block">
+            <label htmlFor="nonce-window" className={SECTION_HEADING + ' block'}>
               Pipelining
             </label>
             <input
@@ -266,7 +271,7 @@ export function GasConfigPanel({ config, onChange }: GasConfigPanelProps) {
               onChange={handleNonceWindowChange}
               className={`${INPUT_CLASS} max-w-24`}
             />
-            <p className="text-xs text-gray-500 dark:text-gray-400">
+            <p className="font-mono text-xs text-[color:var(--color-ink-500)]">
               Submit N batches before waiting for confirmation.
             </p>
           </div>
@@ -279,16 +284,17 @@ export function GasConfigPanel({ config, onChange }: GasConfigPanelProps) {
                 type="checkbox"
                 checked={config.enableRevalidation}
                 onChange={(e) => updateField('enableRevalidation', e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 text-blue-600 focus:ring-blue-500"
+                style={{ accentColor: 'var(--color-pink-500)' }}
+                className="h-4 w-4"
               />
-              <label htmlFor="enable-revalidation" className="text-sm font-medium text-gray-900 dark:text-white">
+              <label htmlFor="enable-revalidation" className={SECTION_HEADING}>
                 Revalidation
               </label>
             </div>
 
             {config.enableRevalidation && (
               <div className="ml-7 space-y-2">
-                <label htmlFor="invalid-threshold" className="text-xs text-gray-500 dark:text-gray-400 block">
+                <label htmlFor="invalid-threshold" className={SMALL_LABEL}>
                   Invalid threshold
                 </label>
                 <input
@@ -299,7 +305,7 @@ export function GasConfigPanel({ config, onChange }: GasConfigPanelProps) {
                   onChange={handleInvalidThresholdChange}
                   className={`${INPUT_CLASS} max-w-24`}
                 />
-                <p className="text-xs text-gray-500 dark:text-gray-400">
+                <p className="font-mono text-xs text-[color:var(--color-ink-500)]">
                   Re-check pending batches and replace if addresses become invalid.
                 </p>
               </div>
