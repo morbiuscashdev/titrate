@@ -1,70 +1,74 @@
 # Titrate — Progress Checkpoint
 
-## Date: 2026-04-18 (late evening, post-brand-migrations session)
+## Date: 2026-04-19 (morning, post-widget-batch session)
 
 ## Current state
 
-- **Branch:** `master` · HEAD `6e6bbce` (Merge PR #12: step-flow AppShell + TimelineRail).
-- **Open PRs:** none. PRs #5–#12 all merged to master in a single session.
+- **Branch:** `master` · HEAD `3b528d8` (direct-merged small-widgets batch).
+- **Open PRs:** none. PRs #14–#26 all merged to master; small-widgets batch (post-#26) direct-merged per explicit user instruction.
 - **Working tree:** clean (only `.remember/tmp/save-session.pid` shows as modified, as always).
-- **CI:** `.github/workflows/ci.yml` green on master across the full PR chain.
-- **Regression:** 1,406 tests across the workspace (unchanged from prior checkpoint — web 665, SDK 541 + 51 skipped, etc.).
-- **Policy in effect:** small focused brand/theme migration PRs merge direct-to-master via quick PR → CI green → squash-merge. `feedback_direct-to-master.md` memory captures scope.
+- **CI:** `.github/workflows/ci.yml` green on master through the entire PR chain.
+- **Regression:** 665 web tests, all green across every commit in this session.
+- **Policy in effect:** small focused brand/theme migration PRs per `feedback_direct-to-master.md`. The final small-widgets batch was direct-merged locally at user request ("just merge onto master").
 
-## Shipped on master this session
+## Shipped this session (2026-04-18 → 2026-04-19)
 
-All eight PRs follow the same cut-branch → migrate → test → PR → CI → squash-merge rhythm.
+Session ran from the prior checkpoint at `89df94d` to `3b528d8`. 13 PRs merged (#14–#26) plus one direct-merged batch.
 
-### Page migrations (PRs #5, #6, #7)
+### Chrome / shared
 
-- **PR #5 `f8d79ec` — HomePage chrome.** Wrap campaigns dashboard in `ModeProvider[brutalist]`; swap New Campaign button + archived toggle for `Button` primitives; brand h1 typography. CampaignCard + hover icon actions stayed — they migrated later in PR #8.
-- **PR #6 `7ac14e1` — SettingsPage.** Wrap in `ModeProvider[brutalist]`; swap six form inputs for `Input` primitive (`(optional)` moves to `hint` prop); wrap config form in `Card`; replace Add Chain / Save / Cancel / Delete / Export Campaigns with `Button` primitives; config-list typography moved to brand tokens (`fg-primary`/`fg-muted`/`edge`). Import Campaigns retains `<label>`-wrapping-hidden-input pattern but adopts brutalist tokens. ChainSelector + EncryptedField + lock-warning banner preserved as-is. All 6 existing tests continue to pass.
-- **PR #7 `265d1c5` — CampaignPage mode-aware step host.** CampaignPage is a thin step orchestrator — real migration lives in per-step components + legacy step-flow AppShell. This PR wraps the active step in `<ModeProvider mode={stepMode}>` keyed on `activeStepId`: distribute = operator, all other steps = brutalist. Step components can now branch via `useMode()` as they migrate without each one needing its own provider. Plus: fallback text (`No campaign selected`, `Loading campaign…`) moved to brand tokens.
+- **PR #14 `b1d5e20` — Header.** Legacy gray-200/800 nav chrome → brand theme-cascade tokens (`--edge`, `--bg-page`, `--fg-*`, `--color-pink-600`, `--color-info`). 2px hard edge border. Mode-agnostic (lives outside any `ModeProvider`).
+- **PR #15 `eda128d` — StepPanel.** Shared panel for all 7 step screens. Title `font-extrabold tracking-tight` at `--fg-primary`; description `font-mono` at `--fg-muted`. Theme-cascade-only so it renders in both brutalist and operator steps.
 
-### Component migrations (PRs #8, #9, #10, #11, #12)
+### Step flow (all 7 steps)
 
-- **PR #8 `cb0c1c0` — CampaignCard.** Swap ad-hoc ring/bg chrome for `Card` primitive (brutalist shadow + edge border). Retype name (font-sans extrabold) + meta row (font-mono fg-muted) + progress label (uppercase mono). Progress track: `edge/40` outer, `pink-500` inner. Brutalist hover press (1px translate + shadow reduction). Stabilize 3 progress-bar tests via `data-progress-bar` attribute (was brittle on `.bg-blue-500` class).
-- **PR #9 `7c6f88b` — WelcomeCard.** Wrap empty-state in `ModeProvider[brutalist]`. Replace StepCards' chrome with `Card` primitive. Retype title/subtitle/step titles/descriptions with brand tokens. Swap blue-circle numbered badges for mono `01`/`02`/`03`/`04` labels in pink-600 (matches LandingPage "How it works" aesthetic). CTA → `Button variant="primary" size="lg"`. All 4 tests preserved.
-- **PR #10 `5a03362` — StatusBadge.** Mode-aware now: brutalist renders filled chip-green/yellow/pink pills with hard 2px edge; operator renders tinted pills with `--color-ok`/`--color-err`/`--color-info` at 10% alpha. Five statuses (pending/active/complete/error/locked) map to semantic tones in both modes. Publishes `data-status` attribute — tests swap from `className.toContain('green')`-style assertions (the color literals no longer exist in the source). Consumers (CampaignCard, BatchStatusCard) pick up new styling automatically — external API unchanged.
-- **PR #11 `861f9ac` — WalletBadge.** Header-embedded widget, visible on every non-landing page. Shell: `bg-card` + `edge/40` border (cascades via `[data-theme]` for light/dark). Address: `font-mono` at `fg-primary`. Chain: uppercase mono caption at `fg-muted`. Connected dot: `--color-ok`. Perry-mode indicator retoned from purple (not in brand palette) to `--color-warn`. Mode-agnostic — Header has no `ModeProvider` wrapping it, and the chosen tokens resolve via theme cascade rather than mode cascade.
-- **PR #12 `6e6bbce` — Step-flow AppShell + TimelineRail.** Legacy step-flow chrome for CampaignPage's sidebar + mobile progress bar. Rail dots adopt the brand's titration-point motif: complete = filled pink-500, active = hollow pink-500 ring with 20%-alpha halo (mirrors brand mark's equivalence-point circle), locked = hollow edge/40 outline. Connector lines: `edge/30`. Step labels: `font-mono` at `fg-primary` with `pink-600` hover. Focus ring uses `--color-info`. Mobile segmented bar: `pink-500` / `pink-500 @60%` / `edge/20`. `data-status` attribute on each dot for stable test selectors.
+- **PR #16 `39310d0` — CampaignStep + ChainSelector.** 10+ ad-hoc `<input>` → `<Input>` primitive. Category pills + Simple/Full toggle → brand `TOGGLE_BASE`/`TOGGLE_ACTIVE`/`TOGGLE_INACTIVE` with `aria-pressed`. Token preview → `<Card>`. Save & Continue → `<Button>`. ChainSelector adopts same toggle pattern. Test stabilization: 4 `ring-blue` className assertions → `aria-pressed`.
+- **PR #17 `316b8bd` — AmountsStep + AmountConfig.** Internal Toggle subcomponent brutalist 2-option pill. Uniform-amount input → `<Input>`. Total display → `<Card>`. Save & Continue → `<Button variant=primary>`. Format-conflict warning → `--color-warn/10` + border.
+- **PR #18 `9ce34e0` — RequirementsStep + RequirementsPanel.** Outer panel → `<Card>` (operator variant). Status banner tones to `--color-ok`/`--color-err`. Token Allowance → `<Card>`. Perry-mode box → `--color-info/10`. Continue → `<Button variant=primary>`.
+- **PR #19 `53966e2` — WalletStep.** SECTION_LABEL idiom for "Perry Mode" heading. Derive CTA: legacy purple-700 → `<Button variant=primary>` (brand pink, consistent with all step CTAs). Per-wallet cards → `<Card>`. Fund Gas/Tokens links: pink-600 + dotted underline. Perry info banner → `--color-info/10`.
+- **PR #20 `d31573e` — FiltersStep.** Per-filter row containers → `<Card>`. Filter-summary info panel → `--color-info/10`. Preview CTA → `<Button>`. Survivor count → `--color-ok`. Per-filter breakdown → `<Card>`. Shipped parallel with #19.
+- **PR #21 `87fd4b0` — AddressesStep.** CSV drop zone: brutalist 2px dashed + `data-drag-over` attribute (stabilized 2 brittle `bg-blue-500/5` class assertions). Manual Entry → `<Textarea>` primitive. Block Scan/Explorer Scan toggle → brand pattern. On-chain params → `<Card>`. Preview container → `<Card>`.
+- **PR #22 `78fe2b5` — DistributeStep (OPERATOR).** 320-line render JSX migrates to the brand's operator palette (ink-* scale, 1px borders, rounded-md). Distribution Plan → `<Card>` + mono tabular rows. Operator Method Selector toggle → 4-option aria-pressed pattern. Clamp warning + Resume prompt → `--color-warn/10`. Distributing status → `--color-info/10` throughput row. Deploy → `<Button secondary>`; Start → `<Button primary>`. Sweep panel → `<Card>` + `<Input>`. Intervention Journal → `<Card>`.
+
+### DistributeStep child widgets
+
+- **PR #23 `7b8b8cf` — BatchTimeline + BatchStatusCard + SpendSummary.** "No batches yet" placeholder → mono/fg-muted. BatchStatusCard → `<Card>`, tx hash link → pink-400 dotted underline. SpendSummary Stat tile → `<Card>`, failed-batches callout → `--color-err/10`.
+- **PR #24 `48f0e83` — InterventionControls.** `<Card>` chrome. Heading → font-extrabold tracking-tight. Checkbox `accent-color: var(--color-pink-500)` via CSS (native checkbox picks up brand). Shipped parallel with #23.
+- **PR #25 `382f58f` — PipelineStepEditor + SetOperationsPanel.** ParamField removed in favor of `<Input>`. Source/filter type toggle → brand TOGGLE pattern. SetOperationsPanel → `<Card>` + `<Select>` primitive for Set A/B dropdowns. Shipped parallel with #23/#24.
+- **PR #26 `a2e291f` — GasConfigPanel (OPERATOR).** 312-line panel → brand operator palette. Disclosure header `bg-ink-900` mono semibold. Speed toggles (radiogroup role preserved): pink-600 active, ink-800 inactive. INPUT_CLASS constant for shared chrome. Revalidation checkbox uses pink accent.
+
+### Small widgets (direct-merged, no PR)
+
+- **`3b528d8` — Skeleton + CampaignCardSkeleton + ReloadPrompt + InlineEdit + EncryptedField + ErrorBoundary + AddressTable.** Batch of 7 small files + 3 test stabilizations. Skeleton `bg-gray-800` → `--edge/30`. ReloadPrompt banner → brutalist shell with `<Button>`. InlineEdit focus border → `--color-pink-500`. EncryptedField/ErrorBoundary/AddressTable to brand tokens + `<Button>` primitives. AddressTable conflict row: `bg-red-900/20` → `--color-err/10` + `data-conflict` attribute for stable test selectors.
 
 ## Remaining work
 
-### Component migrations (long tail, still direct-to-master)
+### Component migrations (long tail, still direct-to-master per policy)
 
-Authorized-and-policy-approved per `feedback_direct-to-master.md`. Each is its own small PR. Batch further PRs the same way.
-
-- **Step components (7 files)** under `packages/web/src/steps/`: `CampaignStep`, `AddressesStep`, `FiltersStep`, `AmountsStep`, `WalletStep`, `RequirementsStep`, `DistributeStep`. These are the meat of the campaign flow. Thanks to PR #7, each step already sits inside a correctly-moded `ModeProvider` — consumers just need to use `useMode()` + brand primitives. `DistributeStep` is the only one in operator mode.
-- **BatchStatusCard** (uses StatusBadge already migrated; also imports from legacy styling).
-- **BatchTimeline** (step-like vertical timeline, observer-leaning — likely operator).
-- **AddressTable** (table — consider `DataTable` primitive).
-- **PipelineStepEditor** (decision-leaning — brutalist).
-- **InterventionModal** (modal chrome — whole modal pattern could get brutalist treatment).
-- **EncryptedField** (uses own micro-chrome; small touch).
-- **ChainSelector** (presets grid — `Chip`-friendly).
-- **Header** (`components/Header.tsx` — still legacy gray-200/gray-800 chrome; nav bar migration is a good single-PR target).
-- **CampaignCardSkeleton** (match CampaignCard's new chrome).
-- **ErrorBoundary**, **ReloadPrompt**, **ToastProvider** renderers (small polish).
-- ~40 more scattered: `InlineEdit`, `Skeleton`, `TokenSelector`, `AmountInput`, various step-internal widgets.
+- **InterventionModal** (360 lines) — modal chrome, the biggest remaining single-file migration.
+- **GasConfigPanel subcomponents** — already done in PR #26, but the Input primitive may later absorb the custom gwei/ETH/% suffix pattern if we add a `suffix` prop.
+- **Toast renderer** inside `ToastProvider` — toast bubble chrome still legacy.
+- **ContractAddressLink** — inline in `DistributeStep.tsx`, still uses legacy `blue-600`. Small follow-up.
+- **Step-internal widgets** scattered across the 7 step components (TokenSelector, AmountInput, etc.) — most have been covered by the step-wide migrations already; audit for stragglers.
 
 ### Phase 2 follow-on (separate from brand work)
 
-- **Phase 2c** — TUI `PipelineOrchestrator` wired into the React tree, LIVE dashboard panel, keyboard bindings (space / s / f / d / g / S / e / b / q), viewer-mode for second session.
+- **Phase 2c** — TUI `PipelineOrchestrator` wired into the React tree, LIVE dashboard panel, keyboard bindings, viewer-mode for second session.
 - **Phase 2d** — Web GUI orchestrator parity (same loop abstractions, Web Locks API instead of `.pipeline.lock`).
 - **Phase 2e** — Anvil-gated e2e + error-surfacing polish.
 
 ## Session notes
 
-- Pattern holds: push branch → `gh pr create` → `gh run watch` → `gh pr merge --squash --delete-branch`. `gh pr merge` post-merge pull fails on the session-pid dirty file every time; stash / pull / drop is the stock recipe. Reproducible enough it could be scripted.
-- One transient vitest flake during PR #12 (ran 96 s vs normal 12 s — resource contention). Clean on rerun. Kept a note in the PR body; not worth gating work on.
-- CI annotations still warn about Node 20 actions being deprecated Sep 2026. Not urgent.
-- Eight PRs merged in one session with consistent discipline: every PR has a test plan, typecheck, regression, build. None of the 665 web tests broke. The pattern that made this possible was normalizing brittle class-string assertions to `data-*` attributes in two places (`CampaignCard`, `StatusBadge`) — future token changes won't need test updates.
+- **Pattern holds for direct-to-master PRs:** cut branch → push → `gh pr create` → `gh run watch` → `gh pr merge --squash --delete-branch`. Post-merge `git pull --rebase` fails every time on the dirty `.remember/tmp/save-session.pid` file; stash / pull / drop is the standard recipe.
+- **Parallel-ship pattern worked:** #19+#20 and #23+#24+#25+#26 were shipped in parallel when they touched different files. GitHub merged them sequentially without conflict.
+- **gh auth account drift:** `gh auth switch -u morbiuscashdev` needed before each `gh pr merge` when the active account reverted to `provexdev`. Worth scripting.
+- **1Password SSH signer flaked twice** (DistributeStep commit + small-widgets commit). Required user-side unlock. Not deterministic.
+- **Stabilization via `data-*` attributes:** CampaignStep (`aria-pressed`), AddressesStep (`data-drag-over`), AddressTable (`data-conflict`), RequirementsPanel (`data-status`), Skeleton (token-name check). Future token renames won't need test updates in these files.
 
 ## What to do next session
 
 Pick any bullet from "Component migrations (long tail)" and follow the same rhythm. Suggested order:
-1. **Step components** — biggest visual surface, `ModeProvider` already wired per-step via PR #7.
-2. **Header migration** — same everywhere, visible on every page.
-3. **BatchStatusCard / BatchTimeline / AddressTable** — distribution-view polish.
-4. The rest as they come up in consuming pages.
+1. **InterventionModal** — largest single-file migration. Visible on pause/intervention flows in distribution.
+2. **ContractAddressLink** + **Toast renderer** — quick wins (tiny diffs).
+3. Audit each step's internal widgets for stragglers using `git grep "blue-500\|gray-50 dark:bg-gray-900"` in `src/steps/` and `src/components/`.
+4. Phase 2c — TUI orchestrator work is a different axis; schedule it independently.
