@@ -12,6 +12,7 @@ ENV NODE_ENV=development
 COPY package.json yarn.lock .yarnrc.yml ./
 COPY packages/contracts/package.json packages/contracts/
 COPY packages/sdk/package.json packages/sdk/
+COPY packages/storage-campaign/package.json packages/storage-campaign/
 COPY packages/storage-fs/package.json packages/storage-fs/
 COPY packages/storage-idb/package.json packages/storage-idb/
 COPY packages/tui/package.json packages/tui/
