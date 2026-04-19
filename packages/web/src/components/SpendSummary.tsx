@@ -1,3 +1,5 @@
+import { Card } from './ui';
+
 export type SpendSummaryProps = {
   readonly totalGasEstimate: string;
   readonly totalTokensSent: string;
@@ -10,17 +12,19 @@ export type SpendSummaryProps = {
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-3 sm:p-4 ring-1 ring-gray-200 dark:ring-gray-800">
-      <p className="text-xs text-gray-400 dark:text-gray-500 uppercase tracking-wide">{label}</p>
-      <p className="mt-1 text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">{typeof value === 'number' ? value.toLocaleString() : value}</p>
-    </div>
+    <Card className="p-3 sm:p-4">
+      <p className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--fg-muted)]">{label}</p>
+      <p className="mt-1 font-sans text-base sm:text-lg font-semibold text-[color:var(--fg-primary)] truncate">
+        {typeof value === 'number' ? value.toLocaleString() : value}
+      </p>
+    </Card>
   );
 }
 
 export function SpendSummary({ totalGasEstimate, totalTokensSent, uniqueRecipients, confirmedBatches, failedBatches }: SpendSummaryProps) {
   return (
     <div>
-      <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">Distribution Summary</h3>
+      <h3 className="font-sans text-sm font-extrabold tracking-tight text-[color:var(--fg-primary)] mb-4">Distribution Summary</h3>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
         <Stat label="Tokens sent" value={totalTokensSent} />
         <Stat label="Gas (est.)" value={totalGasEstimate} />
@@ -28,7 +32,7 @@ export function SpendSummary({ totalGasEstimate, totalTokensSent, uniqueRecipien
         <Stat label="Confirmed" value={confirmedBatches} />
       </div>
       {failedBatches > 0 && (
-        <div className="mt-3 rounded-md bg-red-900/20 p-3 text-sm text-red-400 ring-1 ring-red-900/30">
+        <div className="mt-3 border-2 border-[color:var(--color-err)]/40 bg-[color:var(--color-err)]/10 p-3 font-mono text-sm text-[color:var(--color-err)]">
           {failedBatches} batch{failedBatches > 1 ? 'es' : ''} failed
         </div>
       )}
