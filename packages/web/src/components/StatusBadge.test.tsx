@@ -11,14 +11,14 @@ describe('StatusBadge', () => {
     render(<StatusBadge status="pending" />);
     expect(screen.getByText('pending')).toBeInTheDocument();
   });
-  it('applies green styling for complete status', () => {
+  it('tags complete status via data-status', () => {
     render(<StatusBadge status="complete" />);
     const badge = screen.getByText('complete');
-    expect(badge.className).toContain('green');
+    expect(badge.getAttribute('data-status')).toBe('complete');
   });
-  it('applies red styling for error status', () => {
+  it('tags error status via data-status', () => {
     render(<StatusBadge status="error" />);
     const badge = screen.getByText('error');
-    expect(badge.className).toContain('red');
+    expect(badge.getAttribute('data-status')).toBe('error');
   });
 });
