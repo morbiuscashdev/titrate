@@ -4,8 +4,9 @@ import type { Address } from 'viem';
 import { CampaignCard } from '../components/CampaignCard.js';
 import { CampaignCardSkeleton } from '../components/CampaignCardSkeleton.js';
 import { Skeleton } from '../components/Skeleton.js';
-import { InlineEdit } from '../components/InlineEdit.js';
 import { WelcomeCard } from '../components/WelcomeCard.js';
+import { Button } from '../components/ui';
+import { ModeProvider } from '../theme';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
 import { getChainConfig } from '@titrate/sdk';
@@ -172,27 +173,23 @@ export function HomePage() {
   const archivedCount = campaigns.filter((c) => c.archived).length;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
-        <div className="flex items-center gap-3 sm:gap-4 min-w-0">
-          <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Campaigns</h1>
+    <ModeProvider mode="brutalist" className="mx-auto max-w-5xl px-4 py-8">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div className="flex items-center gap-4 min-w-0">
+          <h1 className="font-sans text-xl font-extrabold tracking-tight text-[color:var(--fg-primary)]">Campaigns</h1>
           {archivedCount > 0 && (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setShowArchived((v) => !v)}
-              className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
             >
               {showArchived ? 'Hide archived' : `Show archived (${archivedCount})`}
-            </button>
+            </Button>
           )}
         </div>
-        <button
-          type="button"
-          onClick={handleCreate}
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
-        >
+        <Button variant="primary" onClick={handleCreate}>
           New Campaign
-        </button>
+        </Button>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {visibleCampaigns.map((campaign) => (
@@ -258,6 +255,6 @@ export function HomePage() {
           </div>
         ))}
       </div>
-    </div>
+    </ModeProvider>
   );
 }
