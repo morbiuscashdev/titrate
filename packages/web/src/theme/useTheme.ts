@@ -1,50 +1,59 @@
 import { useCallback, useEffect, useState } from "react";
-import { type Theme, applyTheme, detectInitialTheme, writeStoredTheme } from "./set-theme";
+import {
+  type Theme,
+  type ResolvedTheme,
+  applyTheme,
+  detectInitialTheme,
+  resolveTheme,
+  writeStoredTheme,
+} from "./set-theme";
 
 /**
- * Reads and toggles the current brutalist surface theme.
- * Source of truth: `document.documentElement.dataset.theme` (set by the
- * pre-hydration script). Updates flow: toggle -> applyTheme(next) ->
- * writeStoredTheme(next) -> setState(next) so rerenders follow the DOM.
+ * Reads and changes the current theme preference.
+ *
+ * Theme is tri-state: "light" | "dark" | "system". When the preference
+ * is "system", the resolved theme follows the OS `prefers-color-scheme`
+ * and updates live when the OS preference changes.
+ *
+ * `theme` is the stored preference (useful for toggle UIs that need to
+ * highlight the active option). `resolvedTheme` is what's actually in
+ * effect ("light" | "dark"); use it to pick an icon/glyph.
  */
 export function useTheme(): {
   theme: Theme;
+  resolvedTheme: ResolvedTheme;
   setTheme: (next: Theme) => void;
   toggle: () => void;
 } {
-  const [theme, setThemeState] = useState<Theme>(() => {
-    if (typeof document !== "undefined") {
-      const attr = document.documentElement.dataset.theme;
-      if (attr === "light" || attr === "dark") return attr;
-    }
-    return detectInitialTheme();
-  });
+  const [theme, setThemeState] = useState<Theme>(() => detectInitialTheme());
+  const [resolvedTheme, setResolvedState] = useState<ResolvedTheme>(() =>
+    resolveTheme(detectInitialTheme()),
+  );
 
   const setTheme = useCallback((next: Theme) => {
     applyTheme(next);
     writeStoredTheme(next);
     setThemeState(next);
+    setResolvedState(resolveTheme(next));
   }, []);
 
   const toggle = useCallback(() => {
-    setTheme(theme === "dark" ? "light" : "dark");
-  }, [theme, setTheme]);
+    setTheme(resolvedTheme === "dark" ? "light" : "dark");
+  }, [resolvedTheme, setTheme]);
 
-  // Sync with OS preference changes when no explicit user choice is stored.
+  // When the preference is "system", mirror OS preference changes into
+  // the DOM attribute and state so the UI re-renders with the new theme.
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = (e: MediaQueryListEvent) => {
-      try {
-        if (localStorage.getItem("titrate-theme")) return;
-      } catch { /* storage blocked; honor OS */ }
-      const next: Theme = e.matches ? "dark" : "light";
-      applyTheme(next);
-      setThemeState(next);
+    const onChange = () => {
+      if (theme !== "system") return;
+      applyTheme("system");
+      setResolvedState(resolveTheme("system"));
     };
     mq.addEventListener("change", onChange);
     return () => mq.removeEventListener("change", onChange);
-  }, []);
+  }, [theme]);
 
-  return { theme, setTheme, toggle };
+  return { theme, resolvedTheme, setTheme, toggle };
 }

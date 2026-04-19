@@ -141,15 +141,16 @@ export function SettingsPage() {
       </div>
 
       {!isUnlocked && (
-        <div className="rounded-lg bg-yellow-900/20 p-4 ring-1 ring-yellow-900/30 mb-6">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-yellow-400">
+        <div className="mb-6 border-2 border-[color:var(--color-warn)]/50 bg-[color:var(--color-warn)]/15 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="font-mono text-sm text-[color:var(--fg-primary)]">
+              <span className="mr-2 font-bold text-[color:var(--color-warn)]">⚠</span>
               Storage is locked. Sensitive fields are encrypted.
             </p>
             <button
               type="button"
               onClick={() => void requestUnlock()}
-              className="rounded-lg bg-yellow-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-yellow-500 transition-colors"
+              className="border-2 border-[color:var(--color-warn)] bg-[color:var(--color-warn)] px-3 py-1.5 font-mono text-sm font-bold text-[color:var(--bg-page)] hover:brightness-110 transition-[filter] focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-info)]"
             >
               Unlock
             </button>

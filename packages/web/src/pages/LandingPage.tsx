@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router';
-import { Wordmark, Chip, Card, Button, ThemeToggle } from '../components/ui';
+import { Wordmark, Chip, Card, Button } from '../components/ui';
 import { ModeProvider } from '../theme';
 
 /**
@@ -21,11 +21,6 @@ export function LandingPage() {
       mode="brutalist"
       className="min-h-screen bg-[color:var(--bg-page)] text-[color:var(--fg-primary)]"
     >
-      {/* Top bar — just the theme toggle in the corner for the landing page */}
-      <div className="absolute top-4 right-4 z-10">
-        <ThemeToggle />
-      </div>
-
       <div className="mx-auto max-w-3xl px-6 py-20">
         {/* Hero — mark + wordmark + one-liner + verb chips */}
         <div className="text-center">
