@@ -18,10 +18,10 @@ export type HeaderProps = {
  */
 export function Header({ children }: HeaderProps) {
   return (
-    <header className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-4 py-3">
+    <header className="flex items-center justify-between border-b-2 border-[color:var(--edge)] bg-[color:var(--bg-page)] px-4 py-3">
       <a
         href="/"
-        className="flex items-center gap-2 font-sans font-extrabold tracking-[-0.02em] text-lg text-gray-900 dark:text-white hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 rounded-md"
+        className="flex items-center gap-2 font-sans font-extrabold tracking-[-0.02em] text-lg text-[color:var(--fg-primary)] hover:text-[color:var(--color-pink-600)] transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-info)] rounded-md"
       >
         <span className="text-[color:var(--mark-color,#d63384)]">
           <Mark size={24} />
@@ -33,7 +33,7 @@ export function Header({ children }: HeaderProps) {
         <a
           href="/settings"
           aria-label="Settings"
-          className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 rounded-md"
+          className="text-[color:var(--fg-muted)] hover:text-[color:var(--fg-primary)] transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-info)] rounded-md"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
