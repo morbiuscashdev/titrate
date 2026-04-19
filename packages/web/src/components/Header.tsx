@@ -20,7 +20,7 @@ export function Header({ children }: HeaderProps) {
   return (
     <header className="flex items-center justify-between border-b-2 border-[color:var(--edge)] bg-[color:var(--bg-page)] px-4 py-3">
       <a
-        href="/"
+        href="#/"
         className="flex items-center gap-2 font-sans font-extrabold tracking-[-0.02em] text-lg text-[color:var(--fg-primary)] hover:text-[color:var(--color-pink-600)] transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-info)] rounded-md"
       >
         <span className="text-[color:var(--mark-color,#d63384)]">
@@ -31,7 +31,7 @@ export function Header({ children }: HeaderProps) {
       <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
         <ThemeToggle />
         <a
-          href="/settings"
+          href="#/settings"
           aria-label="Settings"
           className="text-[color:var(--fg-muted)] hover:text-[color:var(--fg-primary)] transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[color:var(--color-info)] rounded-md"
         >
