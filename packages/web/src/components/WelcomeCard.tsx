@@ -1,3 +1,6 @@
+import { Button, Card } from './ui';
+import { ModeProvider } from '../theme';
+
 /** Step card displaying a numbered workflow step. */
 function StepCard({
   number,
@@ -8,18 +11,19 @@ function StepCard({
   readonly title: string;
   readonly description: string;
 }) {
+  const label = String(number).padStart(2, '0');
   return (
-    <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800">
+    <Card>
       <div className="flex items-start gap-3">
-        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-600/20 text-sm font-bold text-blue-400">
-          {number}
+        <span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--color-pink-600)]">
+          {label}
         </span>
         <div>
-          <h3 className="text-sm font-semibold text-gray-900 dark:text-white">{title}</h3>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{description}</p>
+          <h3 className="font-sans text-sm font-extrabold tracking-tight text-[color:var(--fg-primary)]">{title}</h3>
+          <p className="mt-1 font-mono text-xs leading-relaxed text-[color:var(--fg-muted)]">{description}</p>
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -35,12 +39,12 @@ export function WelcomeCard({
   readonly onCreateCampaign: () => void;
 }) {
   return (
-    <div className="mx-auto max-w-2xl px-4 py-16">
+    <ModeProvider mode="brutalist" className="mx-auto max-w-2xl px-4 py-16">
       <div className="text-center mb-8">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+        <h1 className="font-sans text-2xl font-extrabold tracking-tight text-[color:var(--fg-primary)] mb-2">
           Welcome to Titrate
         </h1>
-        <p className="text-gray-500 dark:text-gray-400">
+        <p className="font-mono text-sm text-[color:var(--fg-muted)]">
           Distribute ERC-20 tokens to multiple recipients on any EVM chain.
         </p>
       </div>
@@ -69,17 +73,13 @@ export function WelcomeCard({
       </div>
 
       <div className="text-center">
-        <button
-          type="button"
-          onClick={onCreateCampaign}
-          className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-6 py-3 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
-        >
+        <Button variant="primary" size="lg" onClick={onCreateCampaign}>
           Create Your First Campaign
-        </button>
-        <p className="mt-3 text-xs text-gray-500">
+        </Button>
+        <p className="mt-3 font-mono text-xs text-[color:var(--fg-muted)]">
           Connect your wallet first using the button above.
         </p>
       </div>
-    </div>
+    </ModeProvider>
   );
 }
