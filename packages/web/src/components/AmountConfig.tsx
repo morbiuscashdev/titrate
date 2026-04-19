@@ -1,3 +1,5 @@
+import { Input } from './ui';
+
 export type AmountConfigProps = {
   readonly mode: 'uniform' | 'variable';
   readonly format: 'integer' | 'decimal';
@@ -7,20 +9,32 @@ export type AmountConfigProps = {
   readonly onAmountChange?: (amount: string) => void;
 };
 
+const TOGGLE_BASE = 'rounded-none border-2 px-3 py-1 font-mono text-xs font-bold uppercase tracking-[0.12em] transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[1px] focus-visible:outline-[color:var(--color-info)]';
+const TOGGLE_ACTIVE = 'bg-[color:var(--color-pink-500)] text-white border-[color:var(--color-pink-500)]';
+const TOGGLE_INACTIVE = 'bg-[color:var(--bg-card)] text-[color:var(--fg-muted)] border-[color:var(--edge)] hover:text-[color:var(--fg-primary)]';
+
 function Toggle({ options, selected, onChange }: {
   options: readonly { value: string; label: string }[];
   selected: string;
   onChange?: (value: string) => void;
 }) {
   return (
-    <div className="inline-flex rounded-lg bg-gray-200 dark:bg-gray-800 p-0.5">
-      {options.map((opt) => (
-        <button key={opt.value} type="button" onClick={() => onChange?.(opt.value)}
-          aria-pressed={selected === opt.value}
-          className={`rounded-md px-3 py-1 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-            selected === opt.value ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white' : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-          }`}>{opt.label}</button>
-      ))}
+    <div className="inline-flex gap-0">
+      {options.map((opt, i) => {
+        const active = selected === opt.value;
+        const positional = i === 0 ? '' : '-ml-[2px]';
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => onChange?.(opt.value)}
+            aria-pressed={active}
+            className={`${TOGGLE_BASE} ${positional} ${active ? TOGGLE_ACTIVE : TOGGLE_INACTIVE}`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -28,15 +42,31 @@ function Toggle({ options, selected, onChange }: {
 export function AmountConfig({ mode, format, uniformAmount, onModeChange, onFormatChange, onAmountChange }: AmountConfigProps) {
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-4">
-        <Toggle options={[{ value: 'uniform', label: 'Uniform' }, { value: 'variable', label: 'Variable' }]} selected={mode} onChange={(v) => onModeChange?.(v as 'uniform' | 'variable')} />
-        <Toggle options={[{ value: 'integer', label: 'Integer' }, { value: 'decimal', label: 'Decimal' }]} selected={format} onChange={(v) => onFormatChange?.(v as 'integer' | 'decimal')} />
+      <div className="flex flex-wrap items-center gap-4">
+        <Toggle
+          options={[{ value: 'uniform', label: 'Uniform' }, { value: 'variable', label: 'Variable' }]}
+          selected={mode}
+          onChange={(v) => onModeChange?.(v as 'uniform' | 'variable')}
+        />
+        <Toggle
+          options={[{ value: 'integer', label: 'Integer' }, { value: 'decimal', label: 'Decimal' }]}
+          selected={format}
+          onChange={(v) => onFormatChange?.(v as 'integer' | 'decimal')}
+        />
       </div>
       {mode === 'uniform' && (
-        <input type="text" id="uniform-amount" aria-label="Amount per recipient" value={uniformAmount} onChange={(e) => onAmountChange?.(e.target.value)} placeholder="Enter amount per recipient"
-          className="w-full rounded-lg bg-white dark:bg-gray-900 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-200 dark:ring-gray-800 placeholder:text-gray-400 dark:placeholder:text-gray-600 focus:ring-blue-500 focus:outline-none" />
+        <Input
+          id="uniform-amount"
+          label="Amount per recipient"
+          type="text"
+          value={uniformAmount}
+          onChange={(e) => onAmountChange?.(e.target.value)}
+          placeholder="Enter amount per recipient"
+        />
       )}
-      {mode === 'variable' && <p className="text-xs text-gray-400 dark:text-gray-500">Amounts will be read from the CSV file.</p>}
+      {mode === 'variable' && (
+        <p className="font-mono text-xs text-[color:var(--fg-muted)]">Amounts will be read from the CSV file.</p>
+      )}
     </div>
   );
 }
