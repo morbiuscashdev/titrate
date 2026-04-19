@@ -4,6 +4,7 @@ import { erc20Abi, parseEther } from 'viem';
 import type { Address } from 'viem';
 import { StepPanel } from '../components/StepPanel.js';
 import { WalletBadge } from '../components/WalletBadge.js';
+import { Button, Card } from '../components/ui';
 import { useWallet } from '../providers/WalletProvider.js';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useChain } from '../providers/ChainProvider.js';
@@ -18,6 +19,10 @@ function hwmKey(campaignId: string): string {
 type StoredHWM = {
   readonly highWaterMark: number;
 };
+
+const SECTION_LABEL = 'font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--fg-primary)]';
+const INLINE_INPUT = 'w-16 rounded-none border-2 border-[color:var(--edge)] bg-white text-[color:var(--color-cream-900)] font-mono px-2 py-1 text-sm focus:outline-none focus:border-[color:var(--color-pink-500)]';
+const FUND_LINK = 'font-mono text-xs text-[color:var(--color-pink-600)] hover:text-[color:var(--color-pink-700)] underline decoration-dotted disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[1px] focus-visible:outline-[color:var(--color-info)] rounded-sm';
 
 /**
  * Fifth campaign step: wallet connection and optional perry mode derivation.
@@ -47,7 +52,6 @@ export function WalletStep() {
   const [walletOffset, setWalletOffset] = useState(0);
   const [storedHighWaterMark, setStoredHighWaterMark] = useState(-1);
 
-  // Load persisted high-water-mark on mount / campaign change
   useEffect(() => {
     if (!storage || !activeCampaign) return;
 
@@ -96,7 +100,6 @@ export function WalletStep() {
         });
       }
 
-      // Persist high-water-mark so offset suggestion survives reload
       if (storage) {
         const hwm = walletOffset + walletCount - 1;
         const entry: StoredHWM = { highWaterMark: hwm };
@@ -153,9 +156,9 @@ export function WalletStep() {
   return (
     <StepPanel title="Wallet" description="Connect your wallet and optionally derive a hot wallet for distribution.">
       {!isConnected && (
-        <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-6 ring-1 ring-gray-200 dark:ring-gray-800 text-center">
-          <p className="text-sm text-gray-500 dark:text-gray-400">Connect your wallet using the button in the header.</p>
-        </div>
+        <Card className="text-center">
+          <p className="font-mono text-sm text-[color:var(--fg-muted)]">Connect your wallet using the button in the header.</p>
+        </Card>
       )}
 
       {isConnected && address && (
@@ -167,16 +170,16 @@ export function WalletStep() {
 
           {/* Perry mode section */}
           <div className="space-y-3">
-            <h3 className="text-sm font-medium text-gray-600 dark:text-gray-300">Perry Mode (Hot Wallets)</h3>
+            <h3 className={SECTION_LABEL}>Perry Mode (Hot Wallets)</h3>
 
             {!perryMode && (
               <div className="space-y-3">
-                <p className="text-xs text-gray-400 dark:text-gray-500">
+                <p className="font-mono text-xs text-[color:var(--fg-muted)]">
                   Derive deterministic hot wallets from your connected wallet. Fund them before distributing.
                 </p>
 
                 <div className="flex items-center gap-4">
-                  <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                  <label className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.1em] text-[color:var(--fg-muted)]">
                     Wallets:
                     <input
                       type="number"
@@ -185,11 +188,11 @@ export function WalletStep() {
                       max={10}
                       value={walletCount}
                       onChange={(e) => setWalletCount(Math.max(1, Math.min(10, Number(e.target.value) || 1)))}
-                      className="w-16 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1 text-sm text-gray-900 dark:text-white"
+                      className={INLINE_INPUT}
                     />
                   </label>
 
-                  <label className="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+                  <label className="flex items-center gap-2 font-mono text-xs uppercase tracking-[0.1em] text-[color:var(--fg-muted)]">
                     Offset:
                     <input
                       type="number"
@@ -197,30 +200,29 @@ export function WalletStep() {
                       min={0}
                       value={walletOffset}
                       onChange={(e) => setWalletOffset(Math.max(0, Number(e.target.value) || 0))}
-                      className="w-16 rounded-md border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900 px-2 py-1 text-sm text-gray-900 dark:text-white"
+                      className={INLINE_INPUT}
                     />
                   </label>
                 </div>
 
                 {storedHighWaterMark >= 0 && (
-                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                  <p className="font-mono text-xs text-[color:var(--fg-muted)]">
                     Last used: indices 0-{storedHighWaterMark}. Next unused: {storedHighWaterMark + 1}
                   </p>
                 )}
 
-                <button
-                  type="button"
+                <Button
+                  variant="primary"
                   onClick={handleDerive}
                   disabled={isDeriving || !activeCampaign}
-                  className="bg-purple-700 hover:bg-purple-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
                 >
                   {isDeriving ? 'Deriving...' : 'Derive Hot Wallets'}
-                </button>
+                </Button>
               </div>
             )}
 
             {deriveError && (
-              <div className="rounded-md bg-red-900/20 p-3 text-sm text-red-400 ring-1 ring-red-900/30">
+              <div className="border-2 border-[color:var(--color-err)]/40 bg-[color:var(--color-err)]/10 p-3 font-mono text-sm text-[color:var(--color-err)]">
                 {deriveError}
               </div>
             )}
@@ -235,13 +237,13 @@ export function WalletStep() {
                     coldAddress: perryMode.coldAddress,
                   }}
                 />
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-3">
                   <button
                     type="button"
                     onClick={() => handleFundGas(perryMode.wallets[0].address)}
                     disabled={!coldWalletClient}
                     aria-label="Fund gas for Wallet 0"
-                    className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 rounded"
+                    className={FUND_LINK}
                   >
                     Fund Gas
                   </button>
@@ -250,50 +252,43 @@ export function WalletStep() {
                     onClick={() => handleFundTokens(perryMode.wallets[0].address)}
                     disabled={!coldWalletClient}
                     aria-label="Fund tokens for Wallet 0"
-                    className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 rounded"
+                    className={FUND_LINK}
                   >
                     Fund Tokens
                   </button>
                 </div>
-                <div className="rounded-md bg-purple-900/20 p-3 text-sm text-purple-400 ring-1 ring-purple-900/30">
+                <div className="border-2 border-[color:var(--color-info)]/30 bg-[color:var(--color-info)]/10 p-3 font-mono text-sm text-[color:var(--color-info)]">
                   Operating with a derived hot wallet. Fund it before distributing.
                 </div>
-                <button
-                  type="button"
-                  onClick={handleClear}
-                  className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
-                >
+                <Button variant="secondary" size="sm" onClick={handleClear}>
                   Clear Perry Mode
-                </button>
+                </Button>
               </div>
             )}
 
             {perryMode && hasMultipleWallets && (
               <div className="space-y-3">
-                <div className="rounded-md bg-purple-900/20 p-3 text-sm text-purple-400 ring-1 ring-purple-900/30">
+                <div className="border-2 border-[color:var(--color-info)]/30 bg-[color:var(--color-info)]/10 p-3 font-mono text-sm text-[color:var(--color-info)]">
                   Operating with {perryMode.wallets.length} derived hot wallets. Fund them before distributing.
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {perryMode.wallets.map((wallet, index) => (
-                    <div
-                      key={wallet.address}
-                      className="rounded-lg bg-gray-50 dark:bg-gray-900 p-3 ring-1 ring-gray-200 dark:ring-gray-800"
-                    >
+                    <Card key={wallet.address} className="p-3">
                       <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-gray-900 dark:text-white">
+                        <span className="font-sans text-sm font-semibold text-[color:var(--fg-primary)]">
                           Wallet {perryMode.offset + index}
                         </span>
                       </div>
-                      <span className="font-mono text-xs text-gray-500 dark:text-gray-400">
+                      <span className="font-mono text-xs text-[color:var(--fg-muted)] break-all">
                         {wallet.address}
                       </span>
-                      <div className="flex flex-wrap gap-2 mt-2">
+                      <div className="flex flex-wrap gap-3 mt-2">
                         <button
                           type="button"
                           onClick={() => handleFundGas(wallet.address)}
                           disabled={!coldWalletClient}
                           aria-label={`Fund gas for Wallet ${perryMode.offset + index}`}
-                          className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 rounded"
+                          className={FUND_LINK}
                         >
                           Fund Gas
                         </button>
@@ -302,32 +297,24 @@ export function WalletStep() {
                           onClick={() => handleFundTokens(wallet.address)}
                           disabled={!coldWalletClient}
                           aria-label={`Fund tokens for Wallet ${perryMode.offset + index}`}
-                          className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 rounded"
+                          className={FUND_LINK}
                         >
                           Fund Tokens
                         </button>
                       </div>
-                    </div>
+                    </Card>
                   ))}
                 </div>
-                <button
-                  type="button"
-                  onClick={handleClear}
-                  className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
-                >
+                <Button variant="secondary" size="sm" onClick={handleClear}>
                   Clear Perry Mode
-                </button>
+                </Button>
               </div>
             )}
           </div>
 
-          <button
-            type="button"
-            onClick={handleContinue}
-            className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
-          >
+          <Button variant="primary" onClick={handleContinue}>
             Continue
-          </button>
+          </Button>
         </div>
       )}
     </StepPanel>
