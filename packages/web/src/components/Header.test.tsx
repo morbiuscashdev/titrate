@@ -12,16 +12,16 @@ describe('Header', () => {
     expect(screen.getByText('Titrate')).toBeInTheDocument();
   });
 
-  it('wordmark links to /', () => {
+  it('wordmark links to the hash home route', () => {
     render(<Header />);
     const link = screen.getByText('Titrate').closest('a');
-    expect(link).toHaveAttribute('href', '/');
+    expect(link).toHaveAttribute('href', '#/');
   });
 
-  it('settings link points to /settings', () => {
+  it('settings link points to the hash settings route', () => {
     render(<Header />);
     const settingsLink = screen.getByLabelText('Settings').closest('a');
-    expect(settingsLink).toHaveAttribute('href', '/settings');
+    expect(settingsLink).toHaveAttribute('href', '#/settings');
   });
 
   it('renders the ThemeToggle', () => {
