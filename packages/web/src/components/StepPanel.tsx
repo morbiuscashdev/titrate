@@ -9,8 +9,8 @@ export type StepPanelProps = {
 export function StepPanel({ title, description, children }: StepPanelProps) {
   return (
     <div className="flex-1 p-6">
-      <h2 className="text-lg font-semibold text-gray-900 dark:text-white">{title}</h2>
-      {description && <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{description}</p>}
+      <h2 className="font-sans text-lg font-extrabold tracking-tight text-[color:var(--fg-primary)]">{title}</h2>
+      {description && <p className="mt-1 font-mono text-sm text-[color:var(--fg-muted)]">{description}</p>}
       <div className="mt-6">{children}</div>
     </div>
   );
