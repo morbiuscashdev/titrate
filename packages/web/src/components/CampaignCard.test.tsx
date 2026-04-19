@@ -42,8 +42,7 @@ describe('CampaignCard', () => {
 
   it('progress bar width reflects completion percentage', () => {
     const { container } = render(<CampaignCard {...props} />);
-    // Outer bar has bg-gray-800, inner bar has bg-blue-500
-    const innerBar = container.querySelector('.bg-blue-500') as HTMLElement;
+    const innerBar = container.querySelector('[data-progress-bar]') as HTMLElement;
     expect(innerBar).not.toBeNull();
     // 3/10 = 30%
     expect(innerBar.style.width).toBe('30%');
@@ -53,7 +52,7 @@ describe('CampaignCard', () => {
     const { container } = render(
       <CampaignCard {...props} batchProgress={{ completed: 0, total: 0 }} />,
     );
-    const innerBar = container.querySelector('.bg-blue-500') as HTMLElement;
+    const innerBar = container.querySelector('[data-progress-bar]') as HTMLElement;
     expect(innerBar.style.width).toBe('0%');
   });
 
@@ -61,7 +60,7 @@ describe('CampaignCard', () => {
     const { container } = render(
       <CampaignCard {...props} batchProgress={{ completed: 10, total: 10 }} />,
     );
-    const innerBar = container.querySelector('.bg-blue-500') as HTMLElement;
+    const innerBar = container.querySelector('[data-progress-bar]') as HTMLElement;
     expect(innerBar.style.width).toBe('100%');
   });
 
