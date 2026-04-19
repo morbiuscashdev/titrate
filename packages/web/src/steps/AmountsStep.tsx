@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { StepPanel } from '../components/StepPanel.js';
 import { AmountConfig } from '../components/AmountConfig.js';
+import { Button, Card } from '../components/ui';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
 import { detectAmountFormat } from '@titrate/sdk';
@@ -131,31 +132,26 @@ export function AmountsStep() {
 
         {/* Format conflict warning */}
         {formatWarning && (
-          <div className="rounded-lg bg-yellow-50 dark:bg-yellow-900/20 p-3 ring-1 ring-yellow-200 dark:ring-yellow-900/30">
-            <p className="text-sm text-yellow-700 dark:text-yellow-400">{formatWarning}</p>
+          <div className="border-2 border-[color:var(--color-warn)]/40 bg-[color:var(--color-warn)]/10 p-3">
+            <p className="font-mono text-sm text-[color:var(--color-warn)]">{formatWarning}</p>
           </div>
         )}
 
         {/* Total display for uniform mode */}
         {mode === 'uniform' && uniformAmount.trim() && (
-          <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800">
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+          <Card>
+            <p className="font-mono text-sm text-[color:var(--fg-muted)]">
               Each recipient will receive{' '}
-              <span className="font-medium text-gray-900 dark:text-white">{uniformAmount}</span>{' '}
+              <span className="font-semibold text-[color:var(--fg-primary)]">{uniformAmount}</span>{' '}
               tokens ({format} format).
             </p>
-          </div>
+          </Card>
         )}
 
         {/* Continue */}
-        <button
-          type="button"
-          onClick={handleContinue}
-          disabled={!canContinue || isSaving}
-          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-        >
+        <Button variant="primary" onClick={handleContinue} disabled={!canContinue || isSaving}>
           {isSaving ? 'Saving...' : 'Save & Continue'}
-        </button>
+        </Button>
       </div>
     </StepPanel>
   );
