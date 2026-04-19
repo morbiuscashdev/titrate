@@ -5,6 +5,8 @@ import { useUnlockStorage } from '../hooks/useUnlockStorage.js';
 import { EncryptedField } from '../components/EncryptedField.js';
 import { ChainSelector } from '../components/ChainSelector.js';
 import { Skeleton } from '../components/Skeleton.js';
+import { Button, Card, Input } from '../components/ui';
+import { ModeProvider } from '../theme';
 import { getChains } from '@titrate/sdk';
 import type { StoredChainConfig, StoredCampaign } from '@titrate/sdk';
 
@@ -125,21 +127,16 @@ export function SettingsPage() {
     setForm(EMPTY_FORM);
   }, [storage, form, canSave, loadConfigs]);
 
+  const brutalistLabel = "block font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--fg-primary)] mb-2";
+
   return (
-    <div className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
-        <h1 className="text-lg font-semibold text-gray-900 dark:text-white">Chain Settings</h1>
+    <ModeProvider mode="brutalist" className="mx-auto max-w-3xl px-4 sm:px-6 py-8">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <h1 className="font-sans text-xl font-extrabold tracking-tight text-[color:var(--fg-primary)]">Chain Settings</h1>
         {!showForm && (
-          <button
-            type="button"
-            disabled={!storage}
-            onClick={() => setShowForm(true)}
-            className={`rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white ${
-              storage ? 'hover:bg-blue-700' : 'opacity-50 cursor-not-allowed'
-            }`}
-          >
+          <Button variant="primary" disabled={!storage} onClick={() => setShowForm(true)}>
             Add Chain
-          </button>
+          </Button>
         )}
       </div>
 
@@ -161,11 +158,11 @@ export function SettingsPage() {
       )}
 
       {showForm && (
-        <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 sm:p-6 ring-1 ring-gray-200 dark:ring-gray-800 mb-6">
-          <h2 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">New Chain Configuration</h2>
+        <Card className="mb-6 sm:p-6">
+          <h2 className="font-mono text-xs font-bold uppercase tracking-[0.15em] text-[color:var(--color-pink-600)] mb-4">New Chain Configuration</h2>
 
           <div className="mb-4">
-            <label className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Chain Preset</label>
+            <label className={brutalistLabel}>Chain Preset</label>
             <ChainSelector
               chains={getChains()}
               selectedChainId={form.selectedChainId}
@@ -174,114 +171,77 @@ export function SettingsPage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-            <div>
-              <label htmlFor="chain-name" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">
-                Chain Name
-              </label>
-              <input
-                id="chain-name"
-                type="text"
-                value={form.name}
-                onChange={(e) => updateField('name', e.target.value)}
-                placeholder="e.g. Ethereum"
-                className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label htmlFor="chain-id" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">
-                Chain ID
-              </label>
-              <input
-                id="chain-id"
-                type="number"
-                value={form.chainId}
-                onChange={(e) => updateField('chainId', e.target.value)}
-                placeholder="e.g. 1"
-                className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
+            <Input
+              id="chain-name"
+              label="Chain Name"
+              type="text"
+              value={form.name}
+              onChange={(e) => updateField('name', e.target.value)}
+              placeholder="e.g. Ethereum"
+            />
+            <Input
+              id="chain-id"
+              label="Chain ID"
+              type="number"
+              value={form.chainId}
+              onChange={(e) => updateField('chainId', e.target.value)}
+              placeholder="e.g. 1"
+            />
           </div>
 
           <div className="mb-4">
-            <label htmlFor="rpc-url" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">
-              RPC URL
-            </label>
-            <input
+            <Input
               id="rpc-url"
+              label="RPC URL"
               type="text"
               value={form.rpcUrl}
               onChange={(e) => updateField('rpcUrl', e.target.value)}
               placeholder="https://..."
-              className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
             />
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-            <div>
-              <label htmlFor="explorer-api-url" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">
-                Explorer API URL <span className="text-gray-500">(optional)</span>
-              </label>
-              <input
-                id="explorer-api-url"
-                type="text"
-                value={form.explorerApiUrl}
-                onChange={(e) => updateField('explorerApiUrl', e.target.value)}
-                placeholder="https://api.etherscan.io/api"
-                className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label htmlFor="explorer-api-key" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">
-                Explorer API Key <span className="text-gray-500">(optional)</span>
-              </label>
-              <input
-                id="explorer-api-key"
-                type="text"
-                value={form.explorerApiKey}
-                onChange={(e) => updateField('explorerApiKey', e.target.value)}
-                placeholder="Your API key"
-                className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
-              />
-            </div>
+            <Input
+              id="explorer-api-url"
+              label="Explorer API URL"
+              hint="optional"
+              type="text"
+              value={form.explorerApiUrl}
+              onChange={(e) => updateField('explorerApiUrl', e.target.value)}
+              placeholder="https://api.etherscan.io/api"
+            />
+            <Input
+              id="explorer-api-key"
+              label="Explorer API Key"
+              hint="optional"
+              type="text"
+              value={form.explorerApiKey}
+              onChange={(e) => updateField('explorerApiKey', e.target.value)}
+              placeholder="Your API key"
+            />
           </div>
 
           <div className="mb-6">
-            <label htmlFor="trueblocks-url" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">
-              TrueBlocks URL <span className="text-gray-500">(optional)</span>
-            </label>
-            <input
+            <Input
               id="trueblocks-url"
+              label="TrueBlocks URL"
+              hint="TrueBlocks API endpoint for balance history and address scanning. (optional)"
               type="text"
               value={form.trueBlocksUrl}
               onChange={(e) => updateField('trueBlocksUrl', e.target.value)}
               placeholder="http://localhost:8080"
-              className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none"
             />
-            <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-              TrueBlocks API endpoint for balance history and address scanning.
-            </p>
           </div>
 
           <div className="flex items-center gap-3">
-            <button
-              type="button"
-              disabled={!canSave}
-              onClick={() => void handleSave()}
-              className={`rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white ${
-                canSave ? 'hover:bg-blue-700' : 'opacity-50 cursor-not-allowed'
-              }`}
-            >
+            <Button variant="primary" disabled={!canSave} onClick={() => void handleSave()}>
               Save
-            </button>
-            <button
-              type="button"
-              onClick={handleCancel}
-              className="rounded-lg bg-gray-200 dark:bg-gray-800 px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-700"
-            >
+            </Button>
+            <Button variant="secondary" onClick={handleCancel}>
               Cancel
-            </button>
+            </Button>
           </div>
-        </div>
+        </Card>
       )}
 
       {!storage && (
@@ -302,53 +262,49 @@ export function SettingsPage() {
       )}
 
       {storage && !showForm && configs.length === 0 && (
-        <p className="text-gray-500">No chain configurations saved yet.</p>
+        <p className="font-mono text-sm text-[color:var(--fg-muted)]">No chain configurations saved yet.</p>
       )}
 
       {configs.length > 0 && (
-        <ul className="divide-y divide-gray-200 dark:divide-gray-800">
+        <ul className="divide-y divide-[color:var(--edge)]">
           {configs.map((config) => (
             <li key={config.id} className="py-4">
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 dark:text-white">{config.name}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Chain ID: {config.chainId}</p>
-                  <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 min-w-0">
+                  <p className="font-sans text-sm font-bold text-[color:var(--fg-primary)]">{config.name}</p>
+                  <p className="font-mono text-xs text-[color:var(--fg-muted)]">Chain ID: {config.chainId}</p>
+                  <div className="flex items-center gap-2 font-mono text-xs text-[color:var(--fg-muted)] min-w-0">
                     <span className="flex-shrink-0">RPC:</span>
                     {isUnlocked ? (
-                      <span className="font-mono text-gray-600 dark:text-gray-300 truncate">{config.rpcUrl}</span>
+                      <span className="truncate">{config.rpcUrl}</span>
                     ) : (
                       <EncryptedField ciphertext={config.rpcUrl} onUnlock={requestUnlock} />
                     )}
                   </div>
                   {config.explorerApiKey && (
-                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 min-w-0">
+                    <div className="flex items-center gap-2 font-mono text-xs text-[color:var(--fg-muted)] min-w-0">
                       <span className="flex-shrink-0">Explorer Key:</span>
                       {isUnlocked ? (
-                        <span className="font-mono text-gray-600 dark:text-gray-300">{config.explorerApiKey}</span>
+                        <span>{config.explorerApiKey}</span>
                       ) : (
                         <EncryptedField ciphertext={config.explorerApiKey} onUnlock={requestUnlock} />
                       )}
                     </div>
                   )}
                   {config.trueBlocksUrl && (
-                    <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400 min-w-0">
+                    <div className="flex items-center gap-2 font-mono text-xs text-[color:var(--fg-muted)] min-w-0">
                       <span className="flex-shrink-0">TrueBlocks:</span>
                       {isUnlocked ? (
-                        <span className="font-mono text-gray-600 dark:text-gray-300 truncate">{config.trueBlocksUrl}</span>
+                        <span className="truncate">{config.trueBlocksUrl}</span>
                       ) : (
                         <EncryptedField ciphertext={config.trueBlocksUrl} onUnlock={requestUnlock} />
                       )}
                     </div>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(config.id)}
-                  className="text-sm text-red-400 hover:text-red-300 transition-colors flex-shrink-0"
-                >
+                <Button variant="danger" size="sm" onClick={() => handleDelete(config.id)}>
                   Delete
-                </button>
+                </Button>
               </div>
             </li>
           ))}
@@ -356,11 +312,11 @@ export function SettingsPage() {
       )}
 
       {/* Data Export / Import */}
-      <div className="mt-12 border-t border-gray-200 dark:border-gray-800 pt-8">
-        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Data</h2>
+      <div className="mt-12 border-t-2 border-[color:var(--edge)] pt-8">
+        <h2 className="font-sans text-lg font-extrabold tracking-tight text-[color:var(--fg-primary)] mb-4">Data</h2>
         <div className="flex flex-wrap gap-3">
-          <button
-            type="button"
+          <Button
+            variant="secondary"
             disabled={!storage || campaigns.length === 0}
             onClick={() => {
               const data = JSON.stringify(campaigns, (_key, value) =>
@@ -373,11 +329,10 @@ export function SettingsPage() {
               a.click();
               URL.revokeObjectURL(url);
             }}
-            className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm transition-colors"
           >
             Export Campaigns
-          </button>
-          <label className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm transition-colors cursor-pointer">
+          </Button>
+          <label className="inline-flex items-center justify-center font-sans font-semibold leading-tight cursor-pointer text-sm px-4 py-2.5 shadow-[3px_3px_0_var(--shadow-color)] bg-[color:var(--color-cream-100)] text-[color:var(--color-cream-900)] border-2 border-[color:var(--edge)] hover:translate-x-[1px] hover:translate-y-[1px] hover:shadow-[2px_2px_0_var(--shadow-color)] transition-transform duration-[80ms]">
             Import Campaigns
             <input
               type="file"
@@ -408,10 +363,10 @@ export function SettingsPage() {
             />
           </label>
         </div>
-        <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
+        <p className="mt-2 font-mono text-xs text-[color:var(--fg-muted)]">
           Export saves campaign configurations as JSON. Import merges campaigns into storage (existing campaigns with the same ID are overwritten).
         </p>
       </div>
-    </div>
+    </ModeProvider>
   );
 }
