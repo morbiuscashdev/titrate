@@ -11,7 +11,7 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
-      registerType: 'prompt',
+      registerType: 'autoUpdate',
       includeAssets: ['icon.svg'],
       manifest: {
         name: 'Titrate',
@@ -29,7 +29,30 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+        // Don't precache HTML — index.html holds the CSP meta tag and must be
+        // fetched fresh so deploys propagate without a cache-clear. Assets are
+        // fingerprinted, so they're safe to precache for offline + speed.
+        globPatterns: ['**/*.{js,css,svg,png,ico,woff2}'],
+        // No SPA precache fallback — navigation requests go through the
+        // runtime handler below instead.
+        navigateFallback: null,
+        // NetworkFirst for navigations keeps the app usable offline while
+        // always preferring fresh HTML when online.
+        runtimeCaching: [
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'html-cache',
+              networkTimeoutSeconds: 3,
+              expiration: { maxEntries: 4, maxAgeSeconds: 60 * 60 * 24 },
+            },
+          },
+        ],
+        // Roll out the new SW immediately on every deploy instead of waiting
+        // for tabs to close.
+        skipWaiting: true,
+        clientsClaim: true,
       },
     }),
   ],
