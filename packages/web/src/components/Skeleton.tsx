@@ -7,7 +7,7 @@ export function Skeleton({ className = '' }: SkeletonProps) {
   return (
     <div
       data-testid="skeleton"
-      className={`animate-pulse rounded bg-gray-200 dark:bg-gray-800 ${className}`}
+      className={`animate-pulse bg-[color:var(--edge)]/30 ${className}`}
     />
   );
 }

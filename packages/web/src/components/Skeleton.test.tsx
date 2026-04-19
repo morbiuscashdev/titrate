@@ -8,8 +8,7 @@ describe('Skeleton', () => {
     const element = screen.getByTestId('skeleton');
     expect(element).toBeInTheDocument();
     expect(element.className).toContain('animate-pulse');
-    expect(element.className).toContain('rounded');
-    expect(element.className).toContain('bg-gray-800');
+    expect(element.className).toContain('var(--edge)');
   });
 
   it('appends custom className', () => {

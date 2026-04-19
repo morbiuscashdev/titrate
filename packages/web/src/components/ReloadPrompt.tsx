@@ -1,4 +1,5 @@
 import { useRegisterSW } from 'virtual:pwa-register/react';
+import { Button } from './ui';
 
 /**
  * Persistent banner shown when a new service worker is waiting to activate.
@@ -24,15 +25,11 @@ export function ReloadPrompt() {
   };
 
   return (
-    <div className="fixed bottom-4 left-4 z-50 flex items-center gap-3 rounded-lg bg-blue-600 px-4 py-3 text-sm text-white shadow-lg">
+    <div className="fixed bottom-4 left-4 z-50 flex items-center gap-3 bg-[color:var(--bg-card)] border-2 border-[color:var(--edge)] shadow-[4px_4px_0_var(--shadow-color)] px-4 py-3 font-mono text-sm text-[color:var(--fg-primary)]">
       <span>New version available.</span>
-      <button
-        type="button"
-        onClick={handleRefresh}
-        className="rounded bg-white px-3 py-1 text-sm font-medium text-blue-600 hover:bg-blue-50 transition-colors"
-      >
+      <Button variant="primary" size="sm" onClick={handleRefresh}>
         Refresh
-      </button>
+      </Button>
     </div>
   );
 }

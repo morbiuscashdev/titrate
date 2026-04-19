@@ -12,9 +12,8 @@ describe('CampaignCardSkeleton', () => {
   it('has the campaign card container styling', () => {
     const { container } = render(<CampaignCardSkeleton />);
     const wrapper = container.firstElementChild as HTMLElement;
-    expect(wrapper.className).toContain('rounded-lg');
-    expect(wrapper.className).toContain('bg-gray-900');
-    expect(wrapper.className).toContain('ring-gray-800');
+    expect(wrapper.className).toContain('var(--bg-card)');
+    expect(wrapper.className).toContain('var(--edge)');
   });
 
   it('renders a progress bar skeleton', () => {

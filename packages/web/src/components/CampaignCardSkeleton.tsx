@@ -1,4 +1,5 @@
 import { Skeleton } from './Skeleton.js';
+import { Card } from './ui';
 
 /**
  * Skeleton placeholder matching the CampaignCard layout.
@@ -8,7 +9,7 @@ import { Skeleton } from './Skeleton.js';
  */
 export function CampaignCardSkeleton() {
   return (
-    <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800">
+    <Card>
       <div className="flex items-start justify-between">
         <Skeleton className="h-4 w-32" />
         <Skeleton className="h-5 w-14 rounded-full" />
@@ -23,8 +24,8 @@ export function CampaignCardSkeleton() {
           <Skeleton className="h-3 w-12" />
           <Skeleton className="h-3 w-10" />
         </div>
-        <Skeleton className="h-1.5 w-full rounded-full" />
+        <Skeleton className="h-1.5 w-full" />
       </div>
-    </div>
+    </Card>
   );
 }

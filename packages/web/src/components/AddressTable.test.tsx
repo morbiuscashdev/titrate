@@ -26,7 +26,7 @@ describe('AddressTable', () => {
   it('highlights conflicting rows', () => {
     const conflictRows = [{ address: '0xaaaa…1111', conflict: true }];
     const { container } = render(<AddressTable rows={conflictRows} page={0} pageSize={10} totalRows={1} />);
-    expect(container.querySelector('.bg-red-900\\/20')).toBeInTheDocument();
+    expect(container.querySelector('[data-conflict="true"]')).toBeInTheDocument();
   });
   it('renders pagination info', () => {
     render(<AddressTable rows={rows} page={0} pageSize={2} totalRows={3} />);
