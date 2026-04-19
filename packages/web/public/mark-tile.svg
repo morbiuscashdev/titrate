@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="titrate">
+  <rect x="1" y="1" width="30" height="30" fill="#fefce8" stroke="#171717" stroke-width="2"/>
+  <g transform="translate(6.5 8) scale(0.115)">
+    <path d="M 14 120 L 65 120 L 95 30 L 156 30" stroke="#d63384" stroke-width="12" stroke-linecap="square" stroke-linejoin="miter" fill="none"/>
+    <circle cx="80" cy="75" r="22" stroke="#d63384" stroke-width="8" fill="none"/>
+  </g>
+</svg>

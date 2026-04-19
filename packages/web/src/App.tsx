@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router';
+import { HashRouter, Routes, Route, Navigate } from 'react-router';
 import { ErrorBoundary } from './components/ErrorBoundary.js';
 import { ThemeProvider } from './providers/ThemeProvider.js';
 import { ToastProvider } from './providers/ToastProvider.js';
@@ -83,7 +83,7 @@ export function App() {
               <InterventionModal />
               <ReloadPrompt />
               <ChainBridge>
-                <BrowserRouter>
+                <HashRouter>
                   <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-lg focus:bg-blue-600 focus:px-4 focus:py-2 focus:text-white">
                     Skip to content
                   </a>
@@ -101,7 +101,7 @@ export function App() {
                   </Routes>
                   </Suspense>
                   </div>
-                </BrowserRouter>
+                </HashRouter>
               </ChainBridge>
               </InterventionProvider>
             </CampaignProvider>
