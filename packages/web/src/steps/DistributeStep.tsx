@@ -23,6 +23,7 @@ import { SpendSummary } from '../components/SpendSummary.js';
 import { GasConfigPanel, DEFAULT_GAS_CONFIG, percentToFeeBumpWad } from '../components/GasConfigPanel.js';
 import type { GasConfigState } from '../components/GasConfigPanel.js';
 import { InterventionControls } from '../components/InterventionControls.js';
+import { Button, Card, Input } from '../components/ui';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useChain } from '../providers/ChainProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
@@ -915,14 +916,14 @@ export function DistributeStep() {
       description="Deploy the distribution contract and send tokens to recipients."
     >
       {!activeCampaign && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">No active campaign selected.</p>
+        <p className="font-mono text-sm text-[color:var(--fg-muted)]">No active campaign selected.</p>
       )}
 
       {activeCampaign && (
         <div className="space-y-6">
           {/* Error display */}
           {error && (
-            <div className="rounded-md bg-red-900/20 p-3 text-sm text-red-400 ring-1 ring-red-900/30">
+            <div className="border border-[color:var(--color-err)]/40 bg-[color:var(--color-err)]/10 p-3 rounded-md font-mono text-sm text-[color:var(--color-err)]">
               {error}
             </div>
           )}
@@ -930,56 +931,56 @@ export function DistributeStep() {
           {/* Pre-distribution summary */}
           {phase === 'ready' && (
             <div className="space-y-4">
-              <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-3 sm:p-4 ring-1 ring-gray-200 dark:ring-gray-800">
-                <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+              <Card>
+                <h3 className="font-mono text-[11px] font-bold uppercase tracking-[0.15em] text-[color:var(--color-ink-100)] mb-3">
                   Distribution Plan
                 </h3>
-                <div className="space-y-2 text-sm">
+                <div className="space-y-2 font-mono text-sm">
                   <div className="flex justify-between gap-2">
-                    <span className="text-gray-500 dark:text-gray-400">Campaign</span>
-                    <span className="text-gray-900 dark:text-white">{activeCampaign.name}</span>
+                    <span className="text-[color:var(--color-ink-500)]">Campaign</span>
+                    <span className="text-[color:var(--color-ink-100)]">{activeCampaign.name}</span>
                   </div>
                   <div className="flex justify-between gap-2">
-                    <span className="text-gray-500 dark:text-gray-400">Batch size</span>
-                    <span className="text-gray-900 dark:text-white">
+                    <span className="text-[color:var(--color-ink-500)]">Batch size</span>
+                    <span className="text-[color:var(--color-ink-100)]">
                       {batchSize}{wasClamped ? ` (clamped from ${rawBatchSize})` : ''}
                     </span>
                   </div>
                   <div className="flex justify-between gap-2">
-                    <span className="text-gray-500 dark:text-gray-400">Amount mode</span>
-                    <span className="text-gray-900 dark:text-white">
+                    <span className="text-[color:var(--color-ink-500)]">Amount mode</span>
+                    <span className="text-[color:var(--color-ink-100)]">
                       {activeCampaign.amountMode}
                     </span>
                   </div>
                   {activeCampaign.uniformAmount && (
                     <div className="flex justify-between gap-2">
-                      <span className="text-gray-500 dark:text-gray-400">
+                      <span className="text-[color:var(--color-ink-500)]">
                         Amount per recipient
                       </span>
-                      <span className="text-gray-900 dark:text-white">
+                      <span className="text-[color:var(--color-ink-100)]">
                         {activeCampaign.uniformAmount} {tokenSymbol}
                       </span>
                     </div>
                   )}
                   <div className="flex justify-between gap-2">
-                    <span className="text-gray-500 dark:text-gray-400">Recipients</span>
-                    <span className="text-gray-900 dark:text-white">{recipients.length}</span>
+                    <span className="text-[color:var(--color-ink-500)]">Recipients</span>
+                    <span className="text-[color:var(--color-ink-100)]">{recipients.length}</span>
                   </div>
                   {derivedWalletClients.length > 1 && (
                     <div className="flex justify-between gap-2">
-                      <span className="text-gray-500 dark:text-gray-400">Wallets</span>
-                      <span className="text-gray-900 dark:text-white">{derivedWalletClients.length} (parallel)</span>
+                      <span className="text-[color:var(--color-ink-500)]">Wallets</span>
+                      <span className="text-[color:var(--color-ink-100)]">{derivedWalletClients.length} (parallel)</span>
                     </div>
                   )}
                   <div className="flex justify-between gap-2">
-                    <span className="text-gray-500 dark:text-gray-400">Contract</span>
+                    <span className="text-[color:var(--color-ink-500)]">Contract</span>
                     {hasContract ? (
                       <ContractAddressLink
                         address={activeCampaign.contractAddress as string}
                         explorerApiUrl={chainConfig?.explorerApiUrl}
                       />
                     ) : (
-                      <span className="text-gray-900 dark:text-white">Not deployed</span>
+                      <span className="text-[color:var(--color-ink-100)]">Not deployed</span>
                     )}
                   </div>
                   {hasContract && (
@@ -988,7 +989,7 @@ export function DistributeStep() {
                         type="button"
                         onClick={handleVerify}
                         disabled={verifyState.status === 'verifying'}
-                        className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 disabled:opacity-50 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 rounded"
+                        className="font-mono text-xs text-[color:var(--color-pink-400)] hover:text-[color:var(--color-pink-300)] disabled:opacity-50 transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[1px] focus-visible:outline-[color:var(--color-info)] rounded-sm underline decoration-dotted"
                       >
                         {verifyState.status === 'verifying' ? 'Verifying...' : 'Verify on Explorer'}
                       </button>
@@ -997,81 +998,85 @@ export function DistributeStep() {
                           href={verifyState.explorerUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-xs text-green-600 dark:text-green-400 hover:text-green-500"
+                          className="font-mono text-xs text-[color:var(--color-ok)] hover:opacity-80"
                         >
                           Verified
                         </a>
                       )}
                       {verifyState.status === 'success' && !verifyState.explorerUrl && (
-                        <span className="text-xs text-green-600 dark:text-green-400">Verified</span>
+                        <span className="font-mono text-xs text-[color:var(--color-ok)]">Verified</span>
                       )}
                       {verifyState.status === 'error' && (
-                        <span className="text-xs text-red-400">{verifyState.message}</span>
+                        <span className="font-mono text-xs text-[color:var(--color-err)]">{verifyState.message}</span>
                       )}
                     </div>
                   )}
                   <div className="flex justify-between gap-2">
-                    <span className="text-gray-500 dark:text-gray-400">Live filter</span>
+                    <span className="text-[color:var(--color-ink-500)]">Live filter</span>
                     {liveFilterStatus === 'on' ? (
-                      <span className="text-green-600 dark:text-green-400">ON (registry check)</span>
+                      <span className="text-[color:var(--color-ok)]">ON (registry check)</span>
                     ) : (
-                      <span className="text-gray-400 dark:text-gray-500">OFF</span>
+                      <span className="text-[color:var(--color-ink-500)]">OFF</span>
                     )}
                   </div>
                   {pipelineConfig && pipelineConfig.steps.length > 0 && (
                     <div className="flex justify-between gap-2">
-                      <span className="text-gray-500 dark:text-gray-400">Pipeline filters</span>
-                      <span className="text-gray-900 dark:text-white">
+                      <span className="text-[color:var(--color-ink-500)]">Pipeline filters</span>
+                      <span className="text-[color:var(--color-ink-100)]">
                         {pipelineConfig.steps.filter((s) => s.type === 'filter').length} configured
                       </span>
                     </div>
                   )}
                 </div>
-              </div>
+              </Card>
 
               <GasConfigPanel config={gasConfig} onChange={setGasConfig} />
 
               <InterventionControls enabledPoints={enabledPoints} onChange={setEnabledPoints} />
 
               {activeCampaign.contractVariant === 'full' && (
-                <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800 space-y-2">
-                  <label className="text-sm font-medium text-gray-600 dark:text-gray-300 block">Operator Method Selector</label>
+                <Card className="space-y-2">
+                  <label className="block font-mono text-[11px] uppercase tracking-[0.1em] text-[color:var(--color-ink-500)]">Operator Method Selector</label>
                   <div className="flex flex-wrap gap-2">
-                    {(['auto', 'disperseSimple', 'disperse', 'disperseCall'] as const).map((opt) => (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setSelectorOverride(opt)}
-                        className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                          selectorOverride === opt
-                            ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30'
-                            : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-700'
-                        }`}
-                      >
-                        {opt === 'auto' ? `Auto (${activeCampaign.amountMode === 'uniform' ? 'disperseSimple' : 'disperse'})` : opt}
-                      </button>
-                    ))}
+                    {(['auto', 'disperseSimple', 'disperse', 'disperseCall'] as const).map((opt) => {
+                      const active = selectorOverride === opt;
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => setSelectorOverride(opt)}
+                          aria-pressed={active}
+                          className={`rounded-md px-3 py-1.5 font-mono text-xs font-semibold transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[1px] focus-visible:outline-[color:var(--color-info)] ${
+                            active
+                              ? 'bg-[color:var(--color-pink-600)] text-white'
+                              : 'bg-[color:var(--color-ink-800)] text-[color:var(--color-ink-100)] border border-[color:var(--color-ink-700)] hover:border-[color:var(--color-ink-500)]'
+                          }`}
+                        >
+                          {opt === 'auto' ? `Auto (${activeCampaign.amountMode === 'uniform' ? 'disperseSimple' : 'disperse'})` : opt}
+                        </button>
+                      );
+                    })}
                   </div>
-                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                  <p className="font-mono text-xs text-[color:var(--color-ink-500)]">
                     Controls which function the hot wallet is approved to call on the TitrateFull contract.
                   </p>
-                </div>
+                </Card>
               )}
 
               {wasClamped && (
-                <div className="rounded-md bg-yellow-900/20 p-3 text-sm text-yellow-600 dark:text-yellow-400">
+                <div className="rounded-md border border-[color:var(--color-warn)]/40 bg-[color:var(--color-warn)]/10 p-3 font-mono text-sm text-[color:var(--color-warn)]">
                   Batch size clamped from {rawBatchSize} to {effectiveBatchSize} to fit within gas limit.
                 </div>
               )}
 
               {activeCampaign.contractVariant === 'simple' && (
-                <div className="rounded-md bg-gray-100 dark:bg-gray-900/50 p-3 text-xs text-gray-500 dark:text-gray-400 ring-1 ring-gray-200 dark:ring-gray-800">
+                <div className="rounded-md border border-[color:var(--color-ink-700)] bg-[color:var(--color-ink-800)]/50 p-3 font-mono text-xs text-[color:var(--color-ink-500)]">
                   Live filter (double-send protection) requires the Full contract variant. The Simple variant does not include an on-chain recipient registry.
                 </div>
               )}
 
               {isResuming && (
-                <div className="rounded-md bg-yellow-900/20 p-3 text-sm text-yellow-400 ring-1 ring-yellow-900/30">
+                <div className="rounded-md border border-[color:var(--color-warn)]/40 bg-[color:var(--color-warn)]/10 p-3 font-mono text-sm text-[color:var(--color-warn)]">
                   {confirmedSavedCount} of {Math.ceil(recipients.length / batchSize)} batches completed. Resume from batch {confirmedSavedCount + 1}?
                 </div>
               )}
@@ -1082,21 +1087,13 @@ export function DistributeStep() {
 
               <div className="flex flex-wrap gap-3">
                 {!hasContract && (
-                  <button
-                    type="button"
-                    onClick={handleDeploy}
-                    className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
-                  >
+                  <Button variant="secondary" onClick={handleDeploy}>
                     Deploy Contract
-                  </button>
+                  </Button>
                 )}
-                <button
-                  type="button"
-                  onClick={handleDistribute}
-                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
-                >
+                <Button variant="primary" onClick={handleDistribute}>
                   {isResuming ? 'Resume Distribution' : 'Start Distribution'}
-                </button>
+                </Button>
               </div>
             </div>
           )}
@@ -1105,28 +1102,28 @@ export function DistributeStep() {
           <div role="status" aria-live="polite">
             {/* Deploying state */}
             {phase === 'deploying' && (
-              <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-6 ring-1 ring-gray-200 dark:ring-gray-800 text-center">
-                <p className="text-sm text-gray-500 dark:text-gray-400">
+              <Card className="text-center">
+                <p className="font-mono text-sm text-[color:var(--color-ink-500)]">
                   Deploying distribution contract...
                 </p>
-              </div>
+              </Card>
             )}
 
             {/* Approving state */}
             {phase === 'approving' && (
-              <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-6 ring-1 ring-gray-200 dark:ring-gray-800 text-center">
-                <p className="text-sm text-gray-500 dark:text-gray-400">
+              <Card className="text-center">
+                <p className="font-mono text-sm text-[color:var(--color-ink-500)]">
                   Approving token spend... Please confirm in your wallet.
                 </p>
-              </div>
+              </Card>
             )}
 
             {/* Distributing state + throughput */}
             {phase === 'distributing' && (
-              <div className="rounded-md bg-blue-900/20 p-3 text-sm text-blue-400 ring-1 ring-blue-900/30">
+              <div className="rounded-md border border-[color:var(--color-info)]/30 bg-[color:var(--color-info)]/10 p-3 font-mono text-sm text-[color:var(--color-info)]">
                 <p>Distribution in progress...</p>
                 {throughput && (
-                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-blue-300">
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-[color:var(--color-info)]/80">
                     <span>{throughput.addressesCompleted.toLocaleString()} addresses sent</span>
                     <span>{throughput.addressesPerHour.toLocaleString()} addr/hr</span>
                     {throughput.estimatedRemainingMs > 0 && (
@@ -1162,69 +1159,65 @@ export function DistributeStep() {
               )}
 
               {phase === 'complete' && derivedWalletClients.length > 1 && (
-                <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800 space-y-4">
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white">Sweep Remaining Balances</h3>
-                  <div>
-                    <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">Sweep to address</label>
-                    <input
-                      type="text"
-                      value={sweepAddress}
-                      onChange={(e) => setSweepAddress(e.target.value)}
-                      placeholder="0x..."
-                      aria-label="Sweep destination address"
-                      className="w-full min-w-0 rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none font-mono"
-                    />
-                  </div>
+                <Card className="space-y-4">
+                  <h3 className="font-mono text-[11px] font-bold uppercase tracking-[0.15em] text-[color:var(--color-ink-100)]">Sweep Remaining Balances</h3>
+                  <Input
+                    label="Sweep to address"
+                    type="text"
+                    value={sweepAddress}
+                    onChange={(e) => setSweepAddress(e.target.value)}
+                    placeholder="0x..."
+                    aria-label="Sweep destination address"
+                  />
                   <div className="flex flex-wrap items-center gap-3">
-                    <button
-                      type="button"
+                    <Button
+                      variant="primary"
                       onClick={handleSweep}
                       disabled={!sweepAddress || sweepState.status === 'sweeping'}
-                      className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
                     >
                       {sweepState.status === 'sweeping'
                         ? `Sweeping ${sweepState.progress}/${derivedWalletClients.length}...`
                         : 'Sweep All to Address'}
-                    </button>
+                    </Button>
                     <span aria-live="polite">
                       {sweepState.status === 'done' && (
-                        <span className="text-sm text-green-600 dark:text-green-400">Sweep complete</span>
+                        <span className="font-mono text-sm text-[color:var(--color-ok)]">Sweep complete</span>
                       )}
                       {sweepState.status === 'error' && (
-                        <span className="text-sm text-red-400">{sweepState.errorMessage}</span>
+                        <span className="font-mono text-sm text-[color:var(--color-err)]">{sweepState.errorMessage}</span>
                       )}
                     </span>
                   </div>
-                </div>
+                </Card>
               )}
 
               {phase === 'complete' && journal.length > 0 && (
-                <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800">
-                  <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
+                <Card>
+                  <h3 className="font-mono text-[11px] font-bold uppercase tracking-[0.15em] text-[color:var(--color-ink-100)] mb-3">
                     Intervention Journal ({journal.length} {journal.length === 1 ? 'entry' : 'entries'})
                   </h3>
                   <div className="space-y-2">
                     {journal.map((entry, index) => (
-                      <div key={index} className="flex items-center justify-between text-xs">
+                      <div key={index} className="flex items-center justify-between font-mono text-xs">
                         <div className="flex items-center gap-2">
-                          <span className="text-gray-400 dark:text-gray-500">
+                          <span className="text-[color:var(--color-ink-500)]">
                             {new Date(entry.timestamp).toLocaleTimeString()}
                           </span>
-                          <span className="font-medium text-gray-700 dark:text-gray-300">
+                          <span className="font-semibold text-[color:var(--color-ink-100)]">
                             {entry.point}
                           </span>
                         </div>
                         <span className={
-                          entry.action === 'approve' ? 'text-green-600 dark:text-green-400' :
-                          entry.action === 'abort' ? 'text-red-600 dark:text-red-400' :
-                          'text-gray-600 dark:text-gray-300'
+                          entry.action === 'approve' ? 'text-[color:var(--color-ok)]' :
+                          entry.action === 'abort' ? 'text-[color:var(--color-err)]' :
+                          'text-[color:var(--color-ink-500)]'
                         }>
                           {entry.action}
                         </span>
                       </div>
                     ))}
                   </div>
-                </div>
+                </Card>
               )}
             </div>
           )}
