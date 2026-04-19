@@ -1,3 +1,5 @@
+import { Card } from './ui';
+
 export type RequirementsPanelProps = {
   readonly gasTokenNeeded: string;
   readonly gasTokenBalance: string;
@@ -11,31 +13,36 @@ export type RequirementsPanelProps = {
 
 function Requirement({ label, needed, balance }: { label: string; needed: string; balance: string }) {
   return (
-    <div className="flex items-center justify-between py-2 border-b border-gray-200 dark:border-gray-800">
-      <span className="text-sm text-gray-500 dark:text-gray-400">{label}</span>
+    <div className="flex items-center justify-between py-2 border-b border-[color:var(--edge)]/40">
+      <span className="font-mono text-sm text-[color:var(--fg-muted)]">{label}</span>
       <div className="text-right">
-        <span className="text-sm font-medium text-gray-900 dark:text-white">{needed}</span>
-        <span className="text-xs text-gray-400 dark:text-gray-500 ml-2">(have: {balance})</span>
+        <span className="font-mono text-sm font-semibold text-[color:var(--fg-primary)]">{needed}</span>
+        <span className="font-mono text-xs text-[color:var(--fg-muted)] ml-2">(have: {balance})</span>
       </div>
     </div>
   );
 }
 
 export function RequirementsPanel({ gasTokenNeeded, gasTokenBalance, gasTokenSymbol, erc20Needed, erc20Balance, tokenSymbol, batchCount, isSufficient }: RequirementsPanelProps) {
+  const statusTone = isSufficient
+    ? 'bg-[color:var(--color-ok)]/10 text-[color:var(--color-ok)] border-[color:var(--color-ok)]/30'
+    : 'bg-[color:var(--color-err)]/10 text-[color:var(--color-err)] border-[color:var(--color-err)]/30';
+
   return (
-    <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800">
-      <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">Distribution Requirements</h3>
+    <Card>
+      <h3 className="font-sans text-sm font-extrabold tracking-tight text-[color:var(--fg-primary)] mb-3">Distribution Requirements</h3>
       <Requirement label={`${gasTokenSymbol} for gas`} needed={gasTokenNeeded} balance={gasTokenBalance} />
       <Requirement label={`${tokenSymbol} tokens`} needed={erc20Needed} balance={erc20Balance} />
       <div className="flex items-center justify-between py-2">
-        <span className="text-sm text-gray-500 dark:text-gray-400">Batches</span>
-        <span className="text-sm font-medium text-gray-900 dark:text-white">{batchCount}</span>
+        <span className="font-mono text-sm text-[color:var(--fg-muted)]">Batches</span>
+        <span className="font-mono text-sm font-semibold text-[color:var(--fg-primary)]">{batchCount}</span>
       </div>
-      <div className={`mt-3 rounded-md p-3 text-sm ${
-        isSufficient ? 'bg-green-900/20 text-green-400 ring-1 ring-green-900/30' : 'bg-red-900/20 text-red-400 ring-1 ring-red-900/30'
-      }`}>
+      <div
+        data-status={isSufficient ? 'ok' : 'err'}
+        className={`mt-3 border-2 p-3 font-mono text-sm ${statusTone}`}
+      >
         {isSufficient ? 'Ready to distribute' : 'Insufficient balance — fund wallet before proceeding'}
       </div>
-    </div>
+    </Card>
   );
 }

@@ -3,6 +3,7 @@ import { formatUnits, erc20Abi } from 'viem';
 import { useQuery } from '@tanstack/react-query';
 import { StepPanel } from '../components/StepPanel.js';
 import { RequirementsPanel } from '../components/RequirementsPanel.js';
+import { Button, Card } from '../components/ui';
 import { useWallet } from '../providers/WalletProvider.js';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useChain } from '../providers/ChainProvider.js';
@@ -184,13 +185,13 @@ export function RequirementsStep() {
   return (
     <StepPanel title="Requirements" description="Verify your wallet has sufficient funds for distribution.">
       {!activeCampaign && (
-        <p className="text-sm text-gray-500 dark:text-gray-400">No active campaign selected.</p>
+        <p className="font-mono text-sm text-[color:var(--fg-muted)]">No active campaign selected.</p>
       )}
 
       {activeCampaign && (
         <div className="space-y-6">
           {isLoading && (
-            <p className="text-sm text-gray-400 dark:text-gray-500">Loading balances...</p>
+            <p className="font-mono text-sm text-[color:var(--fg-muted)]">Loading balances...</p>
           )}
 
           <RequirementsPanel
@@ -204,35 +205,33 @@ export function RequirementsStep() {
             isSufficient={isSufficient}
           />
 
-          <p className="text-xs text-gray-400 dark:text-gray-500">
+          <p className="font-mono text-xs text-[color:var(--fg-muted)]">
             Gas estimate: {estimatedGas ? 'live (per-recipient \u00d7 batch size)' : 'default (300k per batch)'}
           </p>
 
           {contractAddress && (
-            <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800">
+            <Card>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500 dark:text-gray-400">Token Allowance</span>
-                <span className={allowanceSufficient ? 'text-green-400' : 'text-red-400'}>
+                <span className="font-mono text-[color:var(--fg-muted)]">Token Allowance</span>
+                <span
+                  data-status={allowanceSufficient ? 'ok' : 'err'}
+                  className={`font-mono font-semibold ${allowanceSufficient ? 'text-[color:var(--color-ok)]' : 'text-[color:var(--color-err)]'}`}
+                >
                   {allowanceFormatted} / {erc20NeededFormatted} {tokenSymbol}
                 </span>
               </div>
-            </div>
+            </Card>
           )}
 
           {perryMode && (
-            <div className="rounded-md bg-purple-900/20 p-3 text-sm text-purple-400 ring-1 ring-purple-900/30">
+            <div className="border-2 border-[color:var(--color-info)]/30 bg-[color:var(--color-info)]/10 p-3 font-mono text-sm text-[color:var(--color-info)]">
               Requirements can be met externally in perry mode. The hot wallet can be funded from any source before distributing.
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={handleContinue}
-            disabled={!isSufficient && !perryMode}
-            className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 text-sm font-medium"
-          >
+          <Button variant="primary" onClick={handleContinue} disabled={!isSufficient && !perryMode}>
             Continue
-          </button>
+          </Button>
         </div>
       )}
     </StepPanel>
