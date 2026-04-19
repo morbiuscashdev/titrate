@@ -1,323 +1,91 @@
 # Titrate — Progress Checkpoint
 
-## Date: 2026-04-04
+## Date: 2026-04-18 (evening)
 
-## What Was Accomplished
+## Current state
 
-### Phase 1: Contracts + SDK Foundation (complete)
-- Monorepo scaffold (npm workspaces, Foundry, Vitest)
-- TitrateSimple.sol + TitrateFull.sol with selector-scoped allowance, on-chain registry, multicall
-- SDK modules: types, storage interface, chains, CSV, wallet (EIP-712), encode, sets
+- **Branch:** `master` · HEAD `167c816` (Merge PR #3 from `feat/brand-theme`)
+- **Open PRs:** none. Both PR #2 (Phase 2) and PR #3 (brand/theme + library + seed migration) merged to master.
+- **Working tree:** clean.
+- **CI:** `.github/workflows/ci.yml` green on master. Corepack-before-cache fix already applied. Full regression under ~2.5 min.
+- **Local Node:** v24 (laptop). CI runs Node 20 via `actions/setup-node@v4`. We've burned in the cross-realm/crypto/TypedArray diffs.
+- **Policy for further migration work:** user has authorized direct-to-master merges for small focused page/component migrations going forward (feedback memory saved).
 
-### Phase 1B: Scanner, Pipeline, Distributor (complete)
-- Scanner: block scanning, Transfer event log scanning with dynamic range titration
-- Pipeline: composable set operations, serializable configs
-- Distributor: deploy, verify, disperse (streaming per-batch LiveFilter), allowance, registry
+## Shipped on master since last checkpoint
 
-### Phase 2: TUI (complete)
-- Filesystem storage adapter, CLI commands, interactive wizard, e2e tests
+### PR #2 — Phase 2 live pipeline (merged `f0be968`)
+- Phase 2a foundation + Phase 2b pure loop algorithms
+- SDK types extended (`StageControl`, `BatchAttemptRecord`, `PipelineHistoryEntry`, `LoopErrorEntry`), `BatchAttempt.outcome` widened to include `pending`, `endBlock` dropped from `PipelineCursor.scan` (now manifest-declarative).
+- storage-campaign: `pipeline-history-store`, `errors-store`, `lock-store` (PID-based stale detection).
+- storage-idb: schema bumped v2→v3, parallel `pipelineHistory` + `errors` stores, `acquireLock` via Web Locks API.
+- `packages/sdk/src/pipeline/loops/`: `createScannerLoop`, `createFilterLoop`, `createDistributorLoop`, `reconcileBatches` (6 edge cases), `EventBus`, `ControlSignal`, `computeDrainStatus`, `selectWallet`, `retroactiveReapply`, `classifyPipelineChange`.
+- Full pipeline + reconciliation-on-restart + retroactive re-apply integration tests.
+- Phase 2c/2d/2e (TUI orchestrator + web GUI parity + Anvil-gated e2e + error surfacing polish) remain as follow-on work.
 
-### Phase 3A: SDK Extraction + Web Component Library (complete)
-- 8 functions extracted from TUI to SDK
-- 2 new SDK functions (computeRequirements, aggregateSpendReport)
-- Web scaffold: Vite + React 19 + Tailwind v4 + Vitest
-- 15 pure React components (layout, data display, forms, feedback)
+### PR #3 — Brand & theme rollout (merged `167c816`)
 
-### Explorer API Scanner (complete)
-- ExplorerBus: adaptive per-domain rate limiting (80% on first 429, -5% per subsequent)
-- Block range bisection for 10k result cap
-- 4 scanner functions: token transfers, transactions, internal txs, balances
-- Pipeline integration: 'explorer-scan' source, 'explorer-balance' filter
+**Design artifacts:**
+- `docs/superpowers/specs/2026-04-18-brand-theme-design.md` — full brand spec. Five open questions resolved inline.
+- `docs/superpowers/plans/2026-04-18-brand-theme-rollout.md` — 32-task implementation plan with complete code in every step.
 
-### TrueBlocks Scanner (complete)
-- TrueBlocksClient: auto-pagination via firstRecord/maxRecords
-- 5 scanner functions: appearances, transfers, balance history, traces, status
-- Integration tests gated by TRUEBLOCKS_URL env var
-- Pipeline integration: 'trueblocks-scan' source, 'trueblocks-balance-hint' filter
+**Brand decisions locked:**
+- One-liner: **"Titrate — Sovereign airdrop tooling. Sign cold, run local, deploy anywhere."** Replaces the inaccurate "offline-first" framing.
+- Logo: custom SVG titration curve — angular `_/` path (flat low plateau → diagonal rise → flat high plateau) with a hollow equivalence-point circle at the inflection. `viewBox` 170×150, stroke-width 12 path, hollow circle r=22 stroke-8. Large hollow chosen because it survives shrinking to 22px nav scale. TUI falls back to `∫` (U+222B); terminal splash uses the three-line ASCII `_/●` banner.
+- Palette: ink (ops surfaces), cream (brutalist surfaces), `pink-400/500/600/700` (role-split: 500 non-text/mark, 600 text-on-fill + CTA, 400 on-dark, 700 hover). All text pairings pass WCAG AA 1.4.3 + 1.4.11.
+- Typography: IBM Plex Sans + Plex Mono + Plex Serif (Google Fonts).
+- Mode split: TUI = operator-A always, dark-only. Web GUI = brutalist-B for decisions (landing, setup, summaries, settings), operator-A for observation (live pipeline, batch tables, logs, diagnostics) — embedded `OperatorPanel` wraps the latter with a 2px + 4px offset seam inside brutalist chrome.
+- Dark-mode marketing in scope as the "Dark brutalist" surface variant, honors `prefers-color-scheme: dark` + manual toggle via `data-theme` attribute.
+- Motion: 3 durations (80/150/240ms) × 3 easings × 6-primitive catalog + reduced-motion rule that cuts decorative motion while preserving focus, fades, and color transitions.
 
-### Gas Improvements (complete)
-- Removed silent 500k gas fallback
-- Speed presets (slow/medium/fast) for headroom and priority
-- Fee history percentile-based priority fee
-- Split base fee cap + priority fee cap, cumulative cost limit
-- parseGwei utility, updated TUI flags
+**Code shipped:**
+- `packages/web/public/mark.svg` (canonical), `mark-tile.svg` (favicon — pink mark in cream tile).
+- `packages/web/src/index.css` — Tailwind v4 `@theme` layer with full token set, `[data-theme="light|dark"]` + `[data-mode="brutalist|operator"]` cascades, motion tokens + keyframes + reduced-motion overrides. Bridges legacy `.dark` class and new `data-theme="dark"` in the `dark:` variant so legacy components keep working alongside the new system.
+- `packages/web/src/theme/` — `set-theme.ts` (pre-hydration), `useTheme.ts` (light/dark toggle with OS sync + localStorage), `useMode.tsx` (ModeProvider context + useMode hook), `index.ts` barrel.
+- `packages/web/index.html` — inline pre-hydration `<script>` sets `data-theme` before React mounts (no FOUC); CSP loosened with `'unsafe-inline'` for that one script; IBM Plex Sans/Mono/Serif linked; favicon swapped to `mark-tile.svg`.
+- `packages/web/src/components/ui/` — 16-primitive brand library: `Mark`, `Wordmark`, `Button`, `BlockCaret`, `Input`, `Textarea`, `Select`, `Checkbox`, `Pill`, `Chip`, `Card`, `StatCard`, `DataTable`, `OperatorPanel`, `AppShell`, `ThemeToggle` + barrel. Every component has a `.test.tsx` alongside. All components are mode-aware via `useMode()` and render different JSX per mode.
+- `packages/tui/src/theme/` — ANSI-256 `colors.ts`, Unicode `symbols.ts` (∫, •, ✓, ✗, ○, ›), ASCII `splash.ts` (three-line `_/●` banner), `index.ts`. Tests live in `packages/tui/__tests__/theme/` per the existing `bunfig.toml` convention.
+- **TUI splash wired**: `packages/tui/src/index.tsx` prints the pink curve + `∫ titrate sovereign airdrop tooling` banner on `--help` / `--version` / no-args. Description updated to the new one-liner.
+- **LandingPage migrated**: full brutalist-B demo using `Wordmark`(hero), three verb `Chip`s, `Card` grid for "how it works" + principles, `Button` primary CTA, `ThemeToggle` in corner.
+- **Header migrated**: brand `Mark` next to "Titrate" wordmark on every non-landing page; new `ThemeToggle` replaces the legacy one.
+- **HashRouter**: `packages/web/src/App.tsx` swapped from `BrowserRouter` to `HashRouter` — app now serves from any subpath (github.io, IPFS, local file URL) without server-side routing rewrites.
 
-### CLI Param Casing (complete)
-- All multi-word CLI flags accept both kebab-case and camelCase
+**Regression as of merge:** 1,406 tests green (sdk 541 + 51 skipped · storage-fs 18 · storage-idb 46 · storage-campaign 48 · web 665 · TUI 39 · contracts 49). `yarn build` clean. `npx tsc --noEmit` clean across web + TUI.
 
-### Human Interventions Layer (complete)
-- SDK validation: address (hex, length, prefix, checksum, duplicates), amount (negative, zero, large), batch, helpers
-- SDK intervention: 8 points, 13 actions, hook/config/journal interfaces, spot check sampling
-- TUI: review file CSV write/read, JSONL journal, spot check display, intervention handler orchestrator
-- Stuck transaction handling: bump/wait/abort
+### Incidental fixes landed in PR #3 (needed to make fresh-checkout CI work)
 
-### Phase B: Distribution MVP (complete)
-- SDK: ChainConfigStore, AppSettingsStore added to Storage interface
-- storage-idb: chain config and app settings object stores (DB v2 migration)
-- Web crypto: AES-GCM encrypt/decrypt with keccak256 key derivation
-- Encrypted storage wrapper: field-level encryption (rpcUrl, explorerApiKey, wallet addresses)
-- 5 providers: ThemeProvider, WalletProvider (Reown AppKit), StorageProvider, ChainProvider, CampaignProvider
-- Step locking: 7-step progressive flow (campaign → addresses → filters → amounts → wallet → requirements → distribute)
-- Perry mode: cold wallet derives hot wallet via EIP-712 signature
-- 4 query hooks: useTokenMetadata, useNativeBalance, useTokenBalance, useGasEstimate (TanStack Query)
-- 3 pages: HomePage (campaign grid), CampaignPage (step flow orchestrator), SettingsPage (chain config CRUD)
-- 7 step forms: CampaignStep, AddressesStep, FiltersStep, AmountsStep, WalletStep, RequirementsStep, DistributeStep
-- Header with ThemeToggle (light/dark/system), EncryptedField with lock icon
-- React Router v7, provider tree, App.tsx wiring
-- 3 TS fixes: Uint8Array buffer cast, FilterType narrowing, vitest import
+- `fix(ci)`: Corepack enable before Yarn cache (setup-node@v4's `cache: yarn` was invoking global Yarn 1.22 which fails against `packageManager: yarn@4.14.0`). Split into separate `corepack enable` + manual `actions/cache@v4` on `.yarn/cache` + `install-state.gz`.
+- `fix(storage-fs)`: implement Phase 2 `Storage` shape (rejecting stubs for `pipelineHistory` + `errors`).
+- `fix(web)`: pass through Phase 2 stores in `createEncryptedStorage` (no encryption needed; no sensitive data in history/errors).
+- `fix(tui)`: add `startBlock`, `endBlock`, `autoStart`, `control` to stale `CampaignManifest` literals in `step-status.test.ts` and `new-campaign.tsx`.
+- `fix(web/crypto)`: pass TypedArray directly to `SubtleCrypto.importKey` — Node 20 in jsdom rejects `.buffer` cross-realm; Node 24 was lenient. Cast to `Uint8Array<ArrayBuffer>`.
+- `fix(web)`: shim `node:fs/promises` + `node:readline` in the Vite alias (Phase 2's `retroactive.ts` uses them; CI's `yarn build` caught the gap that `yarn test` / `yarn typecheck` didn't).
 
-### Phase B: Gap Fixes (complete)
-- ChainProvider now wired to active campaign via ChainBridge component
-- CampaignProvider moved above ChainProvider in provider tree
-- Wallet badge (Reown appkit-button) rendered in Header
-- completeStep() API added to CampaignProvider for explicit step completion
-- Filters step requires explicit save/skip (no longer auto-completes)
-- Vite build: Node builtin shims for SDK barrel export (node:fs, node:path, node:url, node:crypto)
-- Dark body background via Tailwind CSS, class-based dark mode configured
+## Remaining work (not started)
 
-## Test Counts
-- Contracts: 49 tests
-- SDK: 394 tests passing (2 Anvil-dependent failures expected)
-- TUI: 33 tests passing (2 Anvil e2e failures expected)
-- storage-fs: 13 tests
-- storage-idb: 36 tests
-- Web: 174 tests
-- Total: ~699 tests
+### Further brand/theme migrations (direct-to-master policy authorized)
 
-## Build Progression
-C (component library) ✅ → B (distribution MVP) ✅ → A (full app) → Z (analytics)
+Work left to migrate to the new primitive library. Each is a standalone PR-sized unit that should land on master without batching into a big migration PR:
 
-### Phase B: Gap Fixes Round 2 (complete)
-- StorageProvider auto-prompts EIP-712 storage-encryption signature on wallet connect
-- Settings page Add Chain form with ChainSelector presets, RPC URL, explorer API key
-- HomePage shows real chain names from SDK (getChainConfig)
-- RequirementsStep loads recipient count from address sets in storage
+- `packages/web/src/pages/HomePage.tsx` → swap `CampaignCard` grid for `Card`/`DataTable`; adopt `Button` for actions.
+- `packages/web/src/pages/SettingsPage.tsx` → replace ad-hoc inputs with `Input` / `Select` / `Checkbox`.
+- `packages/web/src/pages/CampaignPage.tsx` → wrap batch-table and live-status sections in `OperatorPanel`; migrate tables to the operator variant of `DataTable`.
+- Per-component migrations: `WelcomeCard`, `CampaignCard`, `BatchStatusCard`, `BatchTimeline`, `AddressTable`, `PipelineStepEditor`, `WalletBadge`, `InterventionModal`, etc. (~58 legacy components). Each can migrate as its consuming page gets touched.
 
-### Phase B: DistributeStep Real Wiring (complete)
-- DistributeStep now calls real deployDistributor + disperseTokensSimple/disperseTokens from SDK
-- Loads recipients from IDB storage on mount
-- onProgress callback wired to BatchTimeline for live batch status
-- SpendSummary computed from real BatchResult data
-- Error handling for missing wallet, chain, contract, empty recipients
-- 177 web tests passing (15 for DistributeStep alone)
+### Phase 2c/2d/2e follow-on (separate from brand work)
 
-## Test Counts
-- Contracts: 49 tests
-- SDK: 394 tests passing (2 Anvil-dependent failures expected)
-- TUI: 33 tests passing (2 Anvil e2e failures expected)
-- storage-fs: 13 tests
-- storage-idb: 36 tests
-- Web: 177 tests
-- Total: ~702 tests
+- **Phase 2c** — TUI `PipelineOrchestrator` wired into the React tree, LIVE dashboard panel, keyboard bindings (space / s / f / d / g / S / e / b / q), viewer-mode for second session.
+- **Phase 2d** — Web GUI orchestrator parity (same loop abstractions, Web Locks API instead of `.pipeline.lock`).
+- **Phase 2e** — Anvil-gated e2e + error-surfacing polish.
 
-### Phase A: Campaign CRUD (partial)
-- Campaign delete: CampaignStore.delete() added to SDK, IDB, FS; wired into HomePage
-- Campaign clone: cloneCampaign() copies config with new ID, clears contractAddress
-- Real address counts loaded from storage in HomePage dashboard cards
-- Token symbol saved from probe to contractName for display downstream
-- Error boundary wraps entire app for crash resilience
-- ERC-20 approval flow checks allowance before distribution, prompts approve if needed
-- refreshActiveCampaign() updates step states after address saving
+### Open deferred items from the brand spec
 
-### Phase A: Dashboard Polish (complete)
-- Campaign cards show real batch progress and dynamic status (draft/ready/distributing/complete)
-- Delete confirmation dialog (window.confirm)
-- 404 catch-all redirects to home
-- Dynamic page titles per route
-- useEffect-based address count loading from storage
+- Accessibility audit beyond WCAG AA — AAA passes not attempted.
+- Visual regression testing (Chromatic / Percy) — deferred until library has ~15-20 stable components; snapshot tests (Vitest + Testing Library) are what ship now.
+- TUI font fallback for terminals where Plex Mono isn't available and `∫` renders as tofu — not solving preemptively.
 
-### Phase A: Request Caching + Polish (complete)
-- CacheProvider: two-tier cache (memory + IDB) via SDK createCache + storage-idb createIDBCacheStore
-- useTokenMetadata uses cache.getOrCompute for persistent token metadata caching
-- Skeleton components: Skeleton, CampaignCardSkeleton for loading states
-- HomePage and SettingsPage show skeletons while storage initializes
-- Campaign archive: optional archived field on StoredCampaign, archive/unarchive toggle, show/hide filter
-- Campaign rename: pencil icon on card, window.prompt for inline rename
-- InlineEdit component (double-click to edit, Enter/blur to save, Escape to cancel)
+## Session notes
 
-## Test Counts
-- Contracts: 49 tests
-- SDK: 394 tests passing (2 Anvil-dependent failures expected)
-- TUI: 33 tests passing (2 Anvil e2e failures expected)
-- storage-fs: 13 tests
-- storage-idb: 36 tests
-- Web: 183 tests
-- Total: ~708 tests
-
-### Phase A: Final Polish (complete)
-- Code splitting: manual chunks for vendor-react (48KB), vendor-wallet (348KB), vendor-reown (1.4MB)
-- Campaign export/import: JSON download + file upload on Settings page
-- Keyboard shortcut: Cmd/Ctrl+N creates new campaign from HomePage
-- ThemeToggle redesigned: 2-button icon group (light/dark toggle + system mode)
-- Verified: prod build chunks load correctly, no circular deps, all routes render
-
-## Test Counts
-- Contracts: 49 tests
-- SDK: 394 tests passing (2 Anvil-dependent failures expected)
-- TUI: 33 tests passing (2 Anvil e2e failures expected)
-- storage-fs: 13 tests
-- storage-idb: 36 tests
-- Web: 185 tests
-- Total: ~710 tests
-
-### Spec Gap Fixes (complete)
-- RPC calls routed through RequestBus for adaptive rate limiting
-- Custom chain option in CampaignStep (chain ID + name + explorer fields + rate limit group)
-- EncryptedField lock triggers unlock flow via useUnlockStorage hook
-- TitrateFull selector-scoped approval via approveOperator + getAllowance
-- getDisperseSelector pure function for correct 4-byte selector per amountMode
-
-### Batch Persistence + Resume (complete)
-- Batch results saved to storage.batches during distribution
-- batchResultToStored pure function (BigInt → string conversion)
-- Resume from last completed batch via computeResumeOffset
-- "Resume Distribution" UI with progress message
-- Auto-detect complete distributions on mount
-
-### UX Polish (complete)
-- Token allowance display in RequirementsStep (green/red vs needed)
-- Toast notification system (ToastProvider + ToastContainer, auto-dismiss 4s)
-- LoadingButton component with inline spinner + primary/secondary variants
-- Responsive mobile layout pass (9 files: flex-wrap, truncate, responsive padding)
-
-## Test Counts
-- Contracts: 49 tests
-- SDK: 394 tests passing (2 Anvil-dependent failures expected)
-- TUI: 33 tests passing (2 Anvil e2e failures expected)
-- storage-fs: 13 tests
-- storage-idb: 36 tests
-- Web: 393 tests (98% coverage)
-- Total: ~918 tests
-
-### SDK-to-Web Gap Closure (complete — 2026-04-06)
-All 15 gaps between SDK and web app closed:
-- Phase 1: campaignId derivation, live gas estimation, pre-distribution validation, pipeline filter composition
-- Phase 2: Filter preview in FiltersStep (on-demand pipeline execution with surviving count)
-- Phase 3: Contract verification, intervention journal, spot checks in batch-preview modal
-- Phase 4: On-chain address sources (block-scan, explorer-scan), set operations panel
-- Phase 5: TrueBlocks URL field in SettingsPage
-
-### Multi-Wallet Parallel Distribution (complete — 2026-04-06)
-- SDK: deriveWalletAtIndex, deriveMultipleWallets (with offset), suggestWalletCount, zeroPrivateKey
-- Web: WalletProvider multi-wallet state, WalletStep derivation UI (count/offset/funding)
-- DistributeStep: disperseParallel dispatch, per-wallet ERC-20 approvals, sweep-back to user-specified address
-- Encrypted signature persistence via IDB appSettings, highWaterMark tracking
-- Spec: docs/superpowers/specs/2026-04-06-multi-wallet-parallel-distribution.md
-
-### Production Hardening (complete — 2026-04-06)
-- CSP meta tag restricting scripts, connections, fonts
-- React ErrorBoundary wrapping route content
-- TypeScript compilation errors fixed (6 issues)
-
-### Performance (complete — 2026-04-06)
-- Route-level code splitting via React.lazy (HomePage 11KB, SettingsPage 12KB, CampaignPage 139KB)
-- Vendor chunk reorganization (react 48KB, viem 294KB, wagmi 54KB)
-
-### TUI Feature Parity (complete — 2026-04-06)
-- `set-ops` command: union/intersect/difference/symmetricDifference on CSV files
-- `filter-preview` command: dry-run filters with per-filter survival counts
-
-### Responsive + Accessibility (complete — 2026-04-06)
-- Mobile layout fixes: flex-wrap on button rows, responsive grids, min-w-0 on inputs
-- ARIA labels on all new interactive elements (fund buttons, set selectors, sweep input)
-- focus-visible ring styles on all new buttons
-- aria-live regions on sweep progress and filter preview
-
-## Test Counts
-- Contracts: 49 tests
-- SDK: 464 tests (20 new wallet tests)
-- TUI: 39 tests (6 new set-operations tests)
-- storage-fs: 13 tests
-- storage-idb: 36 tests
-- Web: 587 tests
-- Total: ~1,188 tests
-
-### Anvil Test Skip (complete — 2026-04-07)
-- SDK + TUI Anvil-dependent tests now skip cleanly via describe.runIf(anvilUp)
-- anvilAvailable: eager singleton probe at import time, cached across test files
-- 0 failures without Anvil; all tests run normally when Anvil is up
-
-## Updated Test Counts (2026-04-08)
-- Contracts: 49 tests
-- SDK: 444 pass, 51 skipped (Anvil + TrueBlocks)
-- TUI: 39 pass, 2 skipped (Anvil)
-- storage-fs: 13 tests
-- storage-idb: 36 tests
-- Web: 587 tests
-- Total: ~1,168 tests, 0 failures
-
-## TUI ↔ Web Parity Work — Ranked Plan
-
-### Fix Now (small, high-impact safety/correctness)
-1. Persist intervention journal to IDB in web (currently in-memory, lost on refresh)
-2. Manual symbol/decimals fallback in CampaignStep when probeToken fails
-3. Add startBlock/endBlock fields to token-recipients filter in PipelineStepEditor
-4. Render explorer links in InterventionModal spot check
-
-### Fix Soon (medium effort, functional gaps)
-5. Date-string input for block-scan source in AddressesStep (resolveBlockRef)
-6. Filter-preview count display in FiltersStep (per-stage survival counts)
-7. Add --fee-bump, --nonce-window, --revalidation flags to TUI distribute command
-8. Amounts conflict detection in web AmountsStep (decimal values in integer mode)
-
-### Build Next (larger features)
-9. Campaign auto-resume detection (badge on campaign cards)
-10. Multi-wallet support in TUI (derive-wallet count/offset, distribute --wallets)
-11. Post-distribution sweep command for TUI
-12. Operator method selector in web WalletStep (advanced panel)
-13. Gas config parity: TUI --fee-bump, --nonce-window, --revalidation
-
----
-
-### Phase 1: Campaign Lifecycle — TUI Persistent State (complete — 2026-04-17)
-
-**Foundation (Phase 1a — SDK)**
-- CampaignManifest, WalletProvisioning discriminated union, PipelineCursor, CampaignStatus types
-- WalletRecord/BatchRecord/SweepRecord JSONL types (WalletRecord.encryptedKey is full envelope)
-- EncryptedKeyEnvelope type (ciphertext + iv + authTag)
-- RPC provider catalog: PROVIDERS (valve.city, Alchemy, Infura, public, custom) + resolveRpcUrl + splitTemplate
-- AppSettings.providerKeys field
-- EIP712Signer abstraction: paste, WalletConnect, Ledger factories
-
-**New package (Phase 1b — @titrate/storage-campaign)**
-- AppendableCSV, AppendableJSONL<T> primitives
-- ManifestStore, CursorStore (BigInt-safe), PipelineStore
-- createCampaignStorage, createSharedStorage factories
-- 32 tests passing
-
-**TUI runtime switch (Phase 1c)**
-- packages/tui switched from Node to Bun (@opentui/core + @opentui/react)
-- Yarn-managed installs, Bun as runtime only — single lockfile
-- Commander entry point: src/index.tsx (replaces src/index.ts)
-- Interactive React shell: context providers (CampaignStorage, SharedStorage, Manifest, Client) + screen router
-- 7 screens: Dashboard + CampaignSetup + Addresses + Filters + Amounts + Wallet + Distribute
-- Pure-function step-status derivation
-- Passphrase helpers (scrypt + AES-GCM)
-- ProviderKeyInput component with templated prefix/suffix
-
-**Command wiring (Phase 1d)**
-- titrate new <name> — create campaign dir + launch interactive root
-- titrate open <name-or-path> — resolve + launch
-- titrate list — tab-separated stdout
-- --campaign flag on distribute, sweep, collect (loads manifest + decrypts wallets with passphrase)
-- Deleted legacy clack-based wizard, steps, format, intervention-handler, spot-check-display
-
-**Signer + crypto polish (Phase 1e)**
-- WalletConnect signer (@walletconnect/sign-client + terminal QR via qrcode package)
-- Ledger signer (@ledgerhq/hw-app-eth + hw-transport-node-hid) — stretch, requires device
-- WalletRecord.encryptedKey upgraded from string to {ciphertext, iv, authTag} envelope
-- Anvil-gated full-cycle integration test (skips when Anvil down, smoke test always runs)
-
-## Updated Test Counts (2026-04-17)
-- Contracts: 49 tests (forge) — 15 TitrateSimple + 34 TitrateFull, all passing
-- SDK: 475 passed, 51 skipped (Anvil + TrueBlocks gated), 526 total (51 test files)
-- storage-fs: 18 passed (3 test files)
-- storage-idb: 36 passed (7 test files)
-- storage-campaign: 32 passed (7 test files) — new package
-- Web: 598 passed (47 test files)
-- TUI: 22 passed, 6 failed (set-ops — known: npx tsx can't find src/index.tsx), 1 error (describe.runIf — known: bun vs vitest API), 28 total across 9 files
-- Total: ~1,230 tests passing across 6 packages (7 suites)
-
-**Known failures (non-critical, pre-existing):**
-- TUI set-ops (6): tests invoke `npx tsx src/index.ts` which no longer exists — entry point is now `src/index.tsx`; set-ops logic is correct, test runner wiring needs update
-- TUI describe.runIf (1 error): bun's test runner does not implement `describe.runIf`; deploy test is unreachable but does not affect pass count
+- CI went red five times on PR #2 unwinding staleness-masked bugs; each made the branch actually buildable by anyone, not just this machine. Local `yarn test` passes on stale `dist/`, `yarn build` catches more. Consider adding a `Build web` step to the CI workflow.
+- Subagent-driven-development skill was briefly used for Task 1 of the brand rollout (~6 subagent dispatches). The two-stage review produced a false positive because the plan was prescriptive. Switched to hybrid inline execution for the other 31 tasks, dispatching subagents only when judgement was needed. Ratio felt right.
+- Visual companion server (superpowers:brainstorming) used heavily for the brand brainstorm. Last active session at `.superpowers/brainstorm/27143-1776544216/`.
+- Never committed directly to master during this session — every change went through PR #2 or PR #3. Going forward the user has authorized direct-to-master for small migrations; `feedback_direct-to-master.md` memory captures the policy.
