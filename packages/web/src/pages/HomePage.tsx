@@ -34,7 +34,8 @@ const CAMPAIGN_DEFAULTS = {
   tokenDecimals: 18,
   contractAddress: null,
   contractVariant: 'simple' as const,
-  contractName: '',
+  contractName: 'TokenAirdrop',
+  tokenSymbol: '',
   amountMode: 'uniform' as const,
   amountFormat: 'integer' as const,
   uniformAmount: null,
@@ -197,7 +198,7 @@ export function HomePage() {
             <CampaignCard
               name={campaign.name}
               chainName={campaign.chainId > 0 ? (getChainConfig(campaign.chainId)?.name ?? `Chain ${campaign.chainId}`) : 'Not configured'}
-              tokenSymbol={campaign.tokenAddress === '0x0000000000000000000000000000000000000000' ? 'N/A' : (campaign.contractName || `${campaign.tokenAddress.slice(0, 6)}...`)}
+              tokenSymbol={campaign.tokenAddress === '0x0000000000000000000000000000000000000000' ? 'N/A' : (campaign.tokenSymbol || campaign.contractName || `${campaign.tokenAddress.slice(0, 6)}...`)}
               addressCount={campaignStats[campaign.id]?.addresses ?? 0}
               batchProgress={{
                 completed: campaignStats[campaign.id]?.completedBatches ?? 0,

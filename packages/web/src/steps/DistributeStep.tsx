@@ -212,7 +212,7 @@ export function DistributeStep() {
     [rawBatchSize],
   );
   const batchSize = effectiveBatchSize;
-  const tokenSymbol = activeCampaign?.contractName || 'TOKEN';
+  const tokenSymbol = activeCampaign?.tokenSymbol || activeCampaign?.contractName || 'TOKEN';
   const tokenDecimals = activeCampaign?.tokenDecimals ?? 18;
   const hasContract =
     activeCampaign?.contractAddress !== null &&

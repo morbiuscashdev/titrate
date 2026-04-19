@@ -19,3 +19,5 @@ export { validateAddresses } from './addresses.js';
 export { validateAmounts } from './amounts.js';
 export { validateBatch } from './batch.js';
 export { hasErrors, hasWarnings, filterBySeverity } from './helpers.js';
+export { validateContractName, isValidContractName } from './contract-name.js';
+export type { ContractNameValidation } from './contract-name.js';

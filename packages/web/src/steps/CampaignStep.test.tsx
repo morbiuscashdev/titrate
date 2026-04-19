@@ -46,10 +46,17 @@ vi.mock('@titrate/sdk', () => {
     { chainId: 1, name: 'Ethereum', category: 'mainnet', rpcUrls: ['https://eth.llamarpc.com'] },
     { chainId: 369, name: 'PulseChain', category: 'mainnet', rpcUrls: ['https://rpc.pulsechain.com'] },
   ];
+  const IDENTIFIER = /^[A-Za-z_$][A-Za-z_$0-9]*$/;
   return {
     SUPPORTED_CHAINS: chains,
     getChains: (category?: string) => category ? chains.filter((c: { category: string }) => c.category === category) : chains,
     getChainConfig: (chainId: number) => chains.find((c: { chainId: number }) => c.chainId === chainId) ?? null,
+    validateContractName: (input: string) => {
+      const trimmed = input.trim();
+      if (trimmed.length === 0) return { ok: false, reason: 'Contract name is required.' };
+      if (!IDENTIFIER.test(trimmed)) return { ok: false, reason: 'invalid identifier' };
+      return { ok: true, value: trimmed };
+    },
   };
 });
 
@@ -207,7 +214,7 @@ describe('CampaignStep', () => {
     await vi.waitFor(() => {
       expect(mockCreateCampaign).toHaveBeenCalledWith(
         expect.objectContaining({
-          contractName: 'USDC',
+          tokenSymbol: 'USDC',
           tokenDecimals: 6,
         }),
       );
@@ -314,7 +321,7 @@ describe('CampaignStep', () => {
 
     const saved = mockSaveCampaign.mock.calls[0][0];
     expect(saved.tokenDecimals).toBe(6);
-    expect(saved.contractName).toBe('USDC');
+    expect(saved.tokenSymbol).toBe('USDC');
   });
 
   it('creates new campaign with correct data when no active campaign', async () => {

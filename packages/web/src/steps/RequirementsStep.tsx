@@ -157,7 +157,7 @@ export function RequirementsStep() {
     ? formatUnits(tokenBalance, tokenDecimals)
     : '...';
 
-  const tokenSymbol = activeCampaign?.contractName || 'TOKEN';
+  const tokenSymbol = activeCampaign?.tokenSymbol || activeCampaign?.contractName || 'TOKEN';
 
   const allowanceFormatted = allowance !== undefined
     ? formatUnits(allowance, tokenDecimals)
