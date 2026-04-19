@@ -45,6 +45,7 @@ Auto-discovered during Claude Code sessions. Invoke the relevant one when its tr
 - **`titrate-dev-services`** — bring up Anvil (and TrueBlocks) so the ~51 gated SDK tests actually run. Use before claiming a clean regression.
 - **`titrate-tui-smoke`** — full launch-and-exit boot test for the TUI. Use after non-trivial TUI changes before marking the task done.
 - **`titrate-mock-client`** — viem `PublicClient` mock fixture for TUI screen tests that consume `useClient()`.
+- **`titrate-pulsechain-testnet`** — gated PulseChain v4 testnet E2E (faucet → deploy). Use after touching `deploy.ts` / `verify.ts` / contract sources to confirm the deploy path works against a real chain.
 
 ## Documentation layout
 
