@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import type { Address } from 'viem';
 import { StepPanel } from '../components/StepPanel.js';
 import { PipelineStepEditor, type PipelineStepEditorProps } from '../components/PipelineStepEditor.js';
+import { Button, Card } from '../components/ui';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useChain } from '../providers/ChainProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
@@ -195,13 +196,15 @@ export function FiltersStep() {
         {filters.length > 0 && (
           <div className="space-y-4">
             {filters.map((filter, index) => (
-              <div key={filter.id} className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800">
+              <Card key={filter.id}>
                 <div className="mb-3 flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Filter {index + 1}</span>
+                  <span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--fg-primary)]">
+                    Filter {index + 1}
+                  </span>
                   <button
                     type="button"
                     onClick={() => handleRemoveFilter(filter.id)}
-                    className="text-xs text-gray-400 dark:text-gray-500 hover:text-red-400 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 rounded"
+                    className="font-mono text-xs uppercase tracking-[0.1em] text-[color:var(--fg-muted)] hover:text-[color:var(--color-err)] transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[1px] focus-visible:outline-[color:var(--color-info)] rounded-sm"
                   >
                     Remove
                   </button>
@@ -213,37 +216,33 @@ export function FiltersStep() {
                   onTypeChange={(type) => handleFilterTypeChange(filter.id, type)}
                   onParamsChange={(params) => handleFilterParamsChange(filter.id, params)}
                 />
-              </div>
+              </Card>
             ))}
           </div>
         )}
 
         {/* Add Filter */}
-        <button
-          type="button"
-          onClick={handleAddFilter}
-          className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
-        >
+        <Button variant="secondary" onClick={handleAddFilter}>
           + Add Filter
-        </button>
+        </Button>
 
         {/* Filter summary */}
         {filters.length > 0 && (
-          <div className="rounded-md bg-blue-900/10 dark:bg-blue-900/20 p-3 text-sm text-blue-700 dark:text-blue-400 ring-1 ring-blue-200 dark:ring-blue-900/30">
-            <p className="font-medium">
+          <div className="border-2 border-[color:var(--color-info)]/30 bg-[color:var(--color-info)]/10 p-3">
+            <p className="font-mono text-sm font-semibold text-[color:var(--color-info)]">
               {filters.length} {filters.length === 1 ? 'filter' : 'filters'} configured
             </p>
-            <ul className="mt-1 list-disc list-inside text-xs text-blue-600 dark:text-blue-300">
+            <ul className="mt-1 list-disc list-inside font-mono text-xs text-[color:var(--color-info)]/80">
               {filters.map((f) => (
                 <li key={f.id}>{getFilterLabel(f.filterType)}</li>
               ))}
             </ul>
             {previewState.status === 'done' ? (
-              <p className="mt-2 text-xs text-green-600 dark:text-green-400/70">
+              <p className="mt-2 font-mono text-xs text-[color:var(--color-ok)]">
                 {previewState.survivingCount.toLocaleString()} of {previewState.totalCount.toLocaleString()} addresses will receive tokens.
               </p>
             ) : (
-              <p className="mt-2 text-xs text-blue-500 dark:text-blue-400/70">
+              <p className="mt-2 font-mono text-xs text-[color:var(--color-info)]/80">
                 Use Preview Filters to see how many addresses pass.
               </p>
             )}
@@ -253,47 +252,46 @@ export function FiltersStep() {
         {/* Filter Preview */}
         {filters.length > 0 && recipients.length > 0 && (
           <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
+            <div className="flex items-center gap-3 flex-wrap">
+              <Button
+                variant="secondary"
                 onClick={handlePreview}
                 disabled={previewState.status === 'running'}
-                className="bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 disabled:opacity-50 text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
               >
                 {previewState.status === 'running' ? 'Running...' : 'Preview Filters'}
-              </button>
+              </Button>
               {previewState.status === 'done' && (
-                <span role="status" className="text-sm text-gray-600 dark:text-gray-300">
-                  <span className="font-medium text-green-600 dark:text-green-400">{previewState.survivingCount.toLocaleString()}</span>
+                <span role="status" className="font-mono text-sm text-[color:var(--fg-muted)]">
+                  <span className="font-semibold text-[color:var(--color-ok)]">{previewState.survivingCount.toLocaleString()}</span>
                   {' '}of{' '}
-                  <span className="font-medium">{previewState.totalCount.toLocaleString()}</span>
+                  <span className="font-semibold text-[color:var(--fg-primary)]">{previewState.totalCount.toLocaleString()}</span>
                   {' '}addresses pass
                 </span>
               )}
             </div>
             {previewState.status === 'done' && previewState.stages.length > 0 && (
-              <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-3 ring-1 ring-gray-200 dark:ring-gray-800">
-                <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">Per-filter breakdown</p>
+              <Card className="p-3">
+                <p className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--fg-muted)] mb-2">Per-filter breakdown</p>
                 <div className="space-y-1">
                   {previewState.stages.map((stage, i) => {
                     const removed = stage.inputCount - stage.outputCount;
                     return (
-                      <div key={i} className="flex items-center justify-between text-xs">
-                        <span className="text-gray-600 dark:text-gray-300">{getFilterLabel(stage.filterType)}</span>
-                        <span className="text-gray-500 dark:text-gray-400">
+                      <div key={i} className="flex items-center justify-between font-mono text-xs">
+                        <span className="text-[color:var(--fg-primary)]">{getFilterLabel(stage.filterType)}</span>
+                        <span className="text-[color:var(--fg-muted)]">
                           {stage.inputCount.toLocaleString()} → {stage.outputCount.toLocaleString()}
                           {removed > 0 && (
-                            <span className="text-red-400 ml-1">(-{removed.toLocaleString()})</span>
+                            <span className="text-[color:var(--color-err)] ml-1">(-{removed.toLocaleString()})</span>
                           )}
                         </span>
                       </div>
                     );
                   })}
                 </div>
-              </div>
+              </Card>
             )}
             {previewState.status === 'running' && (
-              <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+              <div className="flex items-center gap-2 font-mono text-sm text-[color:var(--fg-muted)]">
                 <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
                   <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
                   <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" className="opacity-75" />
@@ -302,7 +300,7 @@ export function FiltersStep() {
               </div>
             )}
             {previewState.status === 'error' && (
-              <div className="rounded-md bg-red-900/20 p-3 text-sm text-red-400 ring-1 ring-red-900/30">
+              <div className="border-2 border-[color:var(--color-err)]/40 bg-[color:var(--color-err)]/10 p-3 font-mono text-sm text-[color:var(--color-err)]">
                 {previewState.errorMessage}
               </div>
             )}
@@ -311,30 +309,21 @@ export function FiltersStep() {
 
         {/* No addresses loaded hint */}
         {filters.length > 0 && recipients.length === 0 && (
-          <p className="text-xs text-gray-400 dark:text-gray-500">
+          <p className="font-mono text-xs text-[color:var(--fg-muted)]">
             No addresses loaded yet. Add addresses first to preview filter results.
           </p>
         )}
 
         {/* Actions */}
-        <div className="flex gap-3">
+        <div className="flex gap-3 flex-wrap">
           {filters.length === 0 ? (
-            <button
-              type="button"
-              onClick={handleSkip}
-              className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
-            >
+            <Button variant="primary" onClick={handleSkip}>
               Skip Filters
-            </button>
+            </Button>
           ) : (
-            <button
-              type="button"
-              onClick={handleContinue}
-              disabled={isSaving}
-              className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
-            >
+            <Button variant="primary" onClick={handleContinue} disabled={isSaving}>
               {isSaving ? 'Saving...' : 'Save & Continue'}
-            </button>
+            </Button>
           )}
         </div>
       </div>
