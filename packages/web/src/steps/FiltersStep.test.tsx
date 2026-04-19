@@ -311,15 +311,11 @@ describe('FiltersStep', () => {
 
     fireEvent.click(screen.getByText('Preview Filters'));
 
-    await waitFor(() => {
-      expect(screen.getByText(/addresses pass/)).toBeInTheDocument();
-    });
-
-    // Verify the inline preview next to the button shows the correct counts
-    const passText = screen.getByText(/addresses pass/);
+    const passText = await screen.findByRole('status');
     expect(passText.textContent).toContain('2');
     expect(passText.textContent).toContain('of');
     expect(passText.textContent).toContain('3');
+    expect(passText.textContent).toContain('addresses pass');
   });
 
   it('shows error when preview fails', async () => {

@@ -1760,11 +1760,11 @@ describe('DistributeStep pre-distribution validation', () => {
       expect(screen.getByRole('button', { name: /start distribution/i })).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
-
-    await waitFor(() => {
-      expect(screen.getByText(/validation failed/i)).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /start distribution/i }));
     });
+
+    await screen.findByText(/validation failed/i);
 
     expect(mockDisperseTokensSimple).not.toHaveBeenCalled();
   });
