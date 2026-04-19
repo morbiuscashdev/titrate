@@ -7,7 +7,7 @@ export type BatchTimelineProps = {
 
 export function BatchTimeline({ batches }: BatchTimelineProps) {
   if (batches.length === 0) {
-    return <p className="text-sm text-gray-500">No batches yet</p>;
+    return <p className="font-mono text-sm text-[color:var(--fg-muted)]">No batches yet</p>;
   }
   return (
     <div className="flex flex-col gap-2" aria-live="polite" aria-label="Batch progress">
