@@ -16,16 +16,22 @@
   <body>
     <div id="root"></div>
     <script>
-      globalThis.litIssuedWarnings = new Set();
+      // Suppress Lit's "dev mode" warning. Lit transitively ships through
+      // @reown/appkit-ui in dev mode; pre-populating the warnings set with
+      // the "dev-mode" code satisfies the one-shot gate.
+      globalThis.litIssuedWarnings = new Set(["dev-mode"]);
     </script>
     <script>
       (function () {
         try {
           var stored = localStorage.getItem("titrate-theme");
-          var theme = (stored === "light" || stored === "dark")
+          var pref = (stored === "light" || stored === "dark" || stored === "system")
             ? stored
+            : "system";
+          var resolved = (pref === "light" || pref === "dark")
+            ? pref
             : (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
-          document.documentElement.dataset.theme = theme;
+          document.documentElement.dataset.theme = resolved;
         } catch (e) { /* noop */ }
       })();
     </script>
