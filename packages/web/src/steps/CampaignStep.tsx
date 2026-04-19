@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { StepPanel } from '../components/StepPanel.js';
 import { ChainSelector } from '../components/ChainSelector.js';
+import { Button, Input, Card } from '../components/ui';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
 import { useTokenMetadata } from '../hooks/useTokenMetadata.js';
@@ -38,6 +39,12 @@ export function clampBatchSize(value: string): number {
   return Math.max(1, Number(value) || 1);
 }
 
+const SECTION_LABEL = 'block font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--fg-primary)] mb-2';
+const TOGGLE_BUTTON_BASE = 'rounded-none border-2 font-mono font-bold uppercase tracking-[0.12em] transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[1px] focus-visible:outline-[color:var(--color-info)]';
+const TOGGLE_ACTIVE = 'bg-[color:var(--color-pink-500)] text-white border-[color:var(--color-pink-500)]';
+const TOGGLE_INACTIVE = 'bg-[color:var(--bg-card)] text-[color:var(--fg-primary)] border-[color:var(--edge)] hover:border-[color:var(--color-pink-500)]';
+const TOGGLE_INACTIVE_MUTED = 'bg-transparent text-[color:var(--fg-muted)] border-[color:var(--edge)] hover:text-[color:var(--fg-primary)]';
+
 /**
  * Step 1: Campaign setup form.
  *
@@ -66,13 +73,11 @@ export function CampaignStep() {
   const [manualSymbol, setManualSymbol] = useState('');
   const [manualDecimals, setManualDecimals] = useState('18');
 
-  // Determine whether the entered token address is valid hex for probing
   const normalizedTokenAddress: Address | null =
     ADDRESS_REGEX.test(tokenAddress) ? (tokenAddress.toLowerCase() as Address) : null;
 
   const { data: tokenMetadata, isLoading: isProbing, error: probeError } = useTokenMetadata(normalizedTokenAddress);
 
-  // Initialize form from active campaign
   useEffect(() => {
     if (!activeCampaign) {
       return;
@@ -85,7 +90,6 @@ export function CampaignStep() {
     setBatchSize(activeCampaign.batchSize);
   }, [activeCampaign]);
 
-  // Auto-fill RPC URL when a preset chain is selected
   const handleChainSelect = useCallback((selectedChainId: number) => {
     setChainId(selectedChainId);
     setIsCustomChain(false);
@@ -96,7 +100,6 @@ export function CampaignStep() {
     }
   }, []);
 
-  // Switch to custom chain mode
   const handleCustomChain = useCallback(() => {
     setIsCustomChain(true);
     setChainId(null);
@@ -156,7 +159,6 @@ export function CampaignStep() {
         });
       }
 
-      // Persist chain config when explorer or rate limit fields are filled
       if (storage && campaignId && (explorerApiUrl || explorerApiKey || rateLimitGroup)) {
         let rpcBusKey = rateLimitGroup;
         if (!rpcBusKey) {
@@ -193,26 +195,29 @@ export function CampaignStep() {
 
   const canSave = chainId !== null && campaignName.trim().length > 0;
 
+  const rateLimitPlaceholder = (() => {
+    try { return rpcUrl ? new URL(rpcUrl).hostname : 'auto-derived from RPC URL'; }
+    catch { return 'auto-derived from RPC URL'; }
+  })();
+
   return (
     <StepPanel title="Campaign Setup" description="Configure the chain, token, and basic campaign settings.">
       <div className="space-y-6">
         {/* Chain Selection */}
         <div>
-          <label className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Chain</label>
+          <label className={SECTION_LABEL}>Chain</label>
           <div className="flex gap-1 mb-3">
             {CHAIN_CATEGORIES.map((cat) => {
               const count = getChains(cat.value).length;
               if (count === 0) return null;
+              const active = chainCategory === cat.value;
               return (
                 <button
                   key={cat.value}
                   type="button"
                   onClick={() => setChainCategory(cat.value)}
-                  className={`rounded-md px-3 py-1 text-xs font-medium transition-colors ${
-                    chainCategory === cat.value
-                      ? 'bg-blue-500/10 text-blue-400'
-                      : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
-                  }`}
+                  aria-pressed={active}
+                  className={`${TOGGLE_BUTTON_BASE} px-3 py-1 text-xs ${active ? TOGGLE_ACTIVE : TOGGLE_INACTIVE_MUTED}`}
                 >
                   {cat.label}
                 </button>
@@ -227,11 +232,8 @@ export function CampaignStep() {
           <button
             type="button"
             onClick={handleCustomChain}
-            className={`mt-2 rounded-lg px-4 py-2 text-sm font-medium ring-1 transition-colors ${
-              isCustomChain
-                ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30'
-                : 'bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-800 hover:ring-gray-300 dark:hover:ring-gray-700'
-            }`}
+            aria-pressed={isCustomChain}
+            className={`mt-2 ${TOGGLE_BUTTON_BASE} px-4 py-2 text-sm ${isCustomChain ? TOGGLE_ACTIVE : TOGGLE_INACTIVE}`}
           >
             Custom
           </button>
@@ -240,110 +242,89 @@ export function CampaignStep() {
         {/* Custom Chain Fields */}
         {isCustomChain && (
           <div className="space-y-4">
-            <div>
-              <label htmlFor="custom-chain-id" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Chain ID</label>
-              <input
-                id="custom-chain-id"
-                type="number"
-                value={chainId ?? ''}
-                onChange={(e) => setChainId(e.target.value ? Number(e.target.value) : null)}
-                placeholder="e.g. 42161"
-                className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label htmlFor="custom-chain-name" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Chain Name</label>
-              <input
-                id="custom-chain-name"
-                type="text"
-                value={customChainName}
-                onChange={(e) => setCustomChainName(e.target.value)}
-                placeholder="e.g. My Custom Chain"
-                className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-            </div>
+            <Input
+              id="custom-chain-id"
+              label="Chain ID"
+              type="number"
+              value={chainId ?? ''}
+              onChange={(e) => setChainId(e.target.value ? Number(e.target.value) : null)}
+              placeholder="e.g. 42161"
+            />
+            <Input
+              id="custom-chain-name"
+              label="Chain Name"
+              type="text"
+              value={customChainName}
+              onChange={(e) => setCustomChainName(e.target.value)}
+              placeholder="e.g. My Custom Chain"
+            />
           </div>
         )}
 
         {/* RPC URL */}
-        <div>
-          <label htmlFor="rpc-url" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">RPC URL</label>
-          <input
-            id="rpc-url"
-            type="text"
-            value={rpcUrl}
-            onChange={(e) => setRpcUrl(e.target.value)}
-            placeholder="https://..."
-            className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
+        <Input
+          id="rpc-url"
+          label="RPC URL"
+          type="text"
+          value={rpcUrl}
+          onChange={(e) => setRpcUrl(e.target.value)}
+          placeholder="https://..."
+        />
 
         {/* Rate Limit Group */}
-        <div>
-          <label htmlFor="rate-limit-group" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Rate limit group</label>
-          <input
-            id="rate-limit-group"
-            type="text"
-            value={rateLimitGroup}
-            onChange={(e) => setRateLimitGroup(e.target.value)}
-            placeholder={(() => { try { return rpcUrl ? new URL(rpcUrl).hostname : 'auto-derived from RPC URL'; } catch { return 'auto-derived from RPC URL'; } })()}
-            className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">
-            Share rate limits across endpoints (e.g., &quot;alchemy&quot; for all Alchemy chains).
-          </p>
-        </div>
+        <Input
+          id="rate-limit-group"
+          label="Rate limit group"
+          type="text"
+          value={rateLimitGroup}
+          onChange={(e) => setRateLimitGroup(e.target.value)}
+          placeholder={rateLimitPlaceholder}
+          hint='Share rate limits across endpoints (e.g., "alchemy" for all Alchemy chains).'
+        />
 
         {/* Advanced: Explorer Fields */}
         <div>
           <button
             type="button"
             onClick={() => setShowAdvanced(!showAdvanced)}
-            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
+            className="font-mono text-sm text-[color:var(--fg-muted)] hover:text-[color:var(--fg-primary)] underline decoration-dotted transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[1px] focus-visible:outline-[color:var(--color-info)] rounded-sm"
           >
             {showAdvanced ? 'Hide advanced' : 'Show advanced'}
           </button>
           {showAdvanced && (
             <div className="mt-3 space-y-4">
-              <div>
-                <label htmlFor="explorer-api-url" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Explorer API URL</label>
-                <input
-                  id="explorer-api-url"
-                  type="text"
-                  value={explorerApiUrl}
-                  onChange={(e) => setExplorerApiUrl(e.target.value)}
-                  placeholder="https://api.etherscan.io/api"
-                  className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-              <div>
-                <label htmlFor="explorer-api-key" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Explorer API Key</label>
-                <input
-                  id="explorer-api-key"
-                  type="text"
-                  value={explorerApiKey}
-                  onChange={(e) => setExplorerApiKey(e.target.value)}
-                  placeholder="Your API key"
-                  className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
+              <Input
+                id="explorer-api-url"
+                label="Explorer API URL"
+                type="text"
+                value={explorerApiUrl}
+                onChange={(e) => setExplorerApiUrl(e.target.value)}
+                placeholder="https://api.etherscan.io/api"
+              />
+              <Input
+                id="explorer-api-key"
+                label="Explorer API Key"
+                type="text"
+                value={explorerApiKey}
+                onChange={(e) => setExplorerApiKey(e.target.value)}
+                placeholder="Your API key"
+              />
             </div>
           )}
         </div>
 
         {/* Token Address */}
         <div>
-          <label htmlFor="token-address" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Token Address</label>
-          <input
+          <Input
             id="token-address"
+            label="Token Address"
             type="text"
             value={tokenAddress}
             onChange={(e) => setTokenAddress(e.target.value)}
             placeholder="0x..."
-            className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           />
           {normalizedTokenAddress && isProbing && (
-            <div className="mt-2 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+            <div className="mt-2 flex items-center gap-2 font-mono text-sm text-[color:var(--fg-muted)]">
               <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none">
                 <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25" />
                 <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" className="opacity-75" />
@@ -352,62 +333,56 @@ export function CampaignStep() {
             </div>
           )}
           {normalizedTokenAddress && !isProbing && tokenMetadata && (
-            <div className="mt-2 rounded-lg bg-gray-50 dark:bg-gray-900 p-3 ring-1 ring-gray-200 dark:ring-gray-800">
+            <Card className="mt-2 p-3">
               <div className="flex items-center gap-3 text-sm">
-                <span className="font-medium text-gray-900 dark:text-white">{tokenMetadata.name}</span>
-                <span className="text-gray-500 dark:text-gray-400">({tokenMetadata.symbol})</span>
-                <span className="text-gray-400 dark:text-gray-500">{tokenMetadata.decimals} decimals</span>
+                <span className="font-sans font-semibold text-[color:var(--fg-primary)]">{tokenMetadata.name}</span>
+                <span className="font-mono text-[color:var(--fg-muted)]">({tokenMetadata.symbol})</span>
+                <span className="font-mono text-[color:var(--fg-muted)]">{tokenMetadata.decimals} decimals</span>
               </div>
-            </div>
+            </Card>
           )}
           {normalizedTokenAddress && !isProbing && probeError && (
             <div className="mt-2 space-y-3">
-              <p className="text-sm text-red-400">Failed to probe token. Enter details manually:</p>
+              <p className="font-mono text-sm text-[color:var(--color-err)]">Failed to probe token. Enter details manually:</p>
               <div className="flex flex-wrap gap-3">
                 <div className="flex-1 min-w-[120px]">
-                  <label htmlFor="manual-symbol" className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">Symbol</label>
-                  <input
+                  <Input
                     id="manual-symbol"
+                    label="Symbol"
                     type="text"
                     value={manualSymbol}
                     onChange={(e) => setManualSymbol(e.target.value)}
                     placeholder="e.g. USDC"
-                    className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
                 <div className="w-24">
-                  <label htmlFor="manual-decimals" className="text-xs text-gray-400 dark:text-gray-500 mb-1 block">Decimals</label>
-                  <input
+                  <Input
                     id="manual-decimals"
+                    label="Decimals"
                     type="number"
                     value={manualDecimals}
                     onChange={(e) => setManualDecimals(e.target.value)}
                     min={0}
                     max={36}
-                    className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
               </div>
             </div>
           )}
           {normalizedTokenAddress && !isProbing && tokenMetadata === null && !probeError && (
-            <p className="mt-2 text-sm text-yellow-400">Not a valid ERC-20 token at this address.</p>
+            <p className="mt-2 font-mono text-sm text-[color:var(--color-warn)]">Not a valid ERC-20 token at this address.</p>
           )}
         </div>
 
         {/* Contract Variant */}
         <div>
-          <label className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2 block">Contract Variant</label>
+          <label className={SECTION_LABEL}>Contract Variant</label>
           <div className="flex flex-wrap gap-3">
             <button
               type="button"
               onClick={() => setContractVariant('simple')}
               aria-pressed={contractVariant === 'simple'}
-              className={`rounded-lg px-4 py-2 text-sm font-medium ring-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                contractVariant === 'simple'
-                  ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30'
-                  : 'bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-800 hover:ring-gray-300 dark:hover:ring-gray-700'
-              }`}
+              className={`${TOGGLE_BUTTON_BASE} px-4 py-2 text-sm ${contractVariant === 'simple' ? TOGGLE_ACTIVE : TOGGLE_INACTIVE}`}
             >
               Simple
             </button>
@@ -415,11 +390,7 @@ export function CampaignStep() {
               type="button"
               onClick={() => setContractVariant('full')}
               aria-pressed={contractVariant === 'full'}
-              className={`rounded-lg px-4 py-2 text-sm font-medium ring-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 ${
-                contractVariant === 'full'
-                  ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30'
-                  : 'bg-gray-50 dark:bg-gray-900 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-800 hover:ring-gray-300 dark:hover:ring-gray-700'
-              }`}
+              className={`${TOGGLE_BUTTON_BASE} px-4 py-2 text-sm ${contractVariant === 'full' ? TOGGLE_ACTIVE : TOGGLE_INACTIVE}`}
             >
               Full
             </button>
@@ -427,41 +398,30 @@ export function CampaignStep() {
         </div>
 
         {/* Campaign Name */}
-        <div>
-          <label htmlFor="campaign-name" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Campaign Name</label>
-          <input
-            id="campaign-name"
-            type="text"
-            value={campaignName}
-            onChange={(e) => setCampaignName(e.target.value)}
-            placeholder="My Airdrop Campaign"
-            className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
+        <Input
+          id="campaign-name"
+          label="Campaign Name"
+          type="text"
+          value={campaignName}
+          onChange={(e) => setCampaignName(e.target.value)}
+          placeholder="My Airdrop Campaign"
+        />
 
         {/* Batch Size */}
-        <div>
-          <label htmlFor="batch-size" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Batch Size</label>
-          <input
-            id="batch-size"
-            type="number"
-            value={batchSize}
-            onChange={(e) => setBatchSize(clampBatchSize(e.target.value))}
-            min={1}
-            className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <p className="mt-1 text-xs text-gray-400 dark:text-gray-500">Number of recipients per transaction batch.</p>
-        </div>
+        <Input
+          id="batch-size"
+          label="Batch Size"
+          type="number"
+          value={batchSize}
+          onChange={(e) => setBatchSize(clampBatchSize(e.target.value))}
+          min={1}
+          hint="Number of recipients per transaction batch."
+        />
 
         {/* Save */}
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={!canSave || isSaving}
-          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors"
-        >
+        <Button variant="primary" onClick={handleSave} disabled={!canSave || isSaving}>
           {isSaving ? 'Saving...' : 'Save & Continue'}
-        </button>
+        </Button>
       </div>
     </StepPanel>
   );

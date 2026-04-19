@@ -18,7 +18,7 @@ describe('ChainSelector', () => {
   it('highlights selected chain', () => {
     render(<ChainSelector chains={chains} selectedChainId={8453} />);
     const base = screen.getByText('Base').closest('button');
-    expect(base?.className).toContain('ring-blue');
+    expect(base?.getAttribute('aria-pressed')).toBe('true');
   });
   it('calls onSelect with chainId', () => {
     const onSelect = vi.fn();
