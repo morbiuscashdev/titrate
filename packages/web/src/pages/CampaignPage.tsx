@@ -10,6 +10,7 @@ import { WalletStep } from '../steps/WalletStep.js';
 import { RequirementsStep } from '../steps/RequirementsStep.js';
 import { DistributeStep } from '../steps/DistributeStep.js';
 import type { TimelineStep } from '../components/TimelineRail.js';
+import { ModeProvider, type Mode } from '../theme';
 
 const STEP_COMPONENTS: Record<StepId, () => ReactNode> = {
   campaign: () => <CampaignStep />,
@@ -57,7 +58,7 @@ export function CampaignPage() {
   if (!id) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <p className="text-gray-500">No campaign selected.</p>
+        <p className="font-mono text-sm text-[color:var(--fg-muted)]">No campaign selected.</p>
       </div>
     );
   }
@@ -65,10 +66,16 @@ export function CampaignPage() {
   if (!activeCampaign) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
-        <p className="text-gray-500">Loading campaign...</p>
+        <p className="font-mono text-sm text-[color:var(--fg-muted)]">Loading campaign…</p>
       </div>
     );
   }
+
+  // Distribute is an observation surface (operator mode); every other step is
+  // a decision surface (brutalist). Publishing the mode here lets step
+  // components branch their JSX via useMode() as they migrate to brand
+  // primitives, without each one needing its own provider.
+  const stepMode: Mode = activeStepId === 'distribute' ? 'operator' : 'brutalist';
 
   return (
     <AppShell
@@ -76,7 +83,9 @@ export function CampaignPage() {
       activeStepId={activeStepId}
       onStepClick={handleStepClick}
     >
-      {STEP_COMPONENTS[activeStepId]()}
+      <ModeProvider mode={stepMode}>
+        {STEP_COMPONENTS[activeStepId]()}
+      </ModeProvider>
     </AppShell>
   );
 }
