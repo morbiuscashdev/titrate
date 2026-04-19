@@ -92,7 +92,7 @@ describe('CampaignStep', () => {
     render(<CampaignStep />);
     const fullButton = screen.getByText('Full');
     fireEvent.click(fullButton);
-    expect(fullButton.className).toContain('ring-blue');
+    expect(fullButton.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('disables save button when form is incomplete', () => {
@@ -220,15 +220,15 @@ describe('CampaignStep', () => {
     const fullButton = screen.getByText('Full');
 
     // Default is Simple (active)
-    expect(simpleButton.className).toContain('ring-blue');
+    expect(simpleButton.getAttribute('aria-pressed')).toBe('true');
 
     // Click Full
     fireEvent.click(fullButton);
-    expect(fullButton.className).toContain('ring-blue');
+    expect(fullButton.getAttribute('aria-pressed')).toBe('true');
 
     // Click Simple back
     fireEvent.click(simpleButton);
-    expect(simpleButton.className).toContain('ring-blue');
+    expect(simpleButton.getAttribute('aria-pressed')).toBe('true');
   });
 
   it('calls saveCampaign when editing an existing campaign', async () => {
