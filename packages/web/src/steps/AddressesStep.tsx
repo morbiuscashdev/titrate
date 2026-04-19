@@ -1,12 +1,17 @@
 import { useState, useCallback, useRef } from 'react';
 import { StepPanel } from '../components/StepPanel.js';
 import { SetOperationsPanel } from '../components/SetOperationsPanel.js';
+import { Button, Card, Input, Textarea } from '../components/ui';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
 import { useChain } from '../providers/ChainProvider.js';
 import { parseCSV, createPipeline, resolveBlockRef } from '@titrate/sdk';
 import type { Address } from 'viem';
 import type { CSVRow, SourceType } from '@titrate/sdk';
+
+const TOGGLE_BASE = 'rounded-none border-2 px-3 py-1.5 font-mono text-xs font-bold uppercase tracking-[0.12em] transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[1px] focus-visible:outline-[color:var(--color-info)]';
+const TOGGLE_ACTIVE = 'bg-[color:var(--color-pink-500)] text-white border-[color:var(--color-pink-500)]';
+const TOGGLE_INACTIVE = 'bg-[color:var(--bg-card)] text-[color:var(--fg-muted)] border-[color:var(--edge)] hover:text-[color:var(--fg-primary)]';
 
 const ADDRESS_REGEX = /^0x[0-9a-fA-F]{40}$/;
 
@@ -219,7 +224,7 @@ export function AddressesStep() {
       <div className="space-y-6">
         {/* CSV Upload */}
         <div>
-          <label className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">CSV Upload</label>
+          <label className="block font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--fg-primary)] mb-2">CSV Upload</label>
           <div
             onDrop={handleDrop}
             onDragOver={handleDragOver}
@@ -228,17 +233,18 @@ export function AddressesStep() {
             role="button"
             tabIndex={0}
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click(); }}
-            className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 sm:p-8 min-h-[120px] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 ${
+            data-drag-over={isDragOver ? 'true' : 'false'}
+            className={`flex cursor-pointer flex-col items-center justify-center border-2 border-dashed p-6 sm:p-8 min-h-[120px] transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[1px] focus-visible:outline-[color:var(--color-info)] ${
               isDragOver
-                ? 'border-blue-500 bg-blue-500/5'
-                : 'border-gray-300 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 hover:border-gray-400 dark:hover:border-gray-600'
+                ? 'border-[color:var(--color-pink-500)] bg-[color:var(--color-pink-500)]/10'
+                : 'border-[color:var(--edge)] bg-[color:var(--bg-card)] hover:border-[color:var(--color-pink-500)]'
             }`}
           >
-            <svg className="mb-2 h-8 w-8 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <svg className="mb-2 h-8 w-8 text-[color:var(--fg-muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
             </svg>
-            <p className="text-sm text-gray-500 dark:text-gray-400">Drop a CSV file here or click to browse</p>
-            <p className="mt-1 text-xs text-gray-400 dark:text-gray-600">Supports address and address,amount formats</p>
+            <p className="font-mono text-sm text-[color:var(--fg-muted)]">Drop a CSV file here or click to browse</p>
+            <p className="mt-1 font-mono text-xs text-[color:var(--fg-muted)]/80">Supports address and address,amount formats</p>
           </div>
           <input
             ref={fileInputRef}
@@ -252,23 +258,19 @@ export function AddressesStep() {
 
         {/* Manual Entry */}
         <div>
-          <label htmlFor="manual-addresses" className="text-sm font-medium text-gray-600 dark:text-gray-300 mb-1 block">Manual Entry</label>
-          <textarea
+          <Textarea
             id="manual-addresses"
+            label="Manual Entry"
             value={manualText}
             onChange={(e) => setManualText(e.target.value)}
             placeholder="Paste addresses, one per line..."
             rows={4}
-            className="w-full bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg px-3 py-2 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent font-mono"
           />
-          <button
-            type="button"
-            onClick={handleManualParse}
-            disabled={!manualText.trim()}
-            className="mt-2 bg-gray-200 dark:bg-gray-800 hover:bg-gray-300 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed text-gray-600 dark:text-gray-300 rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
-          >
-            Parse Addresses
-          </button>
+          <div className="mt-2">
+            <Button variant="secondary" onClick={handleManualParse} disabled={!manualText.trim()}>
+              Parse Addresses
+            </Button>
+          </div>
         </div>
 
         {/* On-Chain Collection */}
@@ -276,33 +278,27 @@ export function AddressesStep() {
           <button
             type="button"
             onClick={() => setShowOnChain(!showOnChain)}
-            className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 rounded"
+            className="font-mono text-sm text-[color:var(--fg-muted)] hover:text-[color:var(--fg-primary)] underline decoration-dotted transition-colors focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-[1px] focus-visible:outline-[color:var(--color-info)] rounded-sm"
           >
             {showOnChain ? 'Hide on-chain collection' : 'Collect from chain'}
           </button>
           {showOnChain && (
-            <div className="mt-3 rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800 space-y-4">
+            <Card className="mt-3 space-y-4">
               {/* Source type selector */}
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   onClick={() => { setSourceType('block-scan'); setSourceParams({}); }}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 ${
-                    sourceType === 'block-scan'
-                      ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30'
-                      : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-700'
-                  }`}
+                  aria-pressed={sourceType === 'block-scan'}
+                  className={`${TOGGLE_BASE} ${sourceType === 'block-scan' ? TOGGLE_ACTIVE : TOGGLE_INACTIVE}`}
                 >
                   Block Scan
                 </button>
                 <button
                   type="button"
                   onClick={() => { setSourceType('explorer-scan'); setSourceParams({}); }}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-medium ring-1 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950 ${
-                    sourceType === 'explorer-scan'
-                      ? 'bg-blue-500/10 text-blue-400 ring-blue-500/30'
-                      : 'bg-white dark:bg-gray-800 text-gray-500 dark:text-gray-400 ring-gray-200 dark:ring-gray-700'
-                  }`}
+                  aria-pressed={sourceType === 'explorer-scan'}
+                  className={`${TOGGLE_BASE} ${sourceType === 'explorer-scan' ? TOGGLE_ACTIVE : TOGGLE_INACTIVE}`}
                 >
                   Explorer Scan
                 </button>
@@ -312,145 +308,124 @@ export function AddressesStep() {
               {sourceType === 'block-scan' && (
                 <div className="space-y-3">
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">Start Block</label>
-                      <input
-                        type="text"
-                        value={sourceParams.startBlock ?? ''}
-                        onChange={(e) => setSourceParams((p) => ({ ...p, startBlock: e.target.value }))}
-                        placeholder="0 or 2024-01-15"
-                        className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">End Block</label>
-                      <input
-                        type="text"
-                        value={sourceParams.endBlock ?? ''}
-                        onChange={(e) => setSourceParams((p) => ({ ...p, endBlock: e.target.value }))}
-                        placeholder="latest or 2024-06-01"
-                        className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
+                    <Input
+                      label="Start Block"
+                      type="text"
+                      value={sourceParams.startBlock ?? ''}
+                      onChange={(e) => setSourceParams((p) => ({ ...p, startBlock: e.target.value }))}
+                      placeholder="0 or 2024-01-15"
+                    />
+                    <Input
+                      label="End Block"
+                      type="text"
+                      value={sourceParams.endBlock ?? ''}
+                      onChange={(e) => setSourceParams((p) => ({ ...p, endBlock: e.target.value }))}
+                      placeholder="latest or 2024-06-01"
+                    />
                   </div>
-                  <p className="text-xs text-gray-400 dark:text-gray-500">Accepts block numbers or dates (YYYY-MM-DD).</p>
+                  <p className="font-mono text-xs text-[color:var(--fg-muted)]">Accepts block numbers or dates (YYYY-MM-DD).</p>
                 </div>
               )}
 
               {/* Explorer scan params */}
               {sourceType === 'explorer-scan' && (
                 <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">Contract Address</label>
-                    <input
-                      type="text"
-                      value={sourceParams.contractAddress ?? ''}
-                      onChange={(e) => setSourceParams((p) => ({ ...p, contractAddress: e.target.value }))}
-                      placeholder="0x..."
-                      className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none"
-                    />
-                  </div>
+                  <Input
+                    label="Contract Address"
+                    type="text"
+                    value={sourceParams.contractAddress ?? ''}
+                    onChange={(e) => setSourceParams((p) => ({ ...p, contractAddress: e.target.value }))}
+                    placeholder="0x..."
+                  />
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">Start Block</label>
-                      <input
-                        type="text"
-                        value={sourceParams.startBlock ?? ''}
-                        onChange={(e) => setSourceParams((p) => ({ ...p, startBlock: e.target.value }))}
-                        placeholder="0"
-                        className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs text-gray-400 dark:text-gray-500 mb-1">End Block</label>
-                      <input
-                        type="text"
-                        value={sourceParams.endBlock ?? ''}
-                        onChange={(e) => setSourceParams((p) => ({ ...p, endBlock: e.target.value }))}
-                        placeholder="latest"
-                        className="w-full rounded-lg bg-white dark:bg-gray-800 px-3 py-2 text-sm text-gray-900 dark:text-white ring-1 ring-gray-300 dark:ring-gray-700 focus:ring-blue-500 focus:outline-none"
-                      />
-                    </div>
+                    <Input
+                      label="Start Block"
+                      type="text"
+                      value={sourceParams.startBlock ?? ''}
+                      onChange={(e) => setSourceParams((p) => ({ ...p, startBlock: e.target.value }))}
+                      placeholder="0"
+                    />
+                    <Input
+                      label="End Block"
+                      type="text"
+                      value={sourceParams.endBlock ?? ''}
+                      onChange={(e) => setSourceParams((p) => ({ ...p, endBlock: e.target.value }))}
+                      placeholder="latest"
+                    />
                   </div>
                 </div>
               )}
 
               {/* Collect button + status */}
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
+              <div className="flex items-center gap-3 flex-wrap">
+                <Button
+                  variant="primary"
                   onClick={handleCollect}
                   disabled={collectState.status === 'collecting' || !publicClient}
-                  className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
                 >
                   {collectState.status === 'collecting' ? 'Collecting...' : 'Collect Addresses'}
-                </button>
+                </Button>
                 {collectState.status === 'collecting' && (
-                  <span className="text-sm text-gray-500 dark:text-gray-400">
+                  <span className="font-mono text-sm text-[color:var(--fg-muted)]">
                     {collectState.collectedCount.toLocaleString()} found...
                   </span>
                 )}
                 {collectState.status === 'done' && (
-                  <span className="text-sm text-green-600 dark:text-green-400">
+                  <span className="font-mono text-sm text-[color:var(--color-ok)]">
                     {collectState.collectedCount.toLocaleString()} addresses collected
                   </span>
                 )}
               </div>
               {collectState.status === 'error' && (
-                <p className="text-sm text-red-400">{collectState.errorMessage}</p>
+                <p className="font-mono text-sm text-[color:var(--color-err)]">{collectState.errorMessage}</p>
               )}
               {!publicClient && (
-                <p className="text-xs text-gray-400 dark:text-gray-500">Connect to a chain to use on-chain collection.</p>
+                <p className="font-mono text-xs text-[color:var(--fg-muted)]">Connect to a chain to use on-chain collection.</p>
               )}
-            </div>
+            </Card>
           )}
         </div>
 
         {/* Parse Error */}
         {parseError && (
-          <p className="text-sm text-red-400">{parseError}</p>
+          <p className="font-mono text-sm text-[color:var(--color-err)]">{parseError}</p>
         )}
 
         {/* Address Preview */}
         {addresses.length > 0 && (
-          <div className="rounded-lg bg-gray-50 dark:bg-gray-900 p-4 ring-1 ring-gray-200 dark:ring-gray-800">
+          <Card>
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <span className="text-sm font-medium text-gray-900 dark:text-white">
+              <span className="font-sans text-sm font-semibold text-[color:var(--fg-primary)]">
                 {addresses.length.toLocaleString()} addresses loaded
               </span>
               {hasAmounts && (
-                <span className="text-xs text-gray-500 dark:text-gray-400">Includes amounts</span>
+                <span className="font-mono text-xs text-[color:var(--fg-muted)]">Includes amounts</span>
               )}
               {fileName && (
-                <span className="text-xs text-gray-400 dark:text-gray-500">{fileName}</span>
+                <span className="font-mono text-xs text-[color:var(--fg-muted)]">{fileName}</span>
               )}
             </div>
-            <div className="space-y-1 font-mono text-xs text-gray-500 dark:text-gray-400 overflow-x-auto">
+            <div className="space-y-1 font-mono text-xs text-[color:var(--fg-muted)] overflow-x-auto">
               {previewAddresses.map((row) => (
-                <div key={row.address} className="flex justify-between">
-                  <span>{row.address}</span>
-                  {row.amount && <span className="text-gray-400 dark:text-gray-500">{row.amount}</span>}
+                <div key={row.address} className="flex justify-between gap-4">
+                  <span className="text-[color:var(--fg-primary)]">{row.address}</span>
+                  {row.amount && <span>{row.amount}</span>}
                 </div>
               ))}
               {addresses.length > 5 && (
-                <p className="pt-1 text-gray-400 dark:text-gray-600">...and {(addresses.length - 5).toLocaleString()} more</p>
+                <p className="pt-1">...and {(addresses.length - 5).toLocaleString()} more</p>
               )}
             </div>
-          </div>
+          </Card>
         )}
 
         {/* Set Operations */}
         <SetOperationsPanel />
 
         {/* Continue */}
-        <button
-          type="button"
-          onClick={handleContinue}
-          disabled={addresses.length === 0 || isSaving}
-          className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg px-4 py-2 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-950"
-        >
+        <Button variant="primary" onClick={handleContinue} disabled={addresses.length === 0 || isSaving}>
           {isSaving ? 'Saving...' : 'Save & Continue'}
-        </button>
+        </Button>
       </div>
     </StepPanel>
   );

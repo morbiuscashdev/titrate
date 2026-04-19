@@ -290,10 +290,10 @@ describe('AddressesStep', () => {
     const dropZone = screen.getByRole('button', { name: /Drop a CSV/i });
 
     fireEvent.dragOver(dropZone, { dataTransfer: { files: [] } });
-    expect(dropZone.className).toContain('border-blue-500');
+    expect(dropZone.getAttribute('data-drag-over')).toBe('true');
 
     fireEvent.dragLeave(dropZone);
-    expect(dropZone.className).not.toContain('border-blue-500');
+    expect(dropZone.getAttribute('data-drag-over')).toBe('false');
   });
 
   it('handles file drop', async () => {
@@ -491,13 +491,13 @@ describe('AddressesStep', () => {
     render(<AddressesStep />);
     const dropZone = screen.getByRole('button', { name: /Drop a CSV/i });
 
-    // Drag over adds the class
+    // Drag over flips the data-drag-over attribute to 'true'
     fireEvent.dragOver(dropZone, { dataTransfer: { files: [] } });
-    expect(dropZone.className).toContain('bg-blue-500/5');
+    expect(dropZone.getAttribute('data-drag-over')).toBe('true');
 
-    // Drag leave removes the class
+    // Drag leave flips it back
     fireEvent.dragLeave(dropZone);
-    expect(dropZone.className).not.toContain('bg-blue-500/5');
+    expect(dropZone.getAttribute('data-drag-over')).toBe('false');
   });
 
   it('shows error when parseCSV throws an Error', async () => {
