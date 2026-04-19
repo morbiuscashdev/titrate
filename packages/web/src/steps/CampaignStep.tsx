@@ -5,8 +5,10 @@ import { Button, Input, Card } from '../components/ui';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
 import { useTokenMetadata } from '../hooks/useTokenMetadata.js';
-import { getChains, getChainConfig } from '@titrate/sdk';
+import { getChains, getChainConfig, validateContractName } from '@titrate/sdk';
 import type { ChainCategory } from '@titrate/sdk';
+
+const DEFAULT_CONTRACT_NAME = 'TokenAirdrop';
 import { keccak256, toHex } from 'viem';
 import type { Address, Hex } from 'viem';
 import type { StoredCampaign } from '@titrate/sdk';
@@ -72,6 +74,7 @@ export function CampaignStep() {
   const [rateLimitGroup, setRateLimitGroup] = useState('');
   const [manualSymbol, setManualSymbol] = useState('');
   const [manualDecimals, setManualDecimals] = useState('18');
+  const [contractDisplayName, setContractDisplayName] = useState(DEFAULT_CONTRACT_NAME);
 
   const normalizedTokenAddress: Address | null =
     ADDRESS_REGEX.test(tokenAddress) ? (tokenAddress.toLowerCase() as Address) : null;
@@ -88,6 +91,13 @@ export function CampaignStep() {
     setContractVariant(activeCampaign.contractVariant);
     setCampaignName(activeCampaign.name);
     setBatchSize(activeCampaign.batchSize);
+    // Older campaigns stored the token symbol in `contractName`. A valid
+    // Solidity identifier is almost certainly the contract display name; a
+    // symbol like "cb.BTC" is not. Hydrate the input only for valid names.
+    const stored = activeCampaign.contractName?.trim();
+    if (stored && validateContractName(stored).ok) {
+      setContractDisplayName(stored);
+    }
   }, [activeCampaign]);
 
   const handleChainSelect = useCallback((selectedChainId: number) => {
@@ -118,9 +128,14 @@ export function CampaignStep() {
       const resolvedDecimals = tokenMetadata?.decimals
         ?? (probeError ? Number(manualDecimals) || 18 : 18);
 
-      const resolvedContractName = tokenMetadata?.symbol
+      const resolvedTokenSymbol = tokenMetadata?.symbol
         ?? (probeError && manualSymbol.trim() ? manualSymbol.trim() : '')
-        ?? activeCampaign?.contractName ?? '';
+        ?? '';
+
+      const contractNameCheck = validateContractName(contractDisplayName);
+      const resolvedContractName = contractNameCheck.ok
+        ? contractNameCheck.value
+        : DEFAULT_CONTRACT_NAME;
 
       let campaignId: string | null = activeCampaign?.id ?? null;
 
@@ -131,6 +146,7 @@ export function CampaignStep() {
           rpcUrl,
           tokenAddress: resolvedTokenAddress,
           tokenDecimals: resolvedDecimals,
+          tokenSymbol: resolvedTokenSymbol,
           contractVariant,
           contractName: resolvedContractName,
           name: campaignName.trim(),
@@ -147,6 +163,7 @@ export function CampaignStep() {
           rpcUrl,
           tokenAddress: resolvedTokenAddress,
           tokenDecimals: resolvedDecimals,
+          tokenSymbol: resolvedTokenSymbol,
           contractAddress: null,
           contractVariant,
           contractName: resolvedContractName,
@@ -188,12 +205,13 @@ export function CampaignStep() {
     }
   }, [
     chainId, rpcUrl, normalizedTokenAddress, tokenMetadata, probeError,
-    manualSymbol, manualDecimals, contractVariant,
+    manualSymbol, manualDecimals, contractVariant, contractDisplayName,
     campaignName, batchSize, activeCampaign, saveCampaign, createCampaign, setActiveStep,
     storage, explorerApiUrl, explorerApiKey, rateLimitGroup, customChainName,
   ]);
 
-  const canSave = chainId !== null && campaignName.trim().length > 0;
+  const contractNameValidation = validateContractName(contractDisplayName);
+  const canSave = chainId !== null && campaignName.trim().length > 0 && contractNameValidation.ok;
 
   const rateLimitPlaceholder = (() => {
     try { return rpcUrl ? new URL(rpcUrl).hostname : 'auto-derived from RPC URL'; }
@@ -395,6 +413,28 @@ export function CampaignStep() {
               Full
             </button>
           </div>
+        </div>
+
+        {/* Contract Name — Solidity identifier submitted to explorer verify */}
+        <div>
+          <Input
+            id="contract-name"
+            label="Contract Name"
+            type="text"
+            value={contractDisplayName}
+            onChange={(e) => setContractDisplayName(e.target.value)}
+            placeholder={DEFAULT_CONTRACT_NAME}
+            hint={
+              contractNameValidation.ok
+                ? 'Shows on block explorers after verification. Must be a valid Solidity identifier.'
+                : undefined
+            }
+          />
+          {!contractNameValidation.ok && (
+            <p className="mt-1 font-mono text-xs text-[color:var(--color-err)]">
+              {contractNameValidation.reason}
+            </p>
+          )}
         </div>
 
         {/* Campaign Name */}

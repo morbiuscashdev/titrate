@@ -8,8 +8,22 @@ export type CampaignConfig = {
   readonly rpcUrl: string;
   readonly tokenAddress: Address;
   readonly tokenDecimals: number;
+  /**
+   * ERC-20 token symbol (e.g. "WETH"). Display-only; resolved from
+   * token metadata when probing succeeds, or manually entered on probe
+   * failure. Optional for backward compatibility with pre-refactor
+   * campaigns that only stored `contractName` — callers should fall back
+   * to `contractName` when this is missing.
+   */
+  readonly tokenSymbol?: string;
   readonly contractAddress: Address | null;
   readonly contractVariant: 'simple' | 'full';
+  /**
+   * User-chosen display name for the deployed distribution contract
+   * (e.g. "TokenAirdrop"). Must be a valid Solidity identifier
+   * (`^[A-Za-z_$][A-Za-z_$0-9]*$`) so explorer verification can rename
+   * the contract class in the submitted source.
+   */
   readonly contractName: string;
   readonly amountMode: 'uniform' | 'variable';
   readonly amountFormat: 'integer' | 'decimal';
