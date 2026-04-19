@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { ThemeToggle } from './ThemeToggle.js';
+import { Mark } from './ui/Mark.js';
+import { ThemeToggle } from './ui/ThemeToggle.js';
 
 /**
  * Props for the global Header component.
@@ -12,15 +13,19 @@ export type HeaderProps = {
 /**
  * Global header bar present on all routes.
  *
- * Left side: "Titrate" wordmark linking to `/`.
+ * Left side: brand mark + "Titrate" wordmark linking to `/`.
  * Right side: theme toggle, settings gear link, and a wallet badge slot via `children`.
  */
 export function Header({ children }: HeaderProps) {
   return (
     <header className="flex items-center justify-between border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950 px-4 py-3">
-      <a href="/" className="flex items-center gap-2 text-lg font-semibold text-gray-900 dark:text-white hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-md">
-        <img src="/icon-light.svg" alt="" className="h-6 w-6 dark:hidden" />
-        <img src="/icon.svg" alt="" className="h-6 w-6 hidden dark:block" />
+      <a
+        href="/"
+        className="flex items-center gap-2 font-sans font-extrabold tracking-[-0.02em] text-lg text-gray-900 dark:text-white hover:text-gray-600 dark:hover:text-gray-300 focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 rounded-md"
+      >
+        <span className="text-[color:var(--mark-color,#d63384)]">
+          <Mark size={24} />
+        </span>
         Titrate
       </a>
       <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
@@ -28,7 +33,7 @@ export function Header({ children }: HeaderProps) {
         <a
           href="/settings"
           aria-label="Settings"
-          className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 rounded-md"
+          className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-pink-500 rounded-md"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
