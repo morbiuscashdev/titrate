@@ -675,6 +675,98 @@ describe('CampaignStep', () => {
       });
       expect(mockAppSettingsPut).not.toHaveBeenCalled();
     });
+
+    it('commits and closes the editor when Done is clicked after typing a key', async () => {
+      render(<CampaignStep />);
+      fireEvent.click(screen.getByRole('button', { name: /^Ethereum$/i, pressed: false }));
+      fireEvent.click(screen.getByRole('button', { name: /^Alchemy$/i }));
+
+      const keyInput = await screen.findByLabelText('Alchemy API Key') as HTMLInputElement;
+      fireEvent.change(keyInput, { target: { value: 'done-path-key' } });
+      fireEvent.click(screen.getByRole('button', { name: /close provider key editor/i }));
+
+      await vi.waitFor(() => {
+        expect(mockAppSettingsPut).toHaveBeenCalledWith(
+          'provider-key-alchemy',
+          'done-path-key',
+        );
+        expect(screen.queryByLabelText('Alchemy API Key')).not.toBeInTheDocument();
+      });
+    });
+
+    it('Enter blurs the input and triggers commit', async () => {
+      render(<CampaignStep />);
+      fireEvent.click(screen.getByRole('button', { name: /^Ethereum$/i, pressed: false }));
+      fireEvent.click(screen.getByRole('button', { name: /^Infura$/i }));
+
+      const keyInput = await screen.findByLabelText('Infura API Key') as HTMLInputElement;
+      fireEvent.change(keyInput, { target: { value: 'enter-key' } });
+      fireEvent.keyDown(keyInput, { key: 'Enter' });
+
+      await vi.waitFor(() => {
+        expect(mockAppSettingsPut).toHaveBeenCalledWith('provider-key-infura', 'enter-key');
+      });
+      // Editor stays open — Enter commits but doesn't close (matches text-input conventions).
+      expect(screen.getByLabelText('Infura API Key')).toBeInTheDocument();
+    });
+
+    it('Escape closes the editor', async () => {
+      render(<CampaignStep />);
+      fireEvent.click(screen.getByRole('button', { name: /^Ethereum$/i, pressed: false }));
+      fireEvent.click(screen.getByRole('button', { name: /valve\.city/i }));
+
+      const keyInput = await screen.findByLabelText('valve.city API Key') as HTMLInputElement;
+      fireEvent.keyDown(keyInput, { key: 'Escape' });
+
+      await vi.waitFor(() => {
+        expect(screen.queryByLabelText('valve.city API Key')).not.toBeInTheDocument();
+      });
+    });
+
+    it('switches the editor to another provider when its button is clicked mid-edit', async () => {
+      render(<CampaignStep />);
+      fireEvent.click(screen.getByRole('button', { name: /^Ethereum$/i, pressed: false }));
+
+      // Open Alchemy editor, then switch to Infura without closing.
+      fireEvent.click(screen.getByRole('button', { name: /^Alchemy$/i }));
+      await screen.findByLabelText('Alchemy API Key');
+
+      fireEvent.click(screen.getByRole('button', { name: /^Infura$/i }));
+      await vi.waitFor(() => {
+        expect(screen.queryByLabelText('Alchemy API Key')).not.toBeInTheDocument();
+        expect(screen.getByLabelText('Infura API Key')).toBeInTheDocument();
+      });
+    });
+
+    it('marks the active provider button as aria-pressed while its editor is open', async () => {
+      render(<CampaignStep />);
+      fireEvent.click(screen.getByRole('button', { name: /^Ethereum$/i, pressed: false }));
+      fireEvent.click(screen.getByRole('button', { name: /valve\.city/i }));
+
+      await screen.findByLabelText('valve.city API Key');
+      expect(
+        screen.getByRole('button', { name: /valve\.city/i }),
+      ).toHaveAttribute('aria-pressed', 'true');
+      expect(
+        screen.getByRole('button', { name: /^Alchemy$/i }),
+      ).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('paste-URL extraction also works when the pasted value has surrounding whitespace', async () => {
+      render(<CampaignStep />);
+      fireEvent.click(screen.getByRole('button', { name: /^Ethereum$/i, pressed: false }));
+      fireEvent.click(screen.getByRole('button', { name: /^Alchemy$/i }));
+
+      const keyInput = await screen.findByLabelText('Alchemy API Key') as HTMLInputElement;
+      fireEvent.change(keyInput, {
+        target: { value: '  https://eth-mainnet.g.alchemy.com/v2/whitespace-key  ' },
+      });
+
+      expect(keyInput.value).toBe('whitespace-key');
+      expect(
+        (screen.getByLabelText('RPC URL') as HTMLInputElement).value,
+      ).toBe('https://eth-mainnet.g.alchemy.com/v2/whitespace-key');
+    });
   });
 });
 
