@@ -84,6 +84,12 @@ vi.mock('@titrate/sdk', () => {
         },
       };
     },
+    splitTemplate: (id: 'valve' | 'alchemy' | 'infura' | 'public' | 'custom', chainId: number) => {
+      if (id === 'valve') return { prefix: `https://evm${chainId}.rpc.valve.city/v1/`, suffix: '' };
+      if (id === 'alchemy' && chainId === 1) return { prefix: 'https://eth-mainnet.g.alchemy.com/v2/', suffix: '' };
+      if (id === 'infura' && chainId === 1) return { prefix: 'https://mainnet.infura.io/v3/', suffix: '' };
+      return { prefix: '', suffix: '' };
+    },
   };
 });
 
@@ -566,79 +572,108 @@ describe('CampaignStep', () => {
 
     it('enables all provider buttons after a supported chain is picked', () => {
       render(<CampaignStep />);
-      // Pick Ethereum (chainId 1) from the ChainSelector.
       fireEvent.click(screen.getByRole('button', { name: /^Ethereum$/i, pressed: false }));
       for (const name of [/valve\.city/i, /^Alchemy$/i, /^Infura$/i]) {
         expect(screen.getByRole('button', { name })).not.toBeDisabled();
       }
     });
 
-    it('fills RPC URL without prompting when a key is already stored', async () => {
+    it('keeps Alchemy and Infura disabled for chains they do not template', () => {
+      render(<CampaignStep />);
+      fireEvent.click(screen.getByRole('button', { name: /^PulseChain$/i, pressed: false }));
+      expect(screen.getByRole('button', { name: /valve\.city/i })).not.toBeDisabled();
+      expect(screen.getByRole('button', { name: /^Alchemy$/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /^Infura$/i })).toBeDisabled();
+    });
+
+    it('reveals an inline key editor with prefix/suffix spans when a provider is picked', async () => {
+      render(<CampaignStep />);
+      fireEvent.click(screen.getByRole('button', { name: /^Ethereum$/i, pressed: false }));
+      fireEvent.click(screen.getByRole('button', { name: /^Alchemy$/i }));
+
+      await vi.waitFor(() => {
+        expect(screen.getByLabelText('Alchemy API Key')).toBeInTheDocument();
+      });
+      // Prefix visible in the editor row; suffix is empty for these providers.
+      expect(screen.getByText('https://eth-mainnet.g.alchemy.com/v2/')).toBeInTheDocument();
+    });
+
+    it('pre-fills the editor and fills RPC URL when a key was already saved', async () => {
       mockAppSettingsGet.mockImplementation(async (k: string) =>
         k === 'provider-key-valve' ? 'stored-key-abc' : null,
       );
-      const promptSpy = vi.spyOn(window, 'prompt').mockImplementation(() => null);
 
       render(<CampaignStep />);
       fireEvent.click(screen.getByRole('button', { name: /^Ethereum$/i, pressed: false }));
       fireEvent.click(screen.getByRole('button', { name: /valve\.city/i }));
 
       await vi.waitFor(() => {
-        const rpcInput = screen.getByLabelText('RPC URL') as HTMLInputElement;
-        expect(rpcInput.value).toBe('https://evm1.rpc.valve.city/v1/stored-key-abc');
+        const keyInput = screen.getByLabelText('valve.city API Key') as HTMLInputElement;
+        expect(keyInput.value).toBe('stored-key-abc');
       });
-      expect(promptSpy).not.toHaveBeenCalled();
-      expect(mockAppSettingsPut).not.toHaveBeenCalled();
-      promptSpy.mockRestore();
+      const rpcInput = screen.getByLabelText('RPC URL') as HTMLInputElement;
+      expect(rpcInput.value).toBe('https://evm1.rpc.valve.city/v1/stored-key-abc');
     });
 
-    it('prompts for a key, persists it, and fills the RPC URL on first use', async () => {
-      mockAppSettingsGet.mockResolvedValue(null);
-      const promptSpy = vi
-        .spyOn(window, 'prompt')
-        .mockImplementation(() => '  new-alchemy-key  ');
-
+    it('updates the RPC URL live as the user types the key', async () => {
       render(<CampaignStep />);
       fireEvent.click(screen.getByRole('button', { name: /^Ethereum$/i, pressed: false }));
       fireEvent.click(screen.getByRole('button', { name: /^Alchemy$/i }));
 
-      await vi.waitFor(() => {
-        expect(mockAppSettingsPut).toHaveBeenCalledWith(
-          'provider-key-alchemy',
-          'new-alchemy-key',
-        );
-      });
+      const keyInput = await screen.findByLabelText('Alchemy API Key') as HTMLInputElement;
+      fireEvent.change(keyInput, { target: { value: 'typed-key-1' } });
+
       const rpcInput = screen.getByLabelText('RPC URL') as HTMLInputElement;
-      expect(rpcInput.value).toBe('https://eth-mainnet.g.alchemy.com/v2/new-alchemy-key');
-      expect(promptSpy).toHaveBeenCalledOnce();
-      promptSpy.mockRestore();
+      expect(rpcInput.value).toBe('https://eth-mainnet.g.alchemy.com/v2/typed-key-1');
     });
 
-    it('does nothing when the user cancels the key prompt', async () => {
-      mockAppSettingsGet.mockResolvedValue(null);
-      const promptSpy = vi.spyOn(window, 'prompt').mockImplementation(() => null);
-
+    it('extracts the key when the user pastes a full provider URL', async () => {
       render(<CampaignStep />);
       fireEvent.click(screen.getByRole('button', { name: /^Ethereum$/i, pressed: false }));
-      const rpcBefore = (screen.getByLabelText('RPC URL') as HTMLInputElement).value;
       fireEvent.click(screen.getByRole('button', { name: /^Infura$/i }));
 
-      // Small tick so the promise resolves.
-      await Promise.resolve();
-      expect(mockAppSettingsPut).not.toHaveBeenCalled();
-      expect((screen.getByLabelText('RPC URL') as HTMLInputElement).value).toBe(rpcBefore);
-      promptSpy.mockRestore();
+      const keyInput = await screen.findByLabelText('Infura API Key') as HTMLInputElement;
+      fireEvent.change(keyInput, {
+        target: { value: 'https://mainnet.infura.io/v3/pasted-project-id' },
+      });
+
+      // Input collapses to just the key.
+      expect(keyInput.value).toBe('pasted-project-id');
+      // And RPC URL is rebuilt from the extracted key (no double-prefix).
+      expect(
+        (screen.getByLabelText('RPC URL') as HTMLInputElement).value,
+      ).toBe('https://mainnet.infura.io/v3/pasted-project-id');
     });
 
-    it('keeps Alchemy and Infura buttons disabled for chains that have no template', () => {
+    it('persists the key to appSettings on blur', async () => {
       render(<CampaignStep />);
-      // PulseChain (chainId 369) — only valve.city can template it; Alchemy
-      // and Infura have no slug mapping for 369 in the mock.
-      fireEvent.click(screen.getByRole('button', { name: /^PulseChain$/i, pressed: false }));
+      fireEvent.click(screen.getByRole('button', { name: /^Ethereum$/i, pressed: false }));
+      fireEvent.click(screen.getByRole('button', { name: /valve\.city/i }));
 
-      expect(screen.getByRole('button', { name: /valve\.city/i })).not.toBeDisabled();
-      expect(screen.getByRole('button', { name: /^Alchemy$/i })).toBeDisabled();
-      expect(screen.getByRole('button', { name: /^Infura$/i })).toBeDisabled();
+      const keyInput = await screen.findByLabelText('valve.city API Key') as HTMLInputElement;
+      fireEvent.change(keyInput, { target: { value: 'fresh-valve-key' } });
+      fireEvent.blur(keyInput);
+
+      await vi.waitFor(() => {
+        expect(mockAppSettingsPut).toHaveBeenCalledWith(
+          'provider-key-valve',
+          'fresh-valve-key',
+        );
+      });
+    });
+
+    it('closes the editor on Done without committing an empty key', async () => {
+      render(<CampaignStep />);
+      fireEvent.click(screen.getByRole('button', { name: /^Ethereum$/i, pressed: false }));
+      fireEvent.click(screen.getByRole('button', { name: /^Alchemy$/i }));
+
+      await screen.findByLabelText('Alchemy API Key');
+      fireEvent.click(screen.getByRole('button', { name: /close provider key editor/i }));
+
+      await vi.waitFor(() => {
+        expect(screen.queryByLabelText('Alchemy API Key')).not.toBeInTheDocument();
+      });
+      expect(mockAppSettingsPut).not.toHaveBeenCalled();
     });
   });
 });

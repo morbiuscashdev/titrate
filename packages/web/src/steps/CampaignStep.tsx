@@ -10,6 +10,7 @@ import {
   getChainConfig,
   validateContractName,
   getProvider,
+  splitTemplate,
 } from '@titrate/sdk';
 import type { ChainCategory, ProviderId } from '@titrate/sdk';
 
@@ -80,30 +81,51 @@ export function CampaignStep() {
   const [manualSymbol, setManualSymbol] = useState('');
   const [manualDecimals, setManualDecimals] = useState('18');
   const [contractDisplayName, setContractDisplayName] = useState(DEFAULT_CONTRACT_NAME);
+  const [editingProvider, setEditingProvider] = useState<ProviderId | null>(null);
+  const [providerKey, setProviderKey] = useState('');
 
   const handleLoadProvider = useCallback(
     async (id: ProviderId) => {
       if (chainId === null) return;
-      const provider = getProvider(id);
-      const keyStorageKey = `provider-key-${id}`;
-
-      let key = storage ? (await storage.appSettings.get(keyStorageKey)) ?? '' : '';
-      if (!key) {
-        const entered = window.prompt(
-          `Paste your ${provider.name} API key. It's stored locally and reused for future auto-fills.`,
-        );
-        if (!entered) return;
-        key = entered.trim();
-        if (storage) {
-          await storage.appSettings.put(keyStorageKey, key);
-        }
+      const saved = storage
+        ? (await storage.appSettings.get(`provider-key-${id}`)) ?? ''
+        : '';
+      setEditingProvider(id);
+      setProviderKey(saved);
+      if (saved) {
+        const url = getProvider(id).buildUrl(chainId, saved);
+        if (url) setRpcUrl(url);
       }
-
-      const url = provider.buildUrl(chainId, key);
-      if (url) setRpcUrl(url);
     },
     [chainId, storage],
   );
+
+  const handleProviderKeyChange = useCallback(
+    (raw: string) => {
+      if (editingProvider === null || chainId === null) return;
+      const { prefix, suffix } = splitTemplate(editingProvider, chainId);
+      // Paste-URL support: if the value contains the provider's prefix,
+      // extract just the key portion (between prefix and optional suffix).
+      let key = raw;
+      const idx = key.indexOf(prefix);
+      if (prefix && idx !== -1) {
+        key = key.slice(idx + prefix.length);
+      }
+      if (suffix && key.endsWith(suffix)) {
+        key = key.slice(0, -suffix.length);
+      }
+      key = key.trim();
+      setProviderKey(key);
+      const url = getProvider(editingProvider).buildUrl(chainId, key);
+      if (url) setRpcUrl(url);
+    },
+    [editingProvider, chainId],
+  );
+
+  const handleProviderKeyCommit = useCallback(async () => {
+    if (!storage || editingProvider === null || !providerKey) return;
+    await storage.appSettings.put(`provider-key-${editingProvider}`, providerKey);
+  }, [storage, editingProvider, providerKey]);
 
   const normalizedTokenAddress: Address | null =
     ADDRESS_REGEX.test(tokenAddress) ? (tokenAddress.toLowerCase() as Address) : null;
@@ -317,34 +339,90 @@ export function CampaignStep() {
           onChange={(e) => setRpcUrl(e.target.value)}
           placeholder="https://..."
         />
-        <div className="-mt-3 flex flex-wrap items-center gap-2">
-          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--fg-muted)]">
-            Load from:
-          </span>
-          {(['valve', 'alchemy', 'infura'] as const).map((id) => {
-            const provider = getProvider(id);
-            const supported = chainId !== null && provider.buildUrl(chainId, 'x') !== null;
+        <div className="-mt-3 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--fg-muted)]">
+              Load from:
+            </span>
+            {(['valve', 'alchemy', 'infura'] as const).map((id) => {
+              const provider = getProvider(id);
+              const supported = chainId !== null && provider.buildUrl(chainId, 'x') !== null;
+              const active = editingProvider === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => handleLoadProvider(id)}
+                  disabled={!supported}
+                  aria-pressed={active}
+                  title={
+                    chainId === null
+                      ? 'Pick a chain first'
+                      : supported
+                        ? `Enter your ${provider.name} API key to fill the RPC URL`
+                        : `${provider.name} has no template for chain ${chainId}`
+                  }
+                  className={`${TOGGLE_BUTTON_BASE} px-3 py-1 text-xs ${
+                    active ? TOGGLE_ACTIVE : supported ? TOGGLE_INACTIVE : TOGGLE_INACTIVE_MUTED
+                  } disabled:cursor-not-allowed disabled:opacity-50`}
+                >
+                  {provider.name}
+                </button>
+              );
+            })}
+          </div>
+
+          {editingProvider !== null && chainId !== null && (() => {
+            const provider = getProvider(editingProvider);
+            const { prefix, suffix } = splitTemplate(editingProvider, chainId);
             return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => handleLoadProvider(id)}
-                disabled={!supported}
-                title={
-                  chainId === null
-                    ? 'Pick a chain first'
-                    : supported
-                      ? `Paste your ${provider.name} API key and fill the RPC URL`
-                      : `${provider.name} has no template for chain ${chainId}`
-                }
-                className={`${TOGGLE_BUTTON_BASE} px-3 py-1 text-xs ${
-                  supported ? TOGGLE_INACTIVE : TOGGLE_INACTIVE_MUTED
-                } disabled:cursor-not-allowed disabled:opacity-50`}
-              >
-                {provider.name}
-              </button>
+              <div className="space-y-1">
+                <label
+                  htmlFor="provider-key-input"
+                  className="block font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--fg-primary)]"
+                >
+                  {provider.name} API Key
+                </label>
+                <div className="flex items-stretch border-2 border-[color:var(--edge)] bg-white focus-within:border-[color:var(--color-pink-500)]">
+                  <span className="flex items-center px-2 font-mono text-xs text-[color:var(--fg-muted)] select-all">
+                    {prefix}
+                  </span>
+                  <input
+                    id="provider-key-input"
+                    type="text"
+                    autoFocus
+                    value={providerKey}
+                    onChange={(e) => handleProviderKeyChange(e.target.value)}
+                    onBlur={() => { void handleProviderKeyCommit(); }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === 'Escape') {
+                        (e.target as HTMLInputElement).blur();
+                        if (e.key === 'Escape') setEditingProvider(null);
+                      }
+                    }}
+                    placeholder="paste your key — or paste the whole URL"
+                    className="flex-1 min-w-0 bg-transparent font-mono text-sm text-[color:var(--color-cream-900)] px-2 py-1 focus:outline-none"
+                  />
+                  {suffix && (
+                    <span className="flex items-center px-2 font-mono text-xs text-[color:var(--fg-muted)] select-all">
+                      {suffix}
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => { void handleProviderKeyCommit(); setEditingProvider(null); }}
+                    aria-label="Close provider key editor"
+                    className="px-3 font-mono text-xs font-bold uppercase border-l-2 border-[color:var(--edge)] text-[color:var(--fg-muted)] hover:text-[color:var(--fg-primary)]"
+                  >
+                    Done
+                  </button>
+                </div>
+                <p className="font-mono text-[10px] text-[color:var(--fg-muted)]">
+                  Stored locally in this browser, never sent to a server. Paste the whole URL and the key will be extracted.
+                </p>
+              </div>
             );
-          })}
+          })()}
         </div>
 
         {/* Rate Limit Group */}
