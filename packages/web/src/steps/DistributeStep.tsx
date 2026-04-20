@@ -157,7 +157,7 @@ function ContractAddressLink({
   }
 
   return (
-    <span className="text-gray-900 dark:text-white font-mono text-xs">
+    <span className="font-mono text-xs text-[color:var(--fg-primary)]">
       {truncated}
     </span>
   );
