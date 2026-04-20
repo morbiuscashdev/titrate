@@ -72,6 +72,24 @@ export function LandingPage() {
           </div>
         </div>
 
+        {/* Compatible with — data providers + integrations */}
+        <div className="mt-16">
+          <h2 className="font-sans text-xl font-extrabold tracking-tight mb-6">Compatible with</h2>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Chip color="yellow">Etherscan</Chip>
+            <Chip color="green">Blockscout</Chip>
+            <Chip color="pink">Sourcify</Chip>
+            <Chip color="yellow">TrueBlocks</Chip>
+            <Chip color="green">Your RPC</Chip>
+          </div>
+          <p className="mt-4 text-center font-mono text-[12px] leading-relaxed text-[color:var(--fg-muted)]">
+            Address discovery through Etherscan logs or TrueBlocks appearances.
+            Contract verification fans out in parallel to Sourcify, Blockscout v2, and any
+            Etherscan-compat API — a single success verifies. RPC traffic goes to whatever
+            endpoint you point it at.
+          </p>
+        </div>
+
         {/* Principles — what makes it sovereign */}
         <div className="mt-16">
           <h2 className="font-sans text-xl font-extrabold tracking-tight mb-6">Principles</h2>
