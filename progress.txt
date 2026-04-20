@@ -1,74 +1,111 @@
 # Titrate — Progress Checkpoint
 
-## Date: 2026-04-19 (morning, post-widget-batch session)
+## Date: 2026-04-19 (late morning, production-audit + contract-name session)
 
 ## Current state
 
-- **Branch:** `master` · HEAD `3b528d8` (direct-merged small-widgets batch).
-- **Open PRs:** none. PRs #14–#26 all merged to master; small-widgets batch (post-#26) direct-merged per explicit user instruction.
+- **Branch:** `master` · HEAD `6b3cea0`.
+- **Open PRs:** none. 7 PRs merged this session (#27–#33).
 - **Working tree:** clean (only `.remember/tmp/save-session.pid` shows as modified, as always).
-- **CI:** `.github/workflows/ci.yml` green on master through the entire PR chain.
-- **Regression:** 665 web tests, all green across every commit in this session.
-- **Policy in effect:** small focused brand/theme migration PRs per `feedback_direct-to-master.md`. The final small-widgets batch was direct-merged locally at user request ("just merge onto master").
+- **CI:** green on master through the entire PR chain.
+- **Tests:** web 670 passing (up from 665), sdk 561 passing + 52 gated skipped, all green.
+- **Coverage:** web 89.65% stmt / 91.13% line. SDK 77.59% stmt / 78.70% line.
+- **Production deploy:** https://app-production-35a3.up.railway.app — Railway auto-deploys master.
 
-## Shipped this session (2026-04-18 → 2026-04-19)
+## Shipped this session (2026-04-19)
 
-Session ran from the prior checkpoint at `89df94d` to `3b528d8`. 13 PRs merged (#14–#26) plus one direct-merged batch.
+Session ran from the prior checkpoint at `a525786` to `6b3cea0`. 7 PRs merged.
 
-### Chrome / shared
+### CI / infra fixes
 
-- **PR #14 `b1d5e20` — Header.** Legacy gray-200/800 nav chrome → brand theme-cascade tokens (`--edge`, `--bg-page`, `--fg-*`, `--color-pink-600`, `--color-info`). 2px hard edge border. Mode-agnostic (lives outside any `ModeProvider`).
-- **PR #15 `eda128d` — StepPanel.** Shared panel for all 7 step screens. Title `font-extrabold tracking-tight` at `--fg-primary`; description `font-mono` at `--fg-muted`. Theme-cascade-only so it renders in both brutalist and operator steps.
+- **PR #27 `a927589` — test(web): stabilize 2 CI-flaky tests.** FiltersStep `runs preview and shows surviving count` used `getByText(/addresses pass/)` which matched both the pre-preview info banner AND the survivor readout — on slow CI `waitFor` resolved on the banner and `getByText` returned the wrong element. Switched to `findByRole('status')` (only rendered in `done` state). DistributeStep `blocks distribution when validation returns errors` click wasn't wrapped in `act()` — added `act()` + `findByText` to flush React state before polling.
+- **PR #28 `526717d` — fix(web): copy storage-campaign package.json into Docker build.** Railway build was failing with `@titrate/storage-campaign@npm:0.0.1: 404 Not Found` because the Dockerfile pre-copied 6 of 7 workspace package.json files, missing `storage-campaign`. TUI's manifest depends on it, so inside the container Yarn didn't recognize it as a workspace and tried the public registry. One-line fix.
 
-### Step flow (all 7 steps)
+### Production audit fixes (PRs #29–#31)
 
-- **PR #16 `39310d0` — CampaignStep + ChainSelector.** 10+ ad-hoc `<input>` → `<Input>` primitive. Category pills + Simple/Full toggle → brand `TOGGLE_BASE`/`TOGGLE_ACTIVE`/`TOGGLE_INACTIVE` with `aria-pressed`. Token preview → `<Card>`. Save & Continue → `<Button>`. ChainSelector adopts same toggle pattern. Test stabilization: 4 `ring-blue` className assertions → `aria-pressed`.
-- **PR #17 `316b8bd` — AmountsStep + AmountConfig.** Internal Toggle subcomponent brutalist 2-option pill. Uniform-amount input → `<Input>`. Total display → `<Card>`. Save & Continue → `<Button variant=primary>`. Format-conflict warning → `--color-warn/10` + border.
-- **PR #18 `9ce34e0` — RequirementsStep + RequirementsPanel.** Outer panel → `<Card>` (operator variant). Status banner tones to `--color-ok`/`--color-err`. Token Allowance → `<Card>`. Perry-mode box → `--color-info/10`. Continue → `<Button variant=primary>`.
-- **PR #19 `53966e2` — WalletStep.** SECTION_LABEL idiom for "Perry Mode" heading. Derive CTA: legacy purple-700 → `<Button variant=primary>` (brand pink, consistent with all step CTAs). Per-wallet cards → `<Card>`. Fund Gas/Tokens links: pink-600 + dotted underline. Perry info banner → `--color-info/10`.
-- **PR #20 `d31573e` — FiltersStep.** Per-filter row containers → `<Card>`. Filter-summary info panel → `--color-info/10`. Preview CTA → `<Button>`. Survivor count → `--color-ok`. Per-filter breakdown → `<Card>`. Shipped parallel with #19.
-- **PR #21 `87fd4b0` — AddressesStep.** CSV drop zone: brutalist 2px dashed + `data-drag-over` attribute (stabilized 2 brittle `bg-blue-500/5` class assertions). Manual Entry → `<Textarea>` primitive. Block Scan/Explorer Scan toggle → brand pattern. On-chain params → `<Card>`. Preview container → `<Card>`.
-- **PR #22 `78fe2b5` — DistributeStep (OPERATOR).** 320-line render JSX migrates to the brand's operator palette (ink-* scale, 1px borders, rounded-md). Distribution Plan → `<Card>` + mono tabular rows. Operator Method Selector toggle → 4-option aria-pressed pattern. Clamp warning + Resume prompt → `--color-warn/10`. Distributing status → `--color-info/10` throughput row. Deploy → `<Button secondary>`; Start → `<Button primary>`. Sweep panel → `<Card>` + `<Input>`. Intervention Journal → `<Card>`.
+Audited the live Railway deploy via Chrome DevTools MCP, found and fixed five issues:
 
-### DistributeStep child widgets
+- **PR #29 `8cdf651` — fix(web): production header nav, CSP, and Lit dev-mode warning.**
+  - Header anchors used path URLs (`/`, `/settings`) but App uses `<HashRouter>`. Clicking the gear served `index.html` via Caddy's SPA fallback and the router rendered the landing page. Switched to `#/`, `#/settings`.
+  - CSP `connect-src` was missing `https://api.web3modal.org` (where Reown AppKit actually fetches config) — 6 blocked bootstrap requests per page load. Also added `https://cca-lite.coinbase.com` (Coinbase Wallet telemetry).
+  - Lit "dev mode" warning: pre-populated `globalThis.litIssuedWarnings` with `["dev-mode"]` in index.html (empty Set seed didn't work — Lit checks `has(warning) || has(code)`, so needed the actual code string).
+- **PR #30 `cdfb11e` — fix(web): stop precaching index.html so CSP changes propagate.** After #29 shipped, users were STILL seeing the old CSP because the VitePWA service worker precached the old `index.html`. CSP meta tag is in HTML, so every CSP change was gated behind user clicking Refresh. Fix: `globPatterns` drops `**/*.html`, `navigateFallback: null`, runtimeCaching NetworkFirst for `request.mode === 'navigate'` (3s timeout, 24h offline fallback). Also switched `registerType: 'prompt' → 'autoUpdate'` with `skipWaiting: true` + `clientsClaim: true`. Future deploys propagate within one navigation.
+- **PR #31 `5f11d74` — fix(web): tri-state theme toggle, single toggle, unlock contrast, Lit warning.**
+  - Double theme toggle on landing page (LandingPage had its own absolutely-positioned `<ThemeToggle />` in addition to the Header's) — removed duplicate.
+  - System theme option was lost in the brand migration — the new `ui/ThemeToggle` was light/dark only. Expanded `Theme` to `"light" | "dark" | "system"`, added `ResolvedTheme` + `resolveTheme()`, `useTheme` now returns `{theme, resolvedTheme, setTheme, toggle}` with matchMedia listener when theme is "system". Two-segment button group: left flips light/dark, right locks to system.
+  - Settings unlock banner had poor dark-mode contrast (legacy `text-yellow-400` on `bg-yellow-900/20` = orange-on-orange). Switched to brand `--color-warn` tokens with brutalist chrome.
 
-- **PR #23 `7b8b8cf` — BatchTimeline + BatchStatusCard + SpendSummary.** "No batches yet" placeholder → mono/fg-muted. BatchStatusCard → `<Card>`, tx hash link → pink-400 dotted underline. SpendSummary Stat tile → `<Card>`, failed-batches callout → `--color-err/10`.
-- **PR #24 `48f0e83` — InterventionControls.** `<Card>` chrome. Heading → font-extrabold tracking-tight. Checkbox `accent-color: var(--color-pink-500)` via CSS (native checkbox picks up brand). Shipped parallel with #23.
-- **PR #25 `382f58f` — PipelineStepEditor + SetOperationsPanel.** ParamField removed in favor of `<Input>`. Source/filter type toggle → brand TOGGLE pattern. SetOperationsPanel → `<Card>` + `<Select>` primitive for Set A/B dropdowns. Shipped parallel with #23/#24.
-- **PR #26 `a2e291f` — GasConfigPanel (OPERATOR).** 312-line panel → brand operator palette. Disclosure header `bg-ink-900` mono semibold. Speed toggles (radiogroup role preserved): pink-600 active, ink-800 inactive. INPUT_CLASS constant for shared chrome. Revalidation checkbox uses pink accent.
+### Feature work
 
-### Small widgets (direct-merged, no PR)
+- **PR #32 `0d55109` — feat(web,sdk): custom contract name + PulseChain v4 testnet E2E.**
+  - Before: `contractName` on a campaign silently defaulted to the ERC-20 symbol — deploying an airdrop for USDC showed up as "USDC" on block explorers after verification.
+  - After: `contractName` is the user-chosen display name (default `TokenAirdrop`), validated as a Solidity identifier (`^[A-Za-z_$][A-Za-z_$0-9]*$`, ≤ 64 chars, not a reserved keyword). Added a UI input in CampaignStep with inline error. Validation helper `validateContractName` exported from `@titrate/sdk` for TUI reuse.
+  - Added optional `tokenSymbol` field to `CampaignConfig` for ERC-20 symbol display. Consumers (HomePage card, RequirementsStep, DistributeStep) prefer `tokenSymbol` with `contractName` fallback for backcompat.
+  - New `packages/sdk/src/__tests__/helpers/pulsechain-testnet.ts`: viem clients for chainId 943, `claimFromFaucet(address)` (POST FormData to `faucet.v4.testnet.pulsechain.com/api/claim` — no captcha, no API key, 10 tPLS per claim), `waitForBalance` poller.
+  - Gated test `e2e-pulsechain-v4.test.ts` with `describe.runIf(RUN_PULSECHAIN_E2E === '1')`. Claims faucet funds if balance < 0.5 tPLS, deploys TitrateSimple, asserts non-empty bytecode. Run: `RUN_PULSECHAIN_E2E=1 npx vitest run src/__tests__/e2e-pulsechain-v4`. Optional `PULSECHAIN_TESTNET_PRIVATE_KEY` reuses a funded account.
 
-- **`3b528d8` — Skeleton + CampaignCardSkeleton + ReloadPrompt + InlineEdit + EncryptedField + ErrorBoundary + AddressTable.** Batch of 7 small files + 3 test stabilizations. Skeleton `bg-gray-800` → `--edge/30`. ReloadPrompt banner → brutalist shell with `<Button>`. InlineEdit focus border → `--color-pink-500`. EncryptedField/ErrorBoundary/AddressTable to brand tokens + `<Button>` primitives. AddressTable conflict row: `bg-red-900/20` → `--color-err/10` + `data-conflict` attribute for stable test selectors.
+### Skills
+
+- **PR #33 `6b3cea0` — docs(skills): add titrate-pulsechain-testnet skill.** Documents the gated E2E harness added in #32 so future sessions auto-surface the flow (faucet API shape, env vars, chain facts, helper surface, failure-mode table). Indexed in root `CLAUDE.md` alongside the other `titrate-*` skills.
+
+## Production audit findings (for context)
+
+Live URL: https://app-production-35a3.up.railway.app
+
+All four console-visible issues fixed in #29–#31. One remains **outside code scope**:
+
+- **Reown 403 on api.web3modal.org endpoints.** CSP now allows the connection; the 403 is because the `VITE_REOWN_PROJECT_ID` env var on Railway isn't allowlisted for the Railway origin in the Reown dashboard. Fix requires creating/updating a project at cloud.reown.com (any email works — magic-link auth, Google OAuth not required). **User said "ignore reown for now"** — deferred.
 
 ## Remaining work
 
-### Component migrations (long tail, still direct-to-master per policy)
+### Brand migration long tail (unchanged from prior checkpoint)
 
-- **InterventionModal** (360 lines) — modal chrome, the biggest remaining single-file migration.
-- **GasConfigPanel subcomponents** — already done in PR #26, but the Input primitive may later absorb the custom gwei/ETH/% suffix pattern if we add a `suffix` prop.
+- **InterventionModal** (360 lines) — largest single-file migration. Visible on pause/intervention flows during distribution.
+- **ContractAddressLink** — inline in DistributeStep, still `text-blue-600`. Small.
 - **Toast renderer** inside `ToastProvider` — toast bubble chrome still legacy.
-- **ContractAddressLink** — inline in `DistributeStep.tsx`, still uses legacy `blue-600`. Small follow-up.
-- **Step-internal widgets** scattered across the 7 step components (TokenSelector, AmountInput, etc.) — most have been covered by the step-wide migrations already; audit for stragglers.
+- Audit step-internal widgets for stragglers.
 
-### Phase 2 follow-on (separate from brand work)
+### Test coverage gaps
 
-- **Phase 2c** — TUI `PipelineOrchestrator` wired into the React tree, LIVE dashboard panel, keyboard bindings, viewer-mode for second session.
-- **Phase 2d** — Web GUI orchestrator parity (same loop abstractions, Web Locks API instead of `.pipeline.lock`).
+- SDK `src/pipeline`: **44%** — biggest single coverage win for smallest effort. Most-executed runtime path.
+- SDK `src/scanner`: **58%**.
+- SDK `src/signers`: **37%** (`ledger.ts` 26%, `walletconnect.ts` 19%) — hardware/network, harder to mock but possible with fixtures.
+- After covering pipeline + scanner → SDK totals should exceed 85%.
+
+### Testing-depth expansion (discussed, not implemented)
+
+- **Web E2E in real browser** — Playwright spec against Railway preview deploy with MetaMask mock. Catches router/SW/CSP bugs that unit tests don't (exactly this session's class of bug).
+- **TUI per-screen snapshots** — extend `titrate-tui-smoke` with `captureCharFrame()` snapshots for each screen. Catches OpenTUI layout regressions.
+- **Visual regression for web** — Playwright screenshot diffs or chrome-devtools-mcp a11y audits in a gated CI step.
+
+### Phase 2 follow-on (separate axis)
+
+- **Phase 2c** — TUI `PipelineOrchestrator` wired into React tree, LIVE dashboard panel, keyboard bindings, viewer-mode.
+- **Phase 2d** — Web GUI orchestrator parity with Web Locks API.
 - **Phase 2e** — Anvil-gated e2e + error-surfacing polish.
+
+### Contract deployment follow-ups
+
+- `titrate-pulsechain-testnet` skill is written but the E2E hasn't been actually executed against live testnet from this session (the test file is shipped and gated, but nobody ran it with `RUN_PULSECHAIN_E2E=1` yet). Next session could verify.
+- Verify-flow assertion not yet in the gated test — only deploy + bytecode check. Add `verifyContract` assertion if that path changes.
+- PulseChain v4 testnet gas is orders of magnitude cheaper than mainnet, so gas-sensitive code still needs Sepolia for realistic numbers.
 
 ## Session notes
 
-- **Pattern holds for direct-to-master PRs:** cut branch → push → `gh pr create` → `gh run watch` → `gh pr merge --squash --delete-branch`. Post-merge `git pull --rebase` fails every time on the dirty `.remember/tmp/save-session.pid` file; stash / pull / drop is the standard recipe.
-- **Parallel-ship pattern worked:** #19+#20 and #23+#24+#25+#26 were shipped in parallel when they touched different files. GitHub merged them sequentially without conflict.
-- **gh auth account drift:** `gh auth switch -u morbiuscashdev` needed before each `gh pr merge` when the active account reverted to `provexdev`. Worth scripting.
-- **1Password SSH signer flaked twice** (DistributeStep commit + small-widgets commit). Required user-side unlock. Not deterministic.
-- **Stabilization via `data-*` attributes:** CampaignStep (`aria-pressed`), AddressesStep (`data-drag-over`), AddressTable (`data-conflict`), RequirementsPanel (`data-status`), Skeleton (token-name check). Future token renames won't need test updates in these files.
+- **Service worker caching was the real culprit behind "CSP fix doesn't work"** — the fix shipped, but users kept seeing old CSP until the SW updated on its own. Fixed properly in #30 by switching to NetworkFirst for HTML + autoUpdate. Confirmed via curl that Railway was serving the new HTML immediately; browser was stale.
+- **Two coexisting theme systems** discovered in `providers/ThemeProvider.tsx` (legacy, 3-state, `.dark` class) and `theme/useTheme.ts` (brand, was 2-state, `data-theme`). The new brand system is what's wired in App.tsx; the legacy one is orphaned. Merged the tri-state pattern into the new system in #31.
+- **`contractName` semantics were conflated** — used as both token-symbol display AND contract verification name. Split into `tokenSymbol` (new optional field) + `contractName` (verification) in #32.
+- **Railway Dockerfile drift pattern:** workspace packages are cumulative. Every new workspace package needs a line in `packages/web/Dockerfile` pre-copying its package.json, or builds break mysteriously with a public-npm-registry 404. Worth a pre-push CI check eventually.
+- **gh auth drift continues:** `gh auth switch -u morbiuscashdev` required before every `gh pr merge` (active account keeps reverting to `provexdev`). Also required before `gh pr create` when other account gets selected. Still not automated.
+- **1Password SSH signer flaked once** (mid-session on a commit). User-side unlock required. Not deterministic.
 
 ## What to do next session
 
-Pick any bullet from "Component migrations (long tail)" and follow the same rhythm. Suggested order:
-1. **InterventionModal** — largest single-file migration. Visible on pause/intervention flows in distribution.
-2. **ContractAddressLink** + **Toast renderer** — quick wins (tiny diffs).
-3. Audit each step's internal widgets for stragglers using `git grep "blue-500\|gray-50 dark:bg-gray-900"` in `src/steps/` and `src/components/`.
-4. Phase 2c — TUI orchestrator work is a different axis; schedule it independently.
+Pick any of:
+
+1. **SDK `src/pipeline` coverage** — biggest coverage win per hour. The pipeline module is the hot runtime path; raising it from 44% to ~85% pushes SDK total above 85% and hardens the most-executed code.
+2. **Playwright web E2E harness** — biggest UX-bug-catching win. Would have caught all five production-audit findings this session automatically. Needs a MetaMask mock or headless wallet pattern; Playwright + Chrome DevTools MCP are already in play.
+3. **InterventionModal migration** — largest remaining brand-migration single file. Unblocks closing out the brand-migration long tail.
+4. **PulseChain v4 E2E first actual run** — invoke the gated test once end-to-end to make sure the faucet-to-deploy path works start to finish. Follow-up PR if anything needs fixing.
+
+User's session preference: small focused PRs, direct-to-master for brand/theme migrations per `feedback_direct-to-master.md`. For non-migration feature work (like E2E harness, coverage-boosters), regular PR flow applies.
