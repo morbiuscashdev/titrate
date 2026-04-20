@@ -89,20 +89,26 @@ describe.runIf(E2E_ENABLED)('PulseChain v4 testnet E2E', () => {
       chainId: 943,
     });
 
-    // The chain must be resolved to a PulseScan API URL and the verify URL
-    // must point at the address we just deployed.
+    // The chain must resolve to a PulseScan API URL; the verify URL must
+    // point at the contract we just deployed.
     expect(verify.explorerUrl).toContain(deploy.address);
 
-    // Any message mentioning a network failure or missing API URL is a
-    // configuration regression, not a PulseScan-pending quirk — fail hard.
-    const msg = verify.message.toLowerCase();
-    expect(msg).not.toContain('no explorer api url');
-    expect(msg).not.toContain('request failed');
+    // All three backends must have attempted (Sourcify + Blockscout v2 +
+    // Etherscan-compat). An attempts array of any other shape means the
+    // orchestrator itself is broken.
+    expect(verify.attempts).toHaveLength(3);
+    const backends = verify.attempts.map((a) => a.backend).sort();
+    expect(backends).toEqual(['blockscout-v2', 'etherscan', 'sourcify']);
 
-    // Strict: the submission must be accepted and verification confirmed.
-    // If PulseScan is slow enough to poll-timeout (10 × 3s = 30s), we treat
-    // that as a flaky-infra failure and surface the message so the next
-    // session can decide whether to widen the poll window or relax.
-    expect(verify.success, `verify failed: ${verify.message}`).toBe(true);
+    // Strict: ANY of Sourcify / Blockscout v2 / Etherscan-compat must succeed.
+    // If all fail, print every backend's attempt so the infra issue is
+    // self-diagnosing (which service rejected, with what message).
+    const attemptReport = verify.attempts
+      .map((a) => `  - ${a.backend}: ${a.success ? 'OK' : 'FAIL'} — ${a.message}`)
+      .join('\n');
+    expect(
+      verify.success,
+      `verify failed: ${verify.message}\n${attemptReport}`,
+    ).toBe(true);
   }, testTimeout);
 });
