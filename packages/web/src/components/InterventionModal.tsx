@@ -1,6 +1,8 @@
 import { useIntervention } from '../providers/InterventionProvider.js';
 import { createSpotCheck } from '@titrate/sdk';
 import type { InterventionContext } from '@titrate/sdk';
+import { Button, type ButtonVariant } from './ui/index.js';
+import { useMode } from '../theme/index.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -39,14 +41,14 @@ function getExplorerBaseUrl(context: InterventionContext): string {
   return (context.metadata?.explorerBaseUrl as string) ?? 'https://etherscan.io';
 }
 
-/** Render a tx hash as a clickable explorer link. */
+/** Render a tx hash as a clickable explorer link using brand tokens. */
 function TxHashLink({ hash, explorerBaseUrl }: { readonly hash: string; readonly explorerBaseUrl: string }) {
   return (
     <a
       href={`${explorerBaseUrl}/tx/${hash}`}
       target="_blank"
       rel="noopener noreferrer"
-      className="rounded bg-gray-100 px-1 py-0.5 text-xs font-mono text-blue-600 dark:bg-gray-800 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
+      className="rounded bg-[color:var(--bg-page)] px-1 py-0.5 text-xs font-mono text-[color:var(--color-info)] hover:underline"
     >
       {truncateHash(hash)}
     </a>
@@ -75,14 +77,14 @@ function BatchPreviewContent({ context }: { readonly context: InterventionContex
     : null;
 
   return (
-    <div className="space-y-3 text-sm text-gray-700 dark:text-gray-300">
+    <div className="space-y-3 font-mono text-sm text-[color:var(--fg-primary)]">
       <p>
         Batch #{context.batchIndex ?? 0}: {addressCount} address{addressCount !== 1 ? 'es' : ''},{' '}
         {totalTokens.toString()} tokens total.
       </p>
       {spotCheck && spotCheck.samples.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-gray-500 dark:text-gray-400 mb-2">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-[color:var(--fg-muted)]">
             Spot Check ({spotCheck.sampleSize} of {spotCheck.totalCount})
           </p>
           <div className="space-y-1">
@@ -92,12 +94,12 @@ function BatchPreviewContent({ context }: { readonly context: InterventionContex
                   href={sample.explorerUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="font-mono text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
+                  className="font-mono text-[color:var(--color-info)] hover:underline"
                 >
                   {sample.address.slice(0, 10)}...{sample.address.slice(-6)}
                 </a>
                 {sample.amount !== undefined && (
-                  <span className="text-gray-500 dark:text-gray-400">
+                  <span className="text-[color:var(--fg-muted)]">
                     {sample.amount.toString()} tokens
                   </span>
                 )}
@@ -112,7 +114,7 @@ function BatchPreviewContent({ context }: { readonly context: InterventionContex
 
 function BatchResultContent({ context }: { readonly context: InterventionContext }) {
   return (
-    <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+    <div className="space-y-2 font-mono text-sm text-[color:var(--fg-primary)]">
       <p>Batch #{context.batchIndex ?? 0} confirmed.</p>
       {context.txHash && (
         <p>
@@ -125,7 +127,7 @@ function BatchResultContent({ context }: { readonly context: InterventionContext
 
 function StuckTransactionContent({ context }: { readonly context: InterventionContext }) {
   return (
-    <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+    <div className="space-y-2 font-mono text-sm text-[color:var(--fg-primary)]">
       <p>
         Transaction{' '}
         {context.txHash ? (
@@ -135,7 +137,7 @@ function StuckTransactionContent({ context }: { readonly context: InterventionCo
         )}{' '}
         appears to be stuck.
       </p>
-      <p className="text-xs text-gray-500 dark:text-gray-400">
+      <p className="text-xs text-[color:var(--fg-muted)]">
         You can bump gas to speed up the transaction, wait for it to confirm, or abort.
       </p>
     </div>
@@ -145,9 +147,9 @@ function StuckTransactionContent({ context }: { readonly context: InterventionCo
 function ValidationWarningContent({ context }: { readonly context: InterventionContext }) {
   const issues = context.issues ?? [];
   return (
-    <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+    <div className="space-y-2 font-mono text-sm text-[color:var(--fg-primary)]">
       <p>{issues.length} warning{issues.length !== 1 ? 's' : ''} found:</p>
-      <ul className="ml-4 list-disc space-y-1 text-xs text-yellow-600 dark:text-yellow-400">
+      <ul className="ml-4 list-disc space-y-1 text-xs text-[color:var(--color-warn)]">
         {issues.map((issue, index) => (
           <li key={index}>{issue.message}</li>
         ))}
@@ -159,9 +161,9 @@ function ValidationWarningContent({ context }: { readonly context: InterventionC
 function ValidationErrorContent({ context }: { readonly context: InterventionContext }) {
   const issues = context.issues ?? [];
   return (
-    <div className="space-y-2 text-sm text-gray-700 dark:text-gray-300">
+    <div className="space-y-2 font-mono text-sm text-[color:var(--fg-primary)]">
       <p>{issues.length} error{issues.length !== 1 ? 's' : ''} found:</p>
-      <ul className="ml-4 list-disc space-y-1 text-xs text-red-500 dark:text-red-400">
+      <ul className="ml-4 list-disc space-y-1 text-xs text-[color:var(--color-err)]">
         {issues.map((issue, index) => (
           <li key={index}>{issue.message}</li>
         ))}
@@ -172,7 +174,7 @@ function ValidationErrorContent({ context }: { readonly context: InterventionCon
 
 function DefaultContent({ context }: { readonly context: InterventionContext }) {
   return (
-    <div className="text-sm text-gray-700 dark:text-gray-300">
+    <div className="font-mono text-sm text-[color:var(--fg-primary)]">
       <p>Intervention at <strong>{context.point}</strong>.</p>
     </div>
   );
@@ -203,118 +205,122 @@ function InterventionContent({ context }: { readonly context: InterventionContex
 // Action buttons per intervention point
 // ---------------------------------------------------------------------------
 
+type Action = { readonly label: string; readonly variant: ButtonVariant; readonly onClick: () => void };
+
+function ActionRow({ actions }: { readonly actions: readonly Action[] }) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {actions.map((action) => (
+        <Button key={action.label} variant={action.variant} size="md" onClick={action.onClick}>
+          {action.label}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
 function InterventionActions({ point }: { readonly point: InterventionContext['point'] }) {
   const { dismiss } = useIntervention();
 
   switch (point) {
     case 'batch-preview':
       return (
-        <div className="flex flex-wrap gap-2">
-          <ActionButton label="Approve" onClick={() => dismiss({ type: 'approve' })} variant="primary" />
-          <ActionButton label="Skip" onClick={() => dismiss({ type: 'skip' })} variant="secondary" />
-          <ActionButton label="Abort" onClick={() => dismiss({ type: 'abort' })} variant="danger" />
-        </div>
+        <ActionRow
+          actions={[
+            { label: 'Approve', variant: 'primary', onClick: () => dismiss({ type: 'approve' }) },
+            { label: 'Skip', variant: 'secondary', onClick: () => dismiss({ type: 'skip' }) },
+            { label: 'Abort', variant: 'danger', onClick: () => dismiss({ type: 'abort' }) },
+          ]}
+        />
       );
 
     case 'batch-result':
       return (
-        <div className="flex flex-wrap gap-2">
-          <ActionButton label="Continue" onClick={() => dismiss({ type: 'approve' })} variant="primary" />
-          <ActionButton label="Pause" onClick={() => dismiss({ type: 'pause' })} variant="secondary" />
-        </div>
+        <ActionRow
+          actions={[
+            { label: 'Continue', variant: 'primary', onClick: () => dismiss({ type: 'approve' }) },
+            { label: 'Pause', variant: 'secondary', onClick: () => dismiss({ type: 'pause' }) },
+          ]}
+        />
       );
 
     case 'stuck-transaction':
       return (
-        <div className="flex flex-wrap gap-2">
-          <ActionButton label="Bump Gas (1.5x)" onClick={() => dismiss({ type: 'bumpGas', multiplier: 1.5 })} variant="primary" />
-          <ActionButton label="Retry" onClick={() => dismiss({ type: 'retry' })} variant="secondary" />
-          <ActionButton label="Abort" onClick={() => dismiss({ type: 'abort' })} variant="danger" />
-        </div>
+        <ActionRow
+          actions={[
+            { label: 'Bump Gas (1.5x)', variant: 'primary', onClick: () => dismiss({ type: 'bumpGas', multiplier: 1.5 }) },
+            { label: 'Retry', variant: 'secondary', onClick: () => dismiss({ type: 'retry' }) },
+            { label: 'Abort', variant: 'danger', onClick: () => dismiss({ type: 'abort' }) },
+          ]}
+        />
       );
 
     case 'validation-warning':
       return (
-        <div className="flex flex-wrap gap-2">
-          <ActionButton label="Override" onClick={() => dismiss({ type: 'overrideWarnings' })} variant="primary" />
-          <ActionButton label="Abort" onClick={() => dismiss({ type: 'abort' })} variant="danger" />
-        </div>
+        <ActionRow
+          actions={[
+            { label: 'Override', variant: 'primary', onClick: () => dismiss({ type: 'overrideWarnings' }) },
+            { label: 'Abort', variant: 'danger', onClick: () => dismiss({ type: 'abort' }) },
+          ]}
+        />
       );
 
     case 'validation-error':
       return (
-        <div className="flex flex-wrap gap-2">
-          <ActionButton label="Abort" onClick={() => dismiss({ type: 'abort' })} variant="danger" />
-        </div>
+        <ActionRow
+          actions={[{ label: 'Abort', variant: 'danger', onClick: () => dismiss({ type: 'abort' }) }]}
+        />
       );
 
     default:
       return (
-        <div className="flex flex-wrap gap-2">
-          <ActionButton label="Approve" onClick={() => dismiss({ type: 'approve' })} variant="primary" />
-          <ActionButton label="Skip" onClick={() => dismiss({ type: 'skip' })} variant="secondary" />
-          <ActionButton label="Abort" onClick={() => dismiss({ type: 'abort' })} variant="danger" />
-        </div>
+        <ActionRow
+          actions={[
+            { label: 'Approve', variant: 'primary', onClick: () => dismiss({ type: 'approve' }) },
+            { label: 'Skip', variant: 'secondary', onClick: () => dismiss({ type: 'skip' }) },
+            { label: 'Abort', variant: 'danger', onClick: () => dismiss({ type: 'abort' }) },
+          ]}
+        />
       );
   }
 }
 
 // ---------------------------------------------------------------------------
-// Shared button
+// Point icon — brand token chip
 // ---------------------------------------------------------------------------
 
-type ActionButtonVariant = 'primary' | 'secondary' | 'danger';
+type IconSpec = { readonly letter: string; readonly token: string };
 
-const VARIANT_CLASSES: Record<ActionButtonVariant, string> = {
-  primary:
-    'bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500',
-  secondary:
-    'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 focus-visible:ring-gray-400',
-  danger:
-    'bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500',
-};
-
-function ActionButton({
-  label,
-  onClick,
-  variant,
-}: {
-  readonly label: string;
-  readonly onClick: () => void;
-  readonly variant: ActionButtonVariant;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`rounded-lg px-4 py-2 text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-gray-900 ${VARIANT_CLASSES[variant]}`}
-    >
-      {label}
-    </button>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Point icon
-// ---------------------------------------------------------------------------
-
-function PointIcon({ point }: { readonly point: InterventionContext['point'] }) {
-  const baseClass = 'h-8 w-8 rounded-full flex items-center justify-center text-sm font-bold';
-
+function getIconSpec(point: InterventionContext['point']): IconSpec {
   switch (point) {
     case 'batch-preview':
-      return <div className={`${baseClass} bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-400`}>B</div>;
+      return { letter: 'B', token: 'var(--color-info)' };
     case 'batch-result':
-      return <div className={`${baseClass} bg-green-100 text-green-600 dark:bg-green-900/40 dark:text-green-400`}>R</div>;
+      return { letter: 'R', token: 'var(--color-ok)' };
     case 'stuck-transaction':
-      return <div className={`${baseClass} bg-orange-100 text-orange-600 dark:bg-orange-900/40 dark:text-orange-400`}>!</div>;
+      return { letter: '!', token: 'var(--color-warn)' };
     case 'validation-warning':
-      return <div className={`${baseClass} bg-yellow-100 text-yellow-600 dark:bg-yellow-900/40 dark:text-yellow-400`}>W</div>;
+      return { letter: 'W', token: 'var(--color-warn)' };
     case 'validation-error':
-      return <div className={`${baseClass} bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-400`}>E</div>;
+      return { letter: 'E', token: 'var(--color-err)' };
     default:
-      return <div className={`${baseClass} bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400`}>?</div>;
+      return { letter: '?', token: 'var(--fg-muted)' };
   }
+}
+
+function PointIcon({ point }: { readonly point: InterventionContext['point'] }) {
+  const mode = useMode();
+  const { letter, token } = getIconSpec(point);
+  const shape = mode === 'brutalist' ? 'rounded-none border-2 border-[color:var(--edge)]' : 'rounded-full';
+  return (
+    <div
+      className={`flex h-8 w-8 items-center justify-center font-mono text-sm font-bold text-[color:var(--bg-card)] ${shape}`}
+      style={{ backgroundColor: token }}
+      aria-hidden="true"
+    >
+      {letter}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -329,22 +335,27 @@ function PointIcon({ point }: { readonly point: InterventionContext['point'] }) 
  */
 export function InterventionModal() {
   const { state } = useIntervention();
+  const mode = useMode();
 
   if (!state.isActive || !state.context) return null;
 
   const { point } = state.context;
 
+  const panel = mode === 'brutalist'
+    ? 'rounded-none border-2 border-[color:var(--edge)] shadow-[6px_6px_0_var(--shadow-color)]'
+    : 'rounded-lg ring-1 ring-[color:var(--edge)]/30 shadow-xl';
+
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[color:var(--shadow-color)]/60 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
       aria-label={getTitle(point)}
     >
-      <div className="mx-4 w-full max-w-lg rounded-lg bg-white p-6 shadow-xl ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-gray-800">
+      <div className={`mx-4 w-full max-w-lg bg-[color:var(--bg-card)] p-6 ${panel}`}>
         <div className="mb-4 flex items-center gap-3">
           <PointIcon point={point} />
-          <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+          <h2 className="font-sans text-lg font-semibold text-[color:var(--fg-primary)]">
             {getTitle(point)}
           </h2>
         </div>
