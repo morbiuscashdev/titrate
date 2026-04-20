@@ -1,89 +1,79 @@
 # Titrate — Progress Checkpoint
 
-## Date: 2026-04-20 (early morning, post-session-compact)
+## Date: 2026-04-20 (midday, post-session 3)
 
 ## Current state
 
-- **Branch:** `master` · HEAD will be this checkpoint's merge commit.
-- **Open PRs:** none. 7 PRs merged this session (#35–#41).
+- **Branch:** `master` at `d83f8af`. 4 PRs merged this pass (#43–#46).
+- **Open PRs:** none.
 - **Working tree:** clean aside from the usual `.remember/tmp/save-session.pid` + `.yarn/install-state.gz` churn.
 - **CI:** green on master through the entire PR chain.
-- **Tests:** web 645 passing (was 670 — four orphaned components deleted). SDK 604 passing + 52 gated skipped. Playwright 4/4 against built bundle.
-- **Coverage:** SDK 82.9% stmt / 84.23% line (was 77.59% / 78.70% at prior checkpoint). Web coverage unchanged ≥ 89%.
+- **Tests:** SDK 620 passing + 53 gated skipped (was 604 + 52). Web unit 645 (unchanged). Playwright **5/4** against built bundle (added wallet-connect).
+- **Coverage:** SDK **84.6% stmt / 85.98% line** (was 82.9% / 84.23%). `src/distributor` **89.45% stmt** (was 81.02%).
 - **Production deploy:** https://app-production-35a3.up.railway.app — Railway auto-deploys master.
 
-## Shipped this session (2026-04-20 AM)
+## Shipped this session
 
-Ran from the prior checkpoint at `dff6bd4` to HEAD. 7 PRs merged.
+Ran from the prior checkpoint at `bafd4ad` to HEAD at `d83f8af`. 4 PRs.
 
-### SDK coverage push
+### Distributor hot-path coverage
 
-- **PR #35 `4fe3824` — test(sdk): cover pipeline external sources (explorer + trueblocks).** 16 new offline tests using hoisted `vi.mock` fakes of the explorer bus and TrueBlocks client. `src/pipeline` 44.29% → 83.33% statements; `sources.ts` 24.67% → 90.90%; `filters.ts` 45.66% → 75.59%. Bonus coverage uplift on `explorer/*` (was 0–7% → 77–96%) and `trueblocks/*` (was 0–1% → 82–88%). SDK total crosses 80%.
-- **PR #41 `497fb41` — test(sdk): scanner-unit (properties, block-timestamp, titrate-range).** 27 new offline tests. `src/scanner` 57.84% → 72.72%. `properties.ts` 0% → full happy paths. `blocks.ts` adds `resolveBlockByTimestamp` (future-target, exact, below-genesis, between-blocks). `titrate-range.ts` covers `adjustRange`/`shrinkRange`/`isQuerySizeError`. SDK total 81.79% → 82.9% stmt, 82.97% → 84.23% line.
+- **PR #43 `bb7ceb3` — test(sdk): cover allowance + disperse-parallel offline.** 14 new offline tests. `allowance.ts` **9.09% → 100%**; `disperse-parallel.ts` **4.16% → 100%**; `src/distributor` 81% → 89%. Pattern: fake `WalletClient`/`PublicClient` cast as `never` for allowance; hoisted `vi.mock('../distributor/disperse.js')` for parallel dispatcher so tests exercise the partition/offset/event-wrap logic without a real batcher. Covers uniform-amount routing, variable-amounts slicing per lane, even/uneven partitions, empty-lane filtering, batch/tx progress-event offsetting (walletIndex * 1000), and returned-BatchResult offsets.
 
-### PulseChain v4 testnet — now actually runnable
+### Web E2E wallet-connect
 
-- **PR #36 `f15feab` — feat(sdk): persist PulseChain v4 testnet mnemonic on disk.** Moves signer resolution to: `options.privateKey` → `PULSECHAIN_TESTNET_PRIVATE_KEY` env → persisted mnemonic at `packages/sdk/.pulsechain-testnet.local.json` (gitignored) → fresh random. New helper `src/__tests__/helpers/testnet-key-store.ts`. New script `scripts/gen-testnet-key.ts` prints the derived address for manual funding. Skill `titrate-pulsechain-testnet` updated to reflect IP-based faucet cooldowns observed in practice.
-- **Live E2E run (this session).** Persisted address `0xeA2d0cd5E7B90650ED0C581a6E3B168Da13D7DF2`. Faucet cooldown reset on a different IP — claim tx `0x50350d3f6f68aa0a629357c706ad0938e180cd5989cb383d7f6ecd199b9d19f0` delivered 10 tPLS. `RUN_PULSECHAIN_E2E=1 npx vitest run src/__tests__/e2e-pulsechain-v4` passed in 15.68s: faucet claim → deploy TitrateSimple → bytecode non-empty assertion. This is the first successful end-to-end proof of the deploy path against a real chain.
+- **PR #44 `e01e9d9` — feat(web-e2e): inject EIP-1193 mock wallet + assert AppKit connect flow.** Playwright wallet coverage without MetaMask or Synpress. `e2e/helpers/mock-wallet.ts` installs an EIP-1193 provider on `window.ethereum` via `page.addInitScript` **before** the app boots, then announces via EIP-6963 (`eip6963:announceProvider`) so Reown AppKit picks it up as a selectable connector. Gates `eth_accounts` behind `eth_requestAccounts` to match real wallet spec — this is why the mock does NOT auto-connect on load (was the first-attempt bug). Records every RPC call on `window.__mockWalletCalls`; `getMockWalletCalls(page)` reads them back. Unknown methods throw on purpose so silent regressions in app wiring surface as test failures. First test: Connect button → AppKit modal → select MockWallet → header swaps to truncated-address badge.
 
-### Web E2E harness
+### PulseChain v4 verify E2E + multi-backend verification
 
-- **PR #37 `9e03607` — feat(web): Playwright E2E smoke against the built bundle.** `packages/web/e2e/smoke.spec.ts` + `playwright.config.ts`. Runs against `vite preview` of the production build, not the dev server, because the bugs this harness is meant to catch (PWA precaching, CSP meta, HashRouter) only manifest post-build. Four tests cover each of the 2026-04-19 audit's regression classes. CI job runs chromium install + `yarn test:e2e`, uploads the Playwright HTML report on failure. New skill `titrate-web-e2e` documents the harness and when to reach for it vs. unit tests.
-  - Follow-up commit `6ac7280` fixes vitest's default `*.spec.ts` glob picking up Playwright files — excludes `e2e/**` in `vitest.config.ts`.
+- **PR #45 `3b35a72` — feat(sdk): add verifyContract assertion to PulseChain E2E.** Extends the gated testnet harness with a second test case that calls `verifyContract` after deploy against chainId 943, with the 30s poll window covered by a 240s test timeout.
+- **PR #46 `d83f8af` — feat(sdk): multi-backend contract verification (Sourcify + Blockscout v2 + Etherscan).** Complete rewrite of `verify.ts` from one Etherscan-compat call into a parallel orchestrator firing at every reachable backend. `VerifyResult` gains `attempts: VerifyAttempt[]` recording each backend's outcome. Sourcify attempts every chain (server rejects unsupported with a clear message); Blockscout v2 and Etherscan-compat attempt when a chain has a configured explorer API URL. Any one success = verified. Sourcify requires solc `rawMetadata` alongside source — added `rawMetadata` field to the SDK artifact JSONs and a new `scripts/sync-artifacts.ts` that regenerates them from Foundry output. 9 new offline tests using a URL-routing fetch mock cover every backend-success and all-fail permutation. Web `DistributeStep` consumer unchanged (only message text shape changed on success to `"Verified via <backend>: ..."`).
 
-### Brand migration long tail — officially closed
+### Live E2E run this session
 
-- **PR #38 `ec04f0b` — feat(web): migrate InterventionModal to brand tokens + mode-aware chrome.** 360-line modal. `text-gray-*`/`bg-gray-*` → `--fg-primary`/`--fg-muted`/`--bg-card`/`--bg-page`. `text-blue-*` (tx links) → `--color-info`. `text-yellow-*` → `--color-warn`. `text-red-*` → `--color-err`. `text-green-*` → `--color-ok`. Inline `ActionButton` replaced with the shared `Button` primitive. Modal panel chrome and `PointIcon` both switch on `useMode()`.
-- **PR #39 `a40db37` — feat(web): migrate ContractAddressLink + Toast renderer.** Last two legacy-palette entries from the brand-migration long tail. ContractAddressLink (inline in DistributeStep) → `--color-info` + hover underline. ToastContainer gets a single `--bg-card` panel with an accent stripe in `--color-ok`/`--color-err`/`--color-info`; chrome is now mode-aware.
-- **PR #40 `7f3b7ef` — chore(web): delete orphaned legacy components.** The step-internal widget audit turned up four components referenced only by their own test files — all clearly superseded by brand primitives. Deleted `MemoryWarning`, `ProgressRing`, `LoadingButton`, and the legacy `components/ThemeToggle` (the canonical tri-state toggle is `ui/ThemeToggle` from PR #31). Also fixed a last `text-gray-900 dark:text-white` leak in DistributeStep's plain-text span. Test delta: −25 (from 670 to 645) as expected from the four deleted `.test.tsx` files.
+Ran `RUN_PULSECHAIN_E2E=1 vitest run e2e-pulsechain-v4` against the persisted account `0xeA2d0cd5E7B90650ED0C581a6E3B168Da13D7DF2`.
 
-## Infrastructure observations (for context)
+- **Deploy passed (11.4s):** bytecode non-empty, second successful proof that the deploy path is alive on chainId 943.
+- **Verify failed (by design, clear diagnostic):**
+  - `sourcify`: Chain 943 not supported for verification!
+  - `etherscan`: HTTP 503 (openresty: "No server is available to handle this request")
+  - `blockscout-v2`: HTTP 503 (same backend pool at `api.scan.v4.testnet.pulsechain.com` and `contracts.api.scan.v4.testnet.pulsechain.com`)
 
-- **Faucet rate-limit behavior.** The 2026-04-19 session hit a "19h16m49s" cooldown even with a fresh random key. This session, switching to a different IP cleared the block instantly — confirming the skill's note that the cooldown is IP-based, not per-address. The persisted-mnemonic flow is therefore worth it: you pay the faucet tax once, then every run deploys from the same funded account.
-- **PulseChain v4 testnet gas is trivial.** A full TitrateSimple deploy consumes a small fraction of 1 tPLS on chainId 943, so one 10 tPLS top-up covers many runs. Real gas-sensitive tuning still needs Sepolia (mainnet-cost testnet).
-- **Playwright noise filter.** The `shouldIgnore()` filter in `smoke.spec.ts` drops Chromium's "Failed to load resource" console messages so third-party 403s (api.web3modal.org without a Reown project-id allowlisted for `localhost:4173`) don't mask real JS regressions. `pageerror` events + non-network console errors still flow through.
-- **Vitest glob and Playwright specs.** Default vitest glob matches `*.spec.ts` and tried to execute Playwright specs, exploding with "test.describe() not expected here." Fix: `exclude: ['node_modules', 'dist', 'e2e/**']` in `vitest.config.ts`. Worth remembering if any sibling workspace adds Playwright later.
-- **1Password SSH signer still flakes.** Had to unlock mid-session again. Same pattern as prior checkpoints. Not deterministic; no workaround other than unlock + retry.
-- **`gh auth switch -u morbiuscashdev`** still required before most merges/PR creates when the active account reverts to `provexdev`.
+When any of PulseScan's backends recovers (or Sourcify adds chainId 943), the verify test passes with no code changes.
 
-## Remaining work
+## Infrastructure observations
 
-### SDK signers coverage (next session candidate)
+- **PulseScan testnet explorer is currently down.** Openresty LB shows no healthy upstream for `api.scan.v4.testnet.pulsechain.com` AND `contracts.api.scan.v4.testnet.pulsechain.com`, but `stats.api.scan.v4.testnet.pulsechain.com` returns 200 — so the LB itself is fine, only the verifier backend pool is unhealthy. Mainnet `api.scan.pulsechain.com` (chainId 369) works fine with the exact same URL pattern, confirming our config is correct. Verified by DNS+header+IP-direct probes.
+- **Sourcify coverage.** Currently lists PulseChain mainnet (369) but NOT v4 testnet (943). Worth watching — if it lands, the verify test passes immediately.
+- **Mock wallet auto-connect bug.** First Playwright run showed the mock auto-connecting because `eth_accounts` returned the address before authorization. Fix in `mock-wallet.ts`: gate behind `eth_requestAccounts` like real wallets. Saved future time: pattern documented in `titrate-web-e2e` skill.
+- **PR merge sync pattern.** `gh pr merge --squash --delete-branch` fails on local rebase with unstaged churn files. Working pattern: stash churn → merge → pull `--ff-only` → pop. Happened three times this session; consistent.
 
-`src/signers`: 37% total (ledger.ts 26%, walletconnect.ts 19%) — the remaining largest coverage gap. User suggested reframing this: **extract interfaces** for each signer backend and test *those* rather than the hardware-coupled concrete implementations. That would let the tests exercise the call contract (request/response shapes, error surfaces, retry behavior) without a real Ledger or WalletConnect relay.
+## Remaining work from the re-evaluation list
 
-### Playwright phase 2 — MetaMask mock
-
-Wallet-connected flows are still off-limits to the E2E smoke because there's no injected wallet. Two approaches for phase 2:
-1. **Synpress** — a Playwright wrapper with real MetaMask automation. Heavier, ties us to a MetaMask version.
-2. **Injected EIP-1193 shim** — write a small `window.ethereum` mock at `page.addInitScript` time that services `eth_requestAccounts`/`eth_sendTransaction` from a scripted fixture. Lighter, no MetaMask dependency, perfect for smoke testing "connect wallet" flows.
-
-Option 2 is the 80/20. User confirmed they want this done next session.
-
-### PulseChain E2E next steps
-
-- Verify flow assertion not yet in the gated test — currently only deploy + bytecode check. Adding `verifyContract` requires the PulseScan API (same shape as Etherscan). Cheap follow-up if that path changes.
-- Top-up path: once the account balance dips below 0.5 tPLS, the test will attempt another faucet claim automatically. If on an IP that's already been used within 24h, it'll fail cleanly with the cooldown message and the next run (same IP or different) proceeds.
-
-### Phase 2 follow-on (separate axis, unchanged)
-
-- **Phase 2c** — TUI `PipelineOrchestrator` wired into React tree, LIVE dashboard panel, keyboard bindings, viewer-mode.
-- **Phase 2d** — Web GUI orchestrator parity with Web Locks API.
-- **Phase 2e** — Anvil-gated e2e + error-surfacing polish.
-
-## Session notes
-
-- **Seven PRs shipped cleanly.** Each landed with CI green, merge, sync, on to the next. No rollbacks.
-- **The E2E run is the meaningful milestone.** Prior sessions had shipped the test file, helpers, and skill — but never actually invoked the flow against the live chain. This session proved the path is alive on chainId 943.
-- **Brand migration is done.** All components that were enumerated in the 2026-04-19 checkpoint's "long tail" are now on brand tokens OR deleted. Grep for `text-(blue|red|green|yellow|gray)-\d` across `packages/web/src` shows only intentional uses in `App.tsx` (focus-ring offsets) and `HomePage.tsx` (a theme-toggle focus-visible ring — separate from the canonical `ui/ThemeToggle` button).
-- **Orphan-deletion approach worked.** The "audit step-internal widgets for stragglers" task would have been stuck adding brand tokens to dead code. Recognizing the components were unreferenced and deleting them was the right call and shrinks the test surface.
+1. ✅ **Run live PulseChain E2E.** Done; deploy confirmed, verify blocked by live PulseScan outage.
+2. **Mock wallet Perry-mode flow.** Extend Playwright to: connect mock → navigate to a campaign → WalletStep → click Derive → mock signs EIP-712 → hot wallets appear. Needs campaign creation flow first, which is non-trivial.
+3. **Cover `distributor/registry.ts`.** Still at 25% stmt (lines 24-33). Small file; quick win.
+4. **Cover pipeline loops.** `filter-loop.ts` 64% / `scanner-loop.ts` 74%. Higher-leverage than registry but harder to mock; they're orchestration brains.
+5. **Checkpoint.** (this file) ✅
 
 ## What to do next session
 
-Pick any of, in likely order:
+In the revised-priority order:
 
-1. **SDK signers — interface extraction + contract tests** (user-requested approach). Most coverage per hour once the abstraction is in place.
-2. **Playwright phase 2 — injected EIP-1193 shim.** Unlocks wallet-connected flow testing. Highest UX-bug-catching ceiling.
-3. **Add verifyContract assertion to the PulseChain E2E.** Small, cleans up the remaining open item on that axis.
+1. **Mock wallet Perry-mode flow.** Highest-leverage remaining UX test. Validates the signature → derive → display pipeline end-to-end.
+2. **Distributor/registry.ts coverage.** 10-minute task; round out the distributor module.
+3. **Pipeline loop coverage.** Filter-loop + scanner-loop; event-bus integration is the interesting surface.
+4. **Retry the gated PulseChain E2E** any time — Sourcify chain add OR PulseScan recovery makes it pass without code change.
 
-User's session preference (unchanged): small focused PRs, direct-to-master for brand/theme migrations per `feedback_direct-to-master.md`. Feature/coverage work goes through normal PR flow.
+## Notable non-obvious decisions this session
+
+- **Multi-backend verify over chain-pivot.** User reframed from "which endpoint is right" to "try everything" when PulseScan infra was intermittently unreachable. The resulting architecture is strictly better for every chain, not just the one that prompted it.
+- **EIP-1193 mock over Synpress.** Declined Synpress (MetaMask-pinned, heavy) in favor of an injected shim (~150 lines, zero external deps). Tests the exact same code paths wagmi runs against real wallets via EIP-6963 discovery.
+- **Distributor hot-path before signers.** Reframed from the user's initial signer-coverage pick: `distributor/disperse-parallel.ts` (4% covered) and `allowance.ts` (9%) are every-airdrop hot-path code; `src/signers/*` is CLI-only and most real users go through wagmi/Reown in the web app. Signer interface extraction deferred indefinitely.
+
+## Session notes
+
+- Four PRs shipped cleanly. Each landed with CI green, merge, sync, on to the next.
+- **Verify is production-resilient now.** Before PR #46, any one verifier outage silently took the whole flow down. Now a single 200 from any of three backends verifies.
+- **PulseChain E2E test strictness.** Hard-fails if all 3 backends fail, with rich diagnostic. Would pass immediately if any backend recovers — no code change needed.
+- Master is clean through `d83f8af`. User's session preference: small focused PRs; direct-to-master for brand/theme migrations per `feedback_direct-to-master.md`. Feature/coverage work goes through PR flow (followed this session).
