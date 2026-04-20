@@ -84,3 +84,20 @@ jobs:
 
       - name: Run full regression
         run: yarn test:all
+
+      # Web E2E smoke — Playwright against the built web bundle. Guards the
+      # PWA / CSP / router bug classes that only show up post-build.
+
+      - name: Install Playwright browsers (chromium)
+        run: cd packages/web && npx playwright install --with-deps chromium
+
+      - name: Run web E2E smoke
+        run: cd packages/web && yarn test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: packages/web/playwright-report/
+          retention-days: 7
