@@ -149,7 +149,7 @@ function ContractAddressLink({
         href={`${baseUrl}/address/${address}`}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300 font-mono text-xs"
+        className="font-mono text-xs text-[color:var(--color-info)] hover:underline"
       >
         {truncated}
       </a>
