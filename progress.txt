@@ -1,111 +1,89 @@
 # Titrate — Progress Checkpoint
 
-## Date: 2026-04-19 (late morning, production-audit + contract-name session)
+## Date: 2026-04-20 (early morning, post-session-compact)
 
 ## Current state
 
-- **Branch:** `master` · HEAD `6b3cea0`.
-- **Open PRs:** none. 7 PRs merged this session (#27–#33).
-- **Working tree:** clean (only `.remember/tmp/save-session.pid` shows as modified, as always).
+- **Branch:** `master` · HEAD will be this checkpoint's merge commit.
+- **Open PRs:** none. 7 PRs merged this session (#35–#41).
+- **Working tree:** clean aside from the usual `.remember/tmp/save-session.pid` + `.yarn/install-state.gz` churn.
 - **CI:** green on master through the entire PR chain.
-- **Tests:** web 670 passing (up from 665), sdk 561 passing + 52 gated skipped, all green.
-- **Coverage:** web 89.65% stmt / 91.13% line. SDK 77.59% stmt / 78.70% line.
+- **Tests:** web 645 passing (was 670 — four orphaned components deleted). SDK 604 passing + 52 gated skipped. Playwright 4/4 against built bundle.
+- **Coverage:** SDK 82.9% stmt / 84.23% line (was 77.59% / 78.70% at prior checkpoint). Web coverage unchanged ≥ 89%.
 - **Production deploy:** https://app-production-35a3.up.railway.app — Railway auto-deploys master.
 
-## Shipped this session (2026-04-19)
+## Shipped this session (2026-04-20 AM)
 
-Session ran from the prior checkpoint at `a525786` to `6b3cea0`. 7 PRs merged.
+Ran from the prior checkpoint at `dff6bd4` to HEAD. 7 PRs merged.
 
-### CI / infra fixes
+### SDK coverage push
 
-- **PR #27 `a927589` — test(web): stabilize 2 CI-flaky tests.** FiltersStep `runs preview and shows surviving count` used `getByText(/addresses pass/)` which matched both the pre-preview info banner AND the survivor readout — on slow CI `waitFor` resolved on the banner and `getByText` returned the wrong element. Switched to `findByRole('status')` (only rendered in `done` state). DistributeStep `blocks distribution when validation returns errors` click wasn't wrapped in `act()` — added `act()` + `findByText` to flush React state before polling.
-- **PR #28 `526717d` — fix(web): copy storage-campaign package.json into Docker build.** Railway build was failing with `@titrate/storage-campaign@npm:0.0.1: 404 Not Found` because the Dockerfile pre-copied 6 of 7 workspace package.json files, missing `storage-campaign`. TUI's manifest depends on it, so inside the container Yarn didn't recognize it as a workspace and tried the public registry. One-line fix.
+- **PR #35 `4fe3824` — test(sdk): cover pipeline external sources (explorer + trueblocks).** 16 new offline tests using hoisted `vi.mock` fakes of the explorer bus and TrueBlocks client. `src/pipeline` 44.29% → 83.33% statements; `sources.ts` 24.67% → 90.90%; `filters.ts` 45.66% → 75.59%. Bonus coverage uplift on `explorer/*` (was 0–7% → 77–96%) and `trueblocks/*` (was 0–1% → 82–88%). SDK total crosses 80%.
+- **PR #41 `497fb41` — test(sdk): scanner-unit (properties, block-timestamp, titrate-range).** 27 new offline tests. `src/scanner` 57.84% → 72.72%. `properties.ts` 0% → full happy paths. `blocks.ts` adds `resolveBlockByTimestamp` (future-target, exact, below-genesis, between-blocks). `titrate-range.ts` covers `adjustRange`/`shrinkRange`/`isQuerySizeError`. SDK total 81.79% → 82.9% stmt, 82.97% → 84.23% line.
 
-### Production audit fixes (PRs #29–#31)
+### PulseChain v4 testnet — now actually runnable
 
-Audited the live Railway deploy via Chrome DevTools MCP, found and fixed five issues:
+- **PR #36 `f15feab` — feat(sdk): persist PulseChain v4 testnet mnemonic on disk.** Moves signer resolution to: `options.privateKey` → `PULSECHAIN_TESTNET_PRIVATE_KEY` env → persisted mnemonic at `packages/sdk/.pulsechain-testnet.local.json` (gitignored) → fresh random. New helper `src/__tests__/helpers/testnet-key-store.ts`. New script `scripts/gen-testnet-key.ts` prints the derived address for manual funding. Skill `titrate-pulsechain-testnet` updated to reflect IP-based faucet cooldowns observed in practice.
+- **Live E2E run (this session).** Persisted address `0xeA2d0cd5E7B90650ED0C581a6E3B168Da13D7DF2`. Faucet cooldown reset on a different IP — claim tx `0x50350d3f6f68aa0a629357c706ad0938e180cd5989cb383d7f6ecd199b9d19f0` delivered 10 tPLS. `RUN_PULSECHAIN_E2E=1 npx vitest run src/__tests__/e2e-pulsechain-v4` passed in 15.68s: faucet claim → deploy TitrateSimple → bytecode non-empty assertion. This is the first successful end-to-end proof of the deploy path against a real chain.
 
-- **PR #29 `8cdf651` — fix(web): production header nav, CSP, and Lit dev-mode warning.**
-  - Header anchors used path URLs (`/`, `/settings`) but App uses `<HashRouter>`. Clicking the gear served `index.html` via Caddy's SPA fallback and the router rendered the landing page. Switched to `#/`, `#/settings`.
-  - CSP `connect-src` was missing `https://api.web3modal.org` (where Reown AppKit actually fetches config) — 6 blocked bootstrap requests per page load. Also added `https://cca-lite.coinbase.com` (Coinbase Wallet telemetry).
-  - Lit "dev mode" warning: pre-populated `globalThis.litIssuedWarnings` with `["dev-mode"]` in index.html (empty Set seed didn't work — Lit checks `has(warning) || has(code)`, so needed the actual code string).
-- **PR #30 `cdfb11e` — fix(web): stop precaching index.html so CSP changes propagate.** After #29 shipped, users were STILL seeing the old CSP because the VitePWA service worker precached the old `index.html`. CSP meta tag is in HTML, so every CSP change was gated behind user clicking Refresh. Fix: `globPatterns` drops `**/*.html`, `navigateFallback: null`, runtimeCaching NetworkFirst for `request.mode === 'navigate'` (3s timeout, 24h offline fallback). Also switched `registerType: 'prompt' → 'autoUpdate'` with `skipWaiting: true` + `clientsClaim: true`. Future deploys propagate within one navigation.
-- **PR #31 `5f11d74` — fix(web): tri-state theme toggle, single toggle, unlock contrast, Lit warning.**
-  - Double theme toggle on landing page (LandingPage had its own absolutely-positioned `<ThemeToggle />` in addition to the Header's) — removed duplicate.
-  - System theme option was lost in the brand migration — the new `ui/ThemeToggle` was light/dark only. Expanded `Theme` to `"light" | "dark" | "system"`, added `ResolvedTheme` + `resolveTheme()`, `useTheme` now returns `{theme, resolvedTheme, setTheme, toggle}` with matchMedia listener when theme is "system". Two-segment button group: left flips light/dark, right locks to system.
-  - Settings unlock banner had poor dark-mode contrast (legacy `text-yellow-400` on `bg-yellow-900/20` = orange-on-orange). Switched to brand `--color-warn` tokens with brutalist chrome.
+### Web E2E harness
 
-### Feature work
+- **PR #37 `9e03607` — feat(web): Playwright E2E smoke against the built bundle.** `packages/web/e2e/smoke.spec.ts` + `playwright.config.ts`. Runs against `vite preview` of the production build, not the dev server, because the bugs this harness is meant to catch (PWA precaching, CSP meta, HashRouter) only manifest post-build. Four tests cover each of the 2026-04-19 audit's regression classes. CI job runs chromium install + `yarn test:e2e`, uploads the Playwright HTML report on failure. New skill `titrate-web-e2e` documents the harness and when to reach for it vs. unit tests.
+  - Follow-up commit `6ac7280` fixes vitest's default `*.spec.ts` glob picking up Playwright files — excludes `e2e/**` in `vitest.config.ts`.
 
-- **PR #32 `0d55109` — feat(web,sdk): custom contract name + PulseChain v4 testnet E2E.**
-  - Before: `contractName` on a campaign silently defaulted to the ERC-20 symbol — deploying an airdrop for USDC showed up as "USDC" on block explorers after verification.
-  - After: `contractName` is the user-chosen display name (default `TokenAirdrop`), validated as a Solidity identifier (`^[A-Za-z_$][A-Za-z_$0-9]*$`, ≤ 64 chars, not a reserved keyword). Added a UI input in CampaignStep with inline error. Validation helper `validateContractName` exported from `@titrate/sdk` for TUI reuse.
-  - Added optional `tokenSymbol` field to `CampaignConfig` for ERC-20 symbol display. Consumers (HomePage card, RequirementsStep, DistributeStep) prefer `tokenSymbol` with `contractName` fallback for backcompat.
-  - New `packages/sdk/src/__tests__/helpers/pulsechain-testnet.ts`: viem clients for chainId 943, `claimFromFaucet(address)` (POST FormData to `faucet.v4.testnet.pulsechain.com/api/claim` — no captcha, no API key, 10 tPLS per claim), `waitForBalance` poller.
-  - Gated test `e2e-pulsechain-v4.test.ts` with `describe.runIf(RUN_PULSECHAIN_E2E === '1')`. Claims faucet funds if balance < 0.5 tPLS, deploys TitrateSimple, asserts non-empty bytecode. Run: `RUN_PULSECHAIN_E2E=1 npx vitest run src/__tests__/e2e-pulsechain-v4`. Optional `PULSECHAIN_TESTNET_PRIVATE_KEY` reuses a funded account.
+### Brand migration long tail — officially closed
 
-### Skills
+- **PR #38 `ec04f0b` — feat(web): migrate InterventionModal to brand tokens + mode-aware chrome.** 360-line modal. `text-gray-*`/`bg-gray-*` → `--fg-primary`/`--fg-muted`/`--bg-card`/`--bg-page`. `text-blue-*` (tx links) → `--color-info`. `text-yellow-*` → `--color-warn`. `text-red-*` → `--color-err`. `text-green-*` → `--color-ok`. Inline `ActionButton` replaced with the shared `Button` primitive. Modal panel chrome and `PointIcon` both switch on `useMode()`.
+- **PR #39 `a40db37` — feat(web): migrate ContractAddressLink + Toast renderer.** Last two legacy-palette entries from the brand-migration long tail. ContractAddressLink (inline in DistributeStep) → `--color-info` + hover underline. ToastContainer gets a single `--bg-card` panel with an accent stripe in `--color-ok`/`--color-err`/`--color-info`; chrome is now mode-aware.
+- **PR #40 `7f3b7ef` — chore(web): delete orphaned legacy components.** The step-internal widget audit turned up four components referenced only by their own test files — all clearly superseded by brand primitives. Deleted `MemoryWarning`, `ProgressRing`, `LoadingButton`, and the legacy `components/ThemeToggle` (the canonical tri-state toggle is `ui/ThemeToggle` from PR #31). Also fixed a last `text-gray-900 dark:text-white` leak in DistributeStep's plain-text span. Test delta: −25 (from 670 to 645) as expected from the four deleted `.test.tsx` files.
 
-- **PR #33 `6b3cea0` — docs(skills): add titrate-pulsechain-testnet skill.** Documents the gated E2E harness added in #32 so future sessions auto-surface the flow (faucet API shape, env vars, chain facts, helper surface, failure-mode table). Indexed in root `CLAUDE.md` alongside the other `titrate-*` skills.
+## Infrastructure observations (for context)
 
-## Production audit findings (for context)
-
-Live URL: https://app-production-35a3.up.railway.app
-
-All four console-visible issues fixed in #29–#31. One remains **outside code scope**:
-
-- **Reown 403 on api.web3modal.org endpoints.** CSP now allows the connection; the 403 is because the `VITE_REOWN_PROJECT_ID` env var on Railway isn't allowlisted for the Railway origin in the Reown dashboard. Fix requires creating/updating a project at cloud.reown.com (any email works — magic-link auth, Google OAuth not required). **User said "ignore reown for now"** — deferred.
+- **Faucet rate-limit behavior.** The 2026-04-19 session hit a "19h16m49s" cooldown even with a fresh random key. This session, switching to a different IP cleared the block instantly — confirming the skill's note that the cooldown is IP-based, not per-address. The persisted-mnemonic flow is therefore worth it: you pay the faucet tax once, then every run deploys from the same funded account.
+- **PulseChain v4 testnet gas is trivial.** A full TitrateSimple deploy consumes a small fraction of 1 tPLS on chainId 943, so one 10 tPLS top-up covers many runs. Real gas-sensitive tuning still needs Sepolia (mainnet-cost testnet).
+- **Playwright noise filter.** The `shouldIgnore()` filter in `smoke.spec.ts` drops Chromium's "Failed to load resource" console messages so third-party 403s (api.web3modal.org without a Reown project-id allowlisted for `localhost:4173`) don't mask real JS regressions. `pageerror` events + non-network console errors still flow through.
+- **Vitest glob and Playwright specs.** Default vitest glob matches `*.spec.ts` and tried to execute Playwright specs, exploding with "test.describe() not expected here." Fix: `exclude: ['node_modules', 'dist', 'e2e/**']` in `vitest.config.ts`. Worth remembering if any sibling workspace adds Playwright later.
+- **1Password SSH signer still flakes.** Had to unlock mid-session again. Same pattern as prior checkpoints. Not deterministic; no workaround other than unlock + retry.
+- **`gh auth switch -u morbiuscashdev`** still required before most merges/PR creates when the active account reverts to `provexdev`.
 
 ## Remaining work
 
-### Brand migration long tail (unchanged from prior checkpoint)
+### SDK signers coverage (next session candidate)
 
-- **InterventionModal** (360 lines) — largest single-file migration. Visible on pause/intervention flows during distribution.
-- **ContractAddressLink** — inline in DistributeStep, still `text-blue-600`. Small.
-- **Toast renderer** inside `ToastProvider` — toast bubble chrome still legacy.
-- Audit step-internal widgets for stragglers.
+`src/signers`: 37% total (ledger.ts 26%, walletconnect.ts 19%) — the remaining largest coverage gap. User suggested reframing this: **extract interfaces** for each signer backend and test *those* rather than the hardware-coupled concrete implementations. That would let the tests exercise the call contract (request/response shapes, error surfaces, retry behavior) without a real Ledger or WalletConnect relay.
 
-### Test coverage gaps
+### Playwright phase 2 — MetaMask mock
 
-- SDK `src/pipeline`: **44%** — biggest single coverage win for smallest effort. Most-executed runtime path.
-- SDK `src/scanner`: **58%**.
-- SDK `src/signers`: **37%** (`ledger.ts` 26%, `walletconnect.ts` 19%) — hardware/network, harder to mock but possible with fixtures.
-- After covering pipeline + scanner → SDK totals should exceed 85%.
+Wallet-connected flows are still off-limits to the E2E smoke because there's no injected wallet. Two approaches for phase 2:
+1. **Synpress** — a Playwright wrapper with real MetaMask automation. Heavier, ties us to a MetaMask version.
+2. **Injected EIP-1193 shim** — write a small `window.ethereum` mock at `page.addInitScript` time that services `eth_requestAccounts`/`eth_sendTransaction` from a scripted fixture. Lighter, no MetaMask dependency, perfect for smoke testing "connect wallet" flows.
 
-### Testing-depth expansion (discussed, not implemented)
+Option 2 is the 80/20. User confirmed they want this done next session.
 
-- **Web E2E in real browser** — Playwright spec against Railway preview deploy with MetaMask mock. Catches router/SW/CSP bugs that unit tests don't (exactly this session's class of bug).
-- **TUI per-screen snapshots** — extend `titrate-tui-smoke` with `captureCharFrame()` snapshots for each screen. Catches OpenTUI layout regressions.
-- **Visual regression for web** — Playwright screenshot diffs or chrome-devtools-mcp a11y audits in a gated CI step.
+### PulseChain E2E next steps
 
-### Phase 2 follow-on (separate axis)
+- Verify flow assertion not yet in the gated test — currently only deploy + bytecode check. Adding `verifyContract` requires the PulseScan API (same shape as Etherscan). Cheap follow-up if that path changes.
+- Top-up path: once the account balance dips below 0.5 tPLS, the test will attempt another faucet claim automatically. If on an IP that's already been used within 24h, it'll fail cleanly with the cooldown message and the next run (same IP or different) proceeds.
+
+### Phase 2 follow-on (separate axis, unchanged)
 
 - **Phase 2c** — TUI `PipelineOrchestrator` wired into React tree, LIVE dashboard panel, keyboard bindings, viewer-mode.
 - **Phase 2d** — Web GUI orchestrator parity with Web Locks API.
 - **Phase 2e** — Anvil-gated e2e + error-surfacing polish.
 
-### Contract deployment follow-ups
-
-- `titrate-pulsechain-testnet` skill is written but the E2E hasn't been actually executed against live testnet from this session (the test file is shipped and gated, but nobody ran it with `RUN_PULSECHAIN_E2E=1` yet). Next session could verify.
-- Verify-flow assertion not yet in the gated test — only deploy + bytecode check. Add `verifyContract` assertion if that path changes.
-- PulseChain v4 testnet gas is orders of magnitude cheaper than mainnet, so gas-sensitive code still needs Sepolia for realistic numbers.
-
 ## Session notes
 
-- **Service worker caching was the real culprit behind "CSP fix doesn't work"** — the fix shipped, but users kept seeing old CSP until the SW updated on its own. Fixed properly in #30 by switching to NetworkFirst for HTML + autoUpdate. Confirmed via curl that Railway was serving the new HTML immediately; browser was stale.
-- **Two coexisting theme systems** discovered in `providers/ThemeProvider.tsx` (legacy, 3-state, `.dark` class) and `theme/useTheme.ts` (brand, was 2-state, `data-theme`). The new brand system is what's wired in App.tsx; the legacy one is orphaned. Merged the tri-state pattern into the new system in #31.
-- **`contractName` semantics were conflated** — used as both token-symbol display AND contract verification name. Split into `tokenSymbol` (new optional field) + `contractName` (verification) in #32.
-- **Railway Dockerfile drift pattern:** workspace packages are cumulative. Every new workspace package needs a line in `packages/web/Dockerfile` pre-copying its package.json, or builds break mysteriously with a public-npm-registry 404. Worth a pre-push CI check eventually.
-- **gh auth drift continues:** `gh auth switch -u morbiuscashdev` required before every `gh pr merge` (active account keeps reverting to `provexdev`). Also required before `gh pr create` when other account gets selected. Still not automated.
-- **1Password SSH signer flaked once** (mid-session on a commit). User-side unlock required. Not deterministic.
+- **Seven PRs shipped cleanly.** Each landed with CI green, merge, sync, on to the next. No rollbacks.
+- **The E2E run is the meaningful milestone.** Prior sessions had shipped the test file, helpers, and skill — but never actually invoked the flow against the live chain. This session proved the path is alive on chainId 943.
+- **Brand migration is done.** All components that were enumerated in the 2026-04-19 checkpoint's "long tail" are now on brand tokens OR deleted. Grep for `text-(blue|red|green|yellow|gray)-\d` across `packages/web/src` shows only intentional uses in `App.tsx` (focus-ring offsets) and `HomePage.tsx` (a theme-toggle focus-visible ring — separate from the canonical `ui/ThemeToggle` button).
+- **Orphan-deletion approach worked.** The "audit step-internal widgets for stragglers" task would have been stuck adding brand tokens to dead code. Recognizing the components were unreferenced and deleting them was the right call and shrinks the test surface.
 
 ## What to do next session
 
-Pick any of:
+Pick any of, in likely order:
 
-1. **SDK `src/pipeline` coverage** — biggest coverage win per hour. The pipeline module is the hot runtime path; raising it from 44% to ~85% pushes SDK total above 85% and hardens the most-executed code.
-2. **Playwright web E2E harness** — biggest UX-bug-catching win. Would have caught all five production-audit findings this session automatically. Needs a MetaMask mock or headless wallet pattern; Playwright + Chrome DevTools MCP are already in play.
-3. **InterventionModal migration** — largest remaining brand-migration single file. Unblocks closing out the brand-migration long tail.
-4. **PulseChain v4 E2E first actual run** — invoke the gated test once end-to-end to make sure the faucet-to-deploy path works start to finish. Follow-up PR if anything needs fixing.
+1. **SDK signers — interface extraction + contract tests** (user-requested approach). Most coverage per hour once the abstraction is in place.
+2. **Playwright phase 2 — injected EIP-1193 shim.** Unlocks wallet-connected flow testing. Highest UX-bug-catching ceiling.
+3. **Add verifyContract assertion to the PulseChain E2E.** Small, cleans up the remaining open item on that axis.
 
-User's session preference: small focused PRs, direct-to-master for brand/theme migrations per `feedback_direct-to-master.md`. For non-migration feature work (like E2E harness, coverage-boosters), regular PR flow applies.
+User's session preference (unchanged): small focused PRs, direct-to-master for brand/theme migrations per `feedback_direct-to-master.md`. Feature/coverage work goes through normal PR flow.
