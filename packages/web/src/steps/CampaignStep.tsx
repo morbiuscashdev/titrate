@@ -5,8 +5,13 @@ import { Button, Input, Card } from '../components/ui';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
 import { useTokenMetadata } from '../hooks/useTokenMetadata.js';
-import { getChains, getChainConfig, validateContractName } from '@titrate/sdk';
-import type { ChainCategory } from '@titrate/sdk';
+import {
+  getChains,
+  getChainConfig,
+  validateContractName,
+  getProvider,
+} from '@titrate/sdk';
+import type { ChainCategory, ProviderId } from '@titrate/sdk';
 
 const DEFAULT_CONTRACT_NAME = 'TokenAirdrop';
 import { keccak256, toHex } from 'viem';
@@ -75,6 +80,30 @@ export function CampaignStep() {
   const [manualSymbol, setManualSymbol] = useState('');
   const [manualDecimals, setManualDecimals] = useState('18');
   const [contractDisplayName, setContractDisplayName] = useState(DEFAULT_CONTRACT_NAME);
+
+  const handleLoadProvider = useCallback(
+    async (id: ProviderId) => {
+      if (chainId === null) return;
+      const provider = getProvider(id);
+      const keyStorageKey = `provider-key-${id}`;
+
+      let key = storage ? (await storage.appSettings.get(keyStorageKey)) ?? '' : '';
+      if (!key) {
+        const entered = window.prompt(
+          `Paste your ${provider.name} API key. It's stored locally and reused for future auto-fills.`,
+        );
+        if (!entered) return;
+        key = entered.trim();
+        if (storage) {
+          await storage.appSettings.put(keyStorageKey, key);
+        }
+      }
+
+      const url = provider.buildUrl(chainId, key);
+      if (url) setRpcUrl(url);
+    },
+    [chainId, storage],
+  );
 
   const normalizedTokenAddress: Address | null =
     ADDRESS_REGEX.test(tokenAddress) ? (tokenAddress.toLowerCase() as Address) : null;
@@ -288,6 +317,35 @@ export function CampaignStep() {
           onChange={(e) => setRpcUrl(e.target.value)}
           placeholder="https://..."
         />
+        <div className="-mt-3 flex flex-wrap items-center gap-2">
+          <span className="font-mono text-[10px] font-bold uppercase tracking-[0.15em] text-[color:var(--fg-muted)]">
+            Load from:
+          </span>
+          {(['valve', 'alchemy', 'infura'] as const).map((id) => {
+            const provider = getProvider(id);
+            const supported = chainId !== null && provider.buildUrl(chainId, 'x') !== null;
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => handleLoadProvider(id)}
+                disabled={!supported}
+                title={
+                  chainId === null
+                    ? 'Pick a chain first'
+                    : supported
+                      ? `Paste your ${provider.name} API key and fill the RPC URL`
+                      : `${provider.name} has no template for chain ${chainId}`
+                }
+                className={`${TOGGLE_BUTTON_BASE} px-3 py-1 text-xs ${
+                  supported ? TOGGLE_INACTIVE : TOGGLE_INACTIVE_MUTED
+                } disabled:cursor-not-allowed disabled:opacity-50`}
+              >
+                {provider.name}
+              </button>
+            );
+          })}
+        </div>
 
         {/* Rate Limit Group */}
         <Input

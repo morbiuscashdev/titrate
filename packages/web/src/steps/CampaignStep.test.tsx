@@ -23,8 +23,14 @@ vi.mock('../providers/CampaignProvider.js', () => ({
 }));
 
 const mockChainConfigsPut = vi.fn().mockResolvedValue(undefined);
+const mockAppSettingsGet = vi.fn().mockResolvedValue(null);
+const mockAppSettingsPut = vi.fn().mockResolvedValue(undefined);
 const mockStorage = {
   chainConfigs: { put: mockChainConfigsPut },
+  appSettings: {
+    get: mockAppSettingsGet,
+    put: mockAppSettingsPut,
+  },
 };
 
 vi.mock('../providers/StorageProvider.js', () => ({
@@ -57,6 +63,27 @@ vi.mock('@titrate/sdk', () => {
       if (!IDENTIFIER.test(trimmed)) return { ok: false, reason: 'invalid identifier' };
       return { ok: true, value: trimmed };
     },
+    getProvider: (id: 'valve' | 'alchemy' | 'infura' | 'public' | 'custom') => {
+      const names: Record<string, string> = {
+        valve: 'valve.city',
+        alchemy: 'Alchemy',
+        infura: 'Infura',
+        public: 'Public',
+        custom: 'Custom URL',
+      };
+      return {
+        id,
+        name: names[id] ?? id,
+        helpUrl: '',
+        requiresKey: id === 'valve' || id === 'alchemy' || id === 'infura',
+        buildUrl: (chainId: number, key: string) => {
+          if (id === 'valve') return `https://evm${chainId}.rpc.valve.city/v1/${key}`;
+          if (id === 'alchemy' && chainId === 1) return `https://eth-mainnet.g.alchemy.com/v2/${key}`;
+          if (id === 'infura' && chainId === 1) return `https://mainnet.infura.io/v3/${key}`;
+          return null;
+        },
+      };
+    },
   };
 });
 
@@ -66,6 +93,9 @@ describe('CampaignStep', () => {
     activeCampaignOverride = null;
     tokenMetadataMock = { data: undefined, isLoading: false, error: null };
     mockChainConfigsPut.mockClear();
+    mockAppSettingsGet.mockClear();
+    mockAppSettingsGet.mockResolvedValue(null);
+    mockAppSettingsPut.mockClear();
   });
 
   it('renders step panel with title', () => {
@@ -512,6 +542,104 @@ describe('CampaignStep', () => {
     const batchInput = screen.getByDisplayValue('100') as HTMLInputElement;
     fireEvent.change(batchInput, { target: { value: 'abc' } });
     expect(batchInput.value).toBe('1');
+  });
+
+  // ------------------------------------------------------------------------
+  // RPC URL auto-load (provider buttons)
+  // ------------------------------------------------------------------------
+
+  describe('provider auto-load buttons', () => {
+    it('renders "Load from:" label and three provider buttons', () => {
+      render(<CampaignStep />);
+      expect(screen.getByText('Load from:')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /valve\.city/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^Alchemy$/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^Infura$/i })).toBeInTheDocument();
+    });
+
+    it('disables all provider buttons when no chain is selected', () => {
+      render(<CampaignStep />);
+      for (const name of [/valve\.city/i, /^Alchemy$/i, /^Infura$/i]) {
+        expect(screen.getByRole('button', { name })).toBeDisabled();
+      }
+    });
+
+    it('enables all provider buttons after a supported chain is picked', () => {
+      render(<CampaignStep />);
+      // Pick Ethereum (chainId 1) from the ChainSelector.
+      fireEvent.click(screen.getByRole('button', { name: /^Ethereum$/i, pressed: false }));
+      for (const name of [/valve\.city/i, /^Alchemy$/i, /^Infura$/i]) {
+        expect(screen.getByRole('button', { name })).not.toBeDisabled();
+      }
+    });
+
+    it('fills RPC URL without prompting when a key is already stored', async () => {
+      mockAppSettingsGet.mockImplementation(async (k: string) =>
+        k === 'provider-key-valve' ? 'stored-key-abc' : null,
+      );
+      const promptSpy = vi.spyOn(window, 'prompt').mockImplementation(() => null);
+
+      render(<CampaignStep />);
+      fireEvent.click(screen.getByRole('button', { name: /^Ethereum$/i, pressed: false }));
+      fireEvent.click(screen.getByRole('button', { name: /valve\.city/i }));
+
+      await vi.waitFor(() => {
+        const rpcInput = screen.getByLabelText('RPC URL') as HTMLInputElement;
+        expect(rpcInput.value).toBe('https://evm1.rpc.valve.city/v1/stored-key-abc');
+      });
+      expect(promptSpy).not.toHaveBeenCalled();
+      expect(mockAppSettingsPut).not.toHaveBeenCalled();
+      promptSpy.mockRestore();
+    });
+
+    it('prompts for a key, persists it, and fills the RPC URL on first use', async () => {
+      mockAppSettingsGet.mockResolvedValue(null);
+      const promptSpy = vi
+        .spyOn(window, 'prompt')
+        .mockImplementation(() => '  new-alchemy-key  ');
+
+      render(<CampaignStep />);
+      fireEvent.click(screen.getByRole('button', { name: /^Ethereum$/i, pressed: false }));
+      fireEvent.click(screen.getByRole('button', { name: /^Alchemy$/i }));
+
+      await vi.waitFor(() => {
+        expect(mockAppSettingsPut).toHaveBeenCalledWith(
+          'provider-key-alchemy',
+          'new-alchemy-key',
+        );
+      });
+      const rpcInput = screen.getByLabelText('RPC URL') as HTMLInputElement;
+      expect(rpcInput.value).toBe('https://eth-mainnet.g.alchemy.com/v2/new-alchemy-key');
+      expect(promptSpy).toHaveBeenCalledOnce();
+      promptSpy.mockRestore();
+    });
+
+    it('does nothing when the user cancels the key prompt', async () => {
+      mockAppSettingsGet.mockResolvedValue(null);
+      const promptSpy = vi.spyOn(window, 'prompt').mockImplementation(() => null);
+
+      render(<CampaignStep />);
+      fireEvent.click(screen.getByRole('button', { name: /^Ethereum$/i, pressed: false }));
+      const rpcBefore = (screen.getByLabelText('RPC URL') as HTMLInputElement).value;
+      fireEvent.click(screen.getByRole('button', { name: /^Infura$/i }));
+
+      // Small tick so the promise resolves.
+      await Promise.resolve();
+      expect(mockAppSettingsPut).not.toHaveBeenCalled();
+      expect((screen.getByLabelText('RPC URL') as HTMLInputElement).value).toBe(rpcBefore);
+      promptSpy.mockRestore();
+    });
+
+    it('keeps Alchemy and Infura buttons disabled for chains that have no template', () => {
+      render(<CampaignStep />);
+      // PulseChain (chainId 369) — only valve.city can template it; Alchemy
+      // and Infura have no slug mapping for 369 in the mock.
+      fireEvent.click(screen.getByRole('button', { name: /^PulseChain$/i, pressed: false }));
+
+      expect(screen.getByRole('button', { name: /valve\.city/i })).not.toBeDisabled();
+      expect(screen.getByRole('button', { name: /^Alchemy$/i })).toBeDisabled();
+      expect(screen.getByRole('button', { name: /^Infura$/i })).toBeDisabled();
+    });
   });
 });
 
