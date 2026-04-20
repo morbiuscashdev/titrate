@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseEther } from 'viem';
 import { deployDistributor } from '../distributor/deploy.js';
+import { verifyContract } from '../distributor/verify.js';
 import {
   claimFromFaucet,
   createTestnetContext,
@@ -26,8 +27,9 @@ import {
 const E2E_ENABLED = process.env.RUN_PULSECHAIN_E2E === '1';
 
 describe.runIf(E2E_ENABLED)('PulseChain v4 testnet E2E', () => {
-  // Deployment + 2 faucet RTTs can take a while on a slow testnet.
-  const testTimeout = 180_000;
+  // Deploy + faucet RTTs + PulseScan verify polling (up to 30s inside
+  // verifyContract) can total a minute or two on a slow testnet.
+  const testTimeout = 240_000;
 
   it('deploys TitrateSimple after claiming tPLS from the faucet', async () => {
     const ctx = createTestnetContext();
@@ -59,5 +61,48 @@ describe.runIf(E2E_ENABLED)('PulseChain v4 testnet E2E', () => {
     // Sanity: the deployed bytecode at that address is non-empty.
     const code = await ctx.publicClient.getCode({ address: result.address });
     expect(code && code.length).toBeGreaterThan(2);
+  }, testTimeout);
+
+  it('verifies the deployed contract on PulseScan', async () => {
+    const ctx = createTestnetContext();
+
+    // Top-up check so this test can run standalone on a funded account.
+    const existing = await ctx.publicClient.getBalance({ address: ctx.account.address });
+    if (existing < parseEther('0.5')) {
+      await claimFromFaucet(ctx.account.address);
+      await waitForBalance(ctx.publicClient, ctx.account.address, {
+        minBalance: parseEther('0.5'),
+      });
+    }
+
+    const deploy = await deployDistributor({
+      variant: 'simple',
+      name: 'TokenAirdrop',
+      walletClient: ctx.walletClient,
+      publicClient: ctx.publicClient,
+    });
+
+    const verify = await verifyContract({
+      address: deploy.address,
+      name: 'TokenAirdrop',
+      variant: 'simple',
+      chainId: 943,
+    });
+
+    // The chain must be resolved to a PulseScan API URL and the verify URL
+    // must point at the address we just deployed.
+    expect(verify.explorerUrl).toContain(deploy.address);
+
+    // Any message mentioning a network failure or missing API URL is a
+    // configuration regression, not a PulseScan-pending quirk — fail hard.
+    const msg = verify.message.toLowerCase();
+    expect(msg).not.toContain('no explorer api url');
+    expect(msg).not.toContain('request failed');
+
+    // Strict: the submission must be accepted and verification confirmed.
+    // If PulseScan is slow enough to poll-timeout (10 × 3s = 30s), we treat
+    // that as a flaky-infra failure and surface the message so the next
+    // session can decide whether to widen the poll window or relax.
+    expect(verify.success, `verify failed: ${verify.message}`).toBe(true);
   }, testTimeout);
 });

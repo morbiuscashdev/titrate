@@ -109,9 +109,10 @@ Reuse these for any ad-hoc script. They're test-adjacent on purpose: they import
 | `Timed out waiting for ... balance` | Faucet tx hasn't confirmed in 60s. Check PulseScan for the tx, or bump `timeoutMs`. |
 | Deploy hangs past 60s | Testnet RPC is slow or down. Try the `publicnode.com` mirror in chain config. |
 | `code.length` ≤ 2 | Contract wasn't deployed (receipt reverted). Check the receipt's `status` field. |
+| `verify failed: Pending in queue` (or similar) | PulseScan took longer than the 30s poll window (10 × 3s). Transient; rerun. If persistent, bump the poll count inside `verifyContract` or pass a higher `maxAttempts` if that parameter lands. |
+| `verify failed: Fail - Unable to verify` | Source template mismatch — compiler version, optimizer, or runs differ from what the contract was deployed with. The template in `packages/sdk/src/distributor/artifacts/` must stay in sync with Foundry build output. |
 
 ## What this does *not* cover
 
-- Explorer verification (`verifyContract`) — the PulseScan API exists but the gated test doesn't exercise it yet. Add a follow-up assertion if that path changes.
 - Gas estimation on real mainnet — PulseChain fees are orders of magnitude smaller than Ethereum, so gas-sensitive code needs a mainnet-cost testnet (Sepolia) for realistic numbers.
-- ERC-20 interactions — we only deploy + sanity-check bytecode. Full `disperse` flow is still Anvil-tested.
+- ERC-20 interactions — we only deploy + sanity-check bytecode + verify. Full `disperse` flow is still Anvil-tested.
