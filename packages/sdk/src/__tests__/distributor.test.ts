@@ -132,129 +132,323 @@ describe('getContractSourceTemplate', () => {
 });
 
 // ---------------------------------------------------------------------------
-// verifyContract — unit tests (no live explorer required)
+// verifyContract — multi-backend unit tests (no live explorer required)
+//
+// The three backends (Sourcify, Etherscan-compat, Blockscout v2) are
+// dispatched in parallel from a single `verifyContract` call. Tests here
+// mock globalThis.fetch with a URL router so each backend's path can be
+// exercised independently.
 // ---------------------------------------------------------------------------
 
-describe('verifyContract — fetch success path (verify.ts line 78)', () => {
-  it('returns success=true when the explorer API returns status "1"', async () => {
-    // Mock globalThis.fetch to simulate a successful verification response
+/**
+ * Build a fetch mock that routes by URL. Each handler returns a pseudo-Response
+ * object whose `.text()` or `.json()` produces the scripted body.
+ */
+type FetchRoute = {
+  readonly match: (url: string) => boolean;
+  readonly respond: () => { status?: number; ok?: boolean; body: string };
+  readonly onCall?: (url: string) => void;
+};
+
+function makeFetchRouter(routes: readonly FetchRoute[]): ReturnType<typeof vi.fn> {
+  return vi.fn().mockImplementation(async (url: string | URL) => {
+    const str = typeof url === 'string' ? url : url.toString();
+    const route = routes.find((r) => r.match(str));
+    if (!route) {
+      throw new TypeError(`fetch mock: no route matched ${str}`);
+    }
+    route.onCall?.(str);
+    const { status = 200, ok = status >= 200 && status < 300, body } = route.respond();
+    return {
+      status,
+      ok,
+      text: async () => body,
+      json: async () => JSON.parse(body),
+    } as unknown as Response;
+  });
+}
+
+const SOURCIFY_SUCCESS_BODY = JSON.stringify({
+  result: [{ status: 'perfect', address: '0x...' }],
+});
+const SOURCIFY_CHAIN_NOT_SUPPORTED_BODY = JSON.stringify({
+  error: 'Chain 1 not supported for verification!',
+  message: 'Chain 1 not supported for verification!',
+});
+const ETHERSCAN_SUBMIT_ACCEPTED_BODY = JSON.stringify({
+  status: '1',
+  result: 'guid-abc-123',
+  message: 'OK',
+});
+const ETHERSCAN_POLL_CONFIRMED_BODY = JSON.stringify({
+  status: '1',
+  result: 'Pass - Verified',
+  message: 'OK',
+});
+const ETHERSCAN_ALREADY_VERIFIED_BODY = JSON.stringify({
+  status: '0',
+  result: '',
+  message: 'Contract source code already verified',
+});
+const BLOCKSCOUT_V2_ACCEPTED_BODY = JSON.stringify({
+  message: 'Verification started',
+});
+
+function isSourcifyUrl(u: string): boolean {
+  return u.includes('sourcify.dev');
+}
+function isEtherscanSubmitUrl(u: string): boolean {
+  // The Blockscout v2 path `/api/v2/smart-contracts/.../verification/via/...`
+  // also lives under the same host, so exclude that shape explicitly.
+  return (
+    u.includes('etherscan.io/api') &&
+    !u.includes('checkverifystatus') &&
+    !u.includes('/api/v2/smart-contracts/')
+  );
+}
+function isEtherscanPollUrl(u: string): boolean {
+  return u.includes('checkverifystatus');
+}
+function isBlockscoutV2Url(u: string): boolean {
+  return u.includes('/api/v2/smart-contracts/') && u.includes('/verification/via/');
+}
+
+describe('verifyContract — multi-backend orchestration', () => {
+  const ADDR = '0x1234567890123456789012345678901234567890' as Address;
+
+  it('returns success when Sourcify returns a perfect match, even if other backends fail', async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      json: async () => ({ status: '1', result: 'Pass - Verified', message: 'OK' }),
-    }) as never;
+    globalThis.fetch = makeFetchRouter([
+      { match: isSourcifyUrl, respond: () => ({ body: SOURCIFY_SUCCESS_BODY }) },
+      { match: isEtherscanSubmitUrl, respond: () => ({ status: 503, body: '<html>' }) },
+      { match: isBlockscoutV2Url, respond: () => ({ status: 503, body: '<html>' }) },
+    ]) as never;
 
     try {
       const result = await verifyContract({
-        address: '0x1234567890123456789012345678901234567890' as Address,
+        address: ADDR,
         name: 'TestContract',
         variant: 'simple',
-        chainId: 1, // mainnet — has a configured explorer API URL
+        chainId: 1,
       });
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe('Pass - Verified');
-      expect(result.explorerUrl).toContain('0x1234567890123456789012345678901234567890');
+      expect(result.message).toContain('Verified via sourcify');
+      expect(result.attempts).toHaveLength(3);
+      expect(result.attempts.find((a) => a.backend === 'sourcify')?.success).toBe(true);
+      expect(result.attempts.find((a) => a.backend === 'etherscan')?.success).toBe(false);
+      expect(result.attempts.find((a) => a.backend === 'blockscout-v2')?.success).toBe(false);
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
-  it('uses data.message when result is empty', async () => {
+  it('returns success when Etherscan-compat verifies after polling, even if Sourcify rejects the chain', async () => {
     const originalFetch = globalThis.fetch;
-    globalThis.fetch = vi.fn().mockResolvedValue({
-      json: async () => ({ status: '0', result: '', message: 'Contract source code already verified' }),
-    }) as never;
+    globalThis.fetch = makeFetchRouter([
+      { match: isSourcifyUrl, respond: () => ({ status: 400, body: SOURCIFY_CHAIN_NOT_SUPPORTED_BODY }) },
+      { match: isEtherscanPollUrl, respond: () => ({ body: ETHERSCAN_POLL_CONFIRMED_BODY }) },
+      { match: isEtherscanSubmitUrl, respond: () => ({ body: ETHERSCAN_SUBMIT_ACCEPTED_BODY }) },
+      { match: isBlockscoutV2Url, respond: () => ({ status: 503, body: '<html>' }) },
+    ]) as never;
 
     try {
       const result = await verifyContract({
-        address: '0x1234567890123456789012345678901234567890' as Address,
+        address: ADDR,
+        name: 'TestContract',
+        variant: 'simple',
+        chainId: 1,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Verified via etherscan');
+      expect(result.attempts.find((a) => a.backend === 'etherscan')?.message).toBe('Pass - Verified');
+      expect(result.explorerUrl).toContain(ADDR);
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('returns success when Blockscout v2 accepts, even if Sourcify/Etherscan both fail', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = makeFetchRouter([
+      { match: isSourcifyUrl, respond: () => ({ status: 400, body: SOURCIFY_CHAIN_NOT_SUPPORTED_BODY }) },
+      { match: isEtherscanSubmitUrl, respond: () => ({ status: 503, body: '<html>' }) },
+      { match: isBlockscoutV2Url, respond: () => ({ body: BLOCKSCOUT_V2_ACCEPTED_BODY }) },
+    ]) as never;
+
+    try {
+      const result = await verifyContract({
+        address: ADDR,
+        name: 'TestContract',
+        variant: 'simple',
+        chainId: 1,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.message).toContain('Verified via blockscout-v2');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('reports failure from every backend when none succeed, with per-backend attempt messages', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = makeFetchRouter([
+      { match: isSourcifyUrl, respond: () => ({ status: 400, body: SOURCIFY_CHAIN_NOT_SUPPORTED_BODY }) },
+      { match: isEtherscanSubmitUrl, respond: () => ({ body: ETHERSCAN_ALREADY_VERIFIED_BODY }) },
+      { match: isBlockscoutV2Url, respond: () => ({ status: 503, body: '<html>' }) },
+    ]) as never;
+
+    try {
+      const result = await verifyContract({
+        address: ADDR,
         name: 'TestContract',
         variant: 'full',
         chainId: 1,
       });
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe('Contract source code already verified');
+      expect(result.message).toContain('All 3 verification backends failed');
+      const byBackend = Object.fromEntries(result.attempts.map((a) => [a.backend, a]));
+      expect(byBackend.sourcify?.message).toContain('Chain 1 not supported');
+      expect(byBackend.etherscan?.message).toContain('already verified');
+      expect(byBackend['blockscout-v2']?.message).toContain('Blockscout v2 HTTP 503');
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
 
-  it('returns success=false when fetch throws a network error (verify.ts line 78 catch path)', async () => {
+  it('still runs Sourcify on chains with no configured explorer API', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = makeFetchRouter([
+      { match: isSourcifyUrl, respond: () => ({ body: SOURCIFY_SUCCESS_BODY }) },
+    ]) as never;
+
+    try {
+      const result = await verifyContract({
+        address: ADDR,
+        name: 'TestContract',
+        variant: 'simple',
+        chainId: 999999, // unsupported chain — no explorer API URL
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.attempts).toHaveLength(1);
+      expect(result.attempts[0].backend).toBe('sourcify');
+      expect(result.explorerUrl).toBeNull();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('returns success=false with a single attempt when Sourcify rejects an unsupported chain', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = makeFetchRouter([
+      { match: isSourcifyUrl, respond: () => ({ status: 400, body: SOURCIFY_CHAIN_NOT_SUPPORTED_BODY }) },
+    ]) as never;
+
+    try {
+      const result = await verifyContract({
+        address: ADDR,
+        name: 'TestContract',
+        variant: 'simple',
+        chainId: 999999,
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.attempts).toHaveLength(1);
+      expect(result.attempts[0].backend).toBe('sourcify');
+      expect(result.attempts[0].message).toContain('not supported');
+      expect(result.explorerUrl).toBeNull();
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it('surfaces thrown fetch errors as a failed attempt rather than throwing', async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = vi.fn().mockRejectedValue(new TypeError('Failed to fetch')) as never;
 
     try {
       const result = await verifyContract({
-        address: '0x1234567890123456789012345678901234567890' as Address,
+        address: ADDR,
         name: 'TestContract',
         variant: 'simple',
         chainId: 1,
       });
 
       expect(result.success).toBe(false);
-      expect(result.message).toContain('Verification request failed');
-      expect(result.explorerUrl).toBeNull();
+      expect(result.attempts).toHaveLength(3);
+      for (const attempt of result.attempts) {
+        expect(attempt.success).toBe(false);
+        expect(attempt.message).toContain('request failed');
+      }
     } finally {
       globalThis.fetch = originalFetch;
     }
   });
-});
 
-describe('verifyContract', () => {
-  it('returns success=false for an unsupported chain', async () => {
-    const result = await verifyContract({
-      address: '0x1234567890123456789012345678901234567890' as Address,
-      name: 'TestContract',
-      variant: 'simple',
-      chainId: 999999, // unsupported chain
-    });
+  it('renames the contract in the source template via the `name` parameter for full variant', async () => {
+    const originalFetch = globalThis.fetch;
+    let etherscanBody: string | null = null;
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string | URL, init?: RequestInit) => {
+      const str = typeof url === 'string' ? url : url.toString();
+      if (isEtherscanSubmitUrl(str)) {
+        etherscanBody = (init?.body as URLSearchParams).get('sourceCode');
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ error: 'ignored' }),
+        json: async () => ({ error: 'ignored' }),
+      } as unknown as Response;
+    }) as never;
 
-    expect(result.success).toBe(false);
-    expect(result.message).toContain('999999');
-    expect(result.explorerUrl).toBeNull();
+    try {
+      await verifyContract({
+        address: '0x1234567890123456789012345678901234567890' as Address,
+        name: 'MyCustomDistributor',
+        variant: 'full',
+        chainId: 1,
+      });
+
+      expect(etherscanBody).toContain('MyCustomDistributor');
+      expect(etherscanBody).not.toContain('TitrateFull');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 
-  it('returns a VerifyResult (not throws) even when explorer request fails', async () => {
-    // Chain 1 (mainnet) has a configured explorer URL.
-    // In the test environment the HTTP request will fail — verify we get
-    // a graceful result object rather than a thrown error.
-    const result = await verifyContract({
-      address: '0x1234567890123456789012345678901234567890' as Address,
-      name: 'TestContract',
-      variant: 'simple',
-      chainId: 1,
-    });
+  it('accepts a custom compiler version on the Etherscan submission body', async () => {
+    const originalFetch = globalThis.fetch;
+    let submittedCompiler: string | null = null;
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string | URL, init?: RequestInit) => {
+      const str = typeof url === 'string' ? url : url.toString();
+      if (isEtherscanSubmitUrl(str)) {
+        submittedCompiler = (init?.body as URLSearchParams).get('compilerversion');
+      }
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify({ error: 'ignored' }),
+        json: async () => ({ error: 'ignored' }),
+      } as unknown as Response;
+    }) as never;
 
-    expect(typeof result.success).toBe('boolean');
-    expect(typeof result.message).toBe('string');
-  });
+    try {
+      await verifyContract({
+        address: '0x1234567890123456789012345678901234567890' as Address,
+        name: 'TestContract',
+        variant: 'simple',
+        chainId: 1,
+        compilerVersion: 'v0.8.20+commit.a1b79de6',
+      });
 
-  it('substitutes the contract name in the source template for full variant', async () => {
-    // We use an unsupported chain so it returns early without fetching,
-    // allowing us to verify the function path that handles 'full' variant
-    const result = await verifyContract({
-      address: '0x1234567890123456789012345678901234567890' as Address,
-      name: 'MyCustomDistributor',
-      variant: 'full',
-      chainId: 999999,
-    });
-
-    expect(result.success).toBe(false);
-    expect(result.explorerUrl).toBeNull();
-  });
-
-  it('accepts a custom compiler version', async () => {
-    const result = await verifyContract({
-      address: '0x1234567890123456789012345678901234567890' as Address,
-      name: 'TestContract',
-      variant: 'simple',
-      chainId: 999999,
-      compilerVersion: 'v0.8.20+commit.a1b79de6',
-    });
-
-    // Unsupported chain → returns early with success: false
-    expect(result.success).toBe(false);
+      expect(submittedCompiler).toBe('v0.8.20+commit.a1b79de6');
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 
@@ -934,19 +1128,29 @@ describe('pollVerificationStatus', () => {
 // verifyContract — polling integration (mocked)
 // ---------------------------------------------------------------------------
 
-describe('verifyContract — polls after successful submission', () => {
+describe('verifyContract — Etherscan backend polls after successful submission', () => {
   it('calls pollVerificationStatus with the GUID from the submit response', async () => {
-    let callCount = 0;
-    const mockFetch = vi.fn().mockImplementation(async () => {
-      callCount++;
-      // First call is the verifysourcecode submission
-      if (callCount === 1) {
-        return { json: async () => ({ status: '1', result: 'guid-xyz-789', message: 'OK' }) };
+    const originalFetch = globalThis.fetch;
+    let pollUrl: string | null = null;
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string | URL, init?: RequestInit) => {
+      const str = typeof url === 'string' ? url : url.toString();
+      if (isSourcifyUrl(str)) {
+        return { ok: false, status: 400, text: async () => SOURCIFY_CHAIN_NOT_SUPPORTED_BODY, json: async () => JSON.parse(SOURCIFY_CHAIN_NOT_SUPPORTED_BODY) } as unknown as Response;
       }
-      // Subsequent calls are checkverifystatus polls
-      return { json: async () => ({ status: '1', result: 'Pass - Verified', message: 'OK' }) };
-    });
-    globalThis.fetch = mockFetch as never;
+      if (isBlockscoutV2Url(str)) {
+        return { ok: false, status: 503, text: async () => '<html>', json: async () => { throw new Error('not json'); } } as unknown as Response;
+      }
+      if (isEtherscanPollUrl(str)) {
+        pollUrl = str;
+        return { ok: true, status: 200, text: async () => ETHERSCAN_POLL_CONFIRMED_BODY, json: async () => JSON.parse(ETHERSCAN_POLL_CONFIRMED_BODY) } as unknown as Response;
+      }
+      if (isEtherscanSubmitUrl(str)) {
+        // Confirms the body was a POST submission, not a poll.
+        void init;
+        return { ok: true, status: 200, text: async () => JSON.stringify({ status: '1', result: 'guid-xyz-789', message: 'OK' }), json: async () => ({ status: '1', result: 'guid-xyz-789', message: 'OK' }) } as unknown as Response;
+      }
+      throw new TypeError(`unexpected url ${str}`);
+    }) as never;
 
     try {
       const result = await verifyContract({
@@ -957,23 +1161,26 @@ describe('verifyContract — polls after successful submission', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(result.message).toBe('Pass - Verified');
-      // Two fetch calls: submit + one poll
-      expect(mockFetch).toHaveBeenCalledTimes(2);
-      // The second call should include the checkverifystatus action and GUID
-      const secondCallUrl = (mockFetch.mock.calls[1] as unknown[])[0] as string;
-      expect(secondCallUrl).toContain('checkverifystatus');
-      expect(secondCallUrl).toContain('guid-xyz-789');
+      expect(result.attempts.find((a) => a.backend === 'etherscan')?.message).toBe('Pass - Verified');
+      expect(pollUrl).toContain('checkverifystatus');
+      expect(pollUrl).toContain('guid-xyz-789');
     } finally {
-      vi.restoreAllMocks();
+      globalThis.fetch = originalFetch;
     }
   });
 
-  it('returns success=false when submission is rejected (status !== "1")', async () => {
-    const mockFetch = vi.fn().mockResolvedValue({
-      json: async () => ({ status: '0', result: '', message: 'Contract source code already verified' }),
-    });
-    globalThis.fetch = mockFetch as never;
+  it('records a failed Etherscan attempt when the submission is rejected (status !== "1"), without polling', async () => {
+    const originalFetch = globalThis.fetch;
+    let pollCount = 0;
+    globalThis.fetch = vi.fn().mockImplementation(async (url: string | URL) => {
+      const str = typeof url === 'string' ? url : url.toString();
+      if (isEtherscanPollUrl(str)) pollCount += 1;
+      if (isSourcifyUrl(str) || isBlockscoutV2Url(str)) {
+        return { ok: false, status: 503, text: async () => '<html>', json: async () => { throw new Error('not json'); } } as unknown as Response;
+      }
+      // Etherscan submission returns status=0 with "already verified"
+      return { ok: true, status: 200, text: async () => ETHERSCAN_ALREADY_VERIFIED_BODY, json: async () => JSON.parse(ETHERSCAN_ALREADY_VERIFIED_BODY) } as unknown as Response;
+    }) as never;
 
     try {
       const result = await verifyContract({
@@ -983,12 +1190,12 @@ describe('verifyContract — polls after successful submission', () => {
         chainId: 1,
       });
 
-      expect(result.success).toBe(false);
-      expect(result.message).toBe('Contract source code already verified');
-      // No polling should happen — submission was rejected
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      const etherscanAttempt = result.attempts.find((a) => a.backend === 'etherscan');
+      expect(etherscanAttempt?.success).toBe(false);
+      expect(etherscanAttempt?.message).toContain('already verified');
+      expect(pollCount).toBe(0);
     } finally {
-      vi.restoreAllMocks();
+      globalThis.fetch = originalFetch;
     }
   });
 });

@@ -109,8 +109,10 @@ Reuse these for any ad-hoc script. They're test-adjacent on purpose: they import
 | `Timed out waiting for ... balance` | Faucet tx hasn't confirmed in 60s. Check PulseScan for the tx, or bump `timeoutMs`. |
 | Deploy hangs past 60s | Testnet RPC is slow or down. Try the `publicnode.com` mirror in chain config. |
 | `code.length` ≤ 2 | Contract wasn't deployed (receipt reverted). Check the receipt's `status` field. |
-| `verify failed: Pending in queue` (or similar) | PulseScan took longer than the 30s poll window (10 × 3s). Transient; rerun. If persistent, bump the poll count inside `verifyContract` or pass a higher `maxAttempts` if that parameter lands. |
-| `verify failed: Fail - Unable to verify` | Source template mismatch — compiler version, optimizer, or runs differ from what the contract was deployed with. The template in `packages/sdk/src/distributor/artifacts/` must stay in sync with Foundry build output. |
+| `verify failed: All 3 verification backends failed` | Every backend (Sourcify, Blockscout v2, Etherscan-compat) failed. The `attempts` array in the assertion message shows each backend's specific error — use it to diagnose. Common combos: (1) Sourcify `Chain 943 not supported` + PulseScan 503s = wait for PulseScan infra to recover; (2) All three return legit rejections = source template drift from Foundry output, rerun `scripts/sync-artifacts.ts`. |
+| Etherscan `Non-JSON response (HTTP 503)` | PulseScan's Etherscan-compat endpoint (`api.scan.v4.testnet.pulsechain.com/api`) load balancer has no healthy upstream. Transient. |
+| Blockscout v2 `HTTP 503` | Same underlying PulseScan outage — the v2 endpoint lives on the same host. |
+| Sourcify `Chain 943 not supported` | Expected; Sourcify only covers PulseChain mainnet (369), not v4 testnet. Other backends must succeed. |
 
 ## What this does *not* cover
 
