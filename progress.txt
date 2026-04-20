@@ -1,79 +1,67 @@
 # Titrate — Progress Checkpoint
 
-## Date: 2026-04-20 (midday, post-session 3)
+## Date: 2026-04-20 (evening, post-session 4)
 
 ## Current state
 
-- **Branch:** `master` at `d83f8af`. 4 PRs merged this pass (#43–#46).
+- **Branch:** `master` at `952f025`. 2 PRs merged this pass (#48–#49).
 - **Open PRs:** none.
 - **Working tree:** clean aside from the usual `.remember/tmp/save-session.pid` + `.yarn/install-state.gz` churn.
 - **CI:** green on master through the entire PR chain.
-- **Tests:** SDK 620 passing + 53 gated skipped (was 604 + 52). Web unit 645 (unchanged). Playwright **5/4** against built bundle (added wallet-connect).
-- **Coverage:** SDK **84.6% stmt / 85.98% line** (was 82.9% / 84.23%). `src/distributor` **89.45% stmt** (was 81.02%).
+- **Tests:** SDK 631 passing + 53 gated skipped (was 623 + 53). Web unit 645 (unchanged). Playwright 5/4 (unchanged).
+- **Coverage:** SDK **85.96% stmt / 87.5% line** (was 84.73% / 86.13%). `src/distributor` **90.1% stmt** (was 89.45%). `src/pipeline/loops` **87.47% stmt** (was 81.43%).
 - **Production deploy:** https://app-production-35a3.up.railway.app — Railway auto-deploys master.
 
 ## Shipped this session
 
-Ran from the prior checkpoint at `bafd4ad` to HEAD at `d83f8af`. 4 PRs.
+Ran from the prior checkpoint at `4f22e69` to HEAD at `952f025`. 2 PRs — both offline coverage work, no feature changes.
 
-### Distributor hot-path coverage
+### Distributor registry offline coverage
 
-- **PR #43 `bb7ceb3` — test(sdk): cover allowance + disperse-parallel offline.** 14 new offline tests. `allowance.ts` **9.09% → 100%**; `disperse-parallel.ts` **4.16% → 100%**; `src/distributor` 81% → 89%. Pattern: fake `WalletClient`/`PublicClient` cast as `never` for allowance; hoisted `vi.mock('../distributor/disperse.js')` for parallel dispatcher so tests exercise the partition/offset/event-wrap logic without a real batcher. Covers uniform-amount routing, variable-amounts slicing per lane, even/uneven partitions, empty-lane filtering, batch/tx progress-event offsetting (walletIndex * 1000), and returned-BatchResult offsets.
+- **PR #48 `7ed26a5` — test(sdk): cover distributor/registry.ts offline.** Three new offline tests for `checkRecipients` in `distributor-unit.test.ts`. Previously only exercised by the anvilUp-gated integration test, leaving it at **25% stmt** in default runs. Mocks `publicClient.readContract` to assert the function forwards address/abi/functionName/args correctly, handles an empty recipients array, and propagates readContract errors. `src/distributor` 89.45% → 90.1% stmt.
 
-### Web E2E wallet-connect
+### Pipeline loop edge-path coverage
 
-- **PR #44 `e01e9d9` — feat(web-e2e): inject EIP-1193 mock wallet + assert AppKit connect flow.** Playwright wallet coverage without MetaMask or Synpress. `e2e/helpers/mock-wallet.ts` installs an EIP-1193 provider on `window.ethereum` via `page.addInitScript` **before** the app boots, then announces via EIP-6963 (`eip6963:announceProvider`) so Reown AppKit picks it up as a selectable connector. Gates `eth_accounts` behind `eth_requestAccounts` to match real wallet spec — this is why the mock does NOT auto-connect on load (was the first-attempt bug). Records every RPC call on `window.__mockWalletCalls`; `getMockWalletCalls(page)` reads them back. Unknown methods throw on purpose so silent regressions in app wiring surface as test failures. First test: Connect button → AppKit modal → select MockWallet → header swaps to truncated-address badge.
+- **PR #49 `952f025` — test(sdk): cover filter-loop + scanner-loop edge paths.** 8 new offline tests. Targeted the two lowest-coverage files in `src/pipeline/loops`.
+  - `filter-loop.ts` **63.76% → 81.15% stmt.** New tests: applyFilterChain throw → errors.append + row dropped + watermark still advances; `stop()` mid-run → status returns to idle; `on()` delegates to the event bus; driver throw → `console.error` logged and `.finally()` resets status via a cursor store whose `read()` throws.
+  - `scanner-loop.ts` **73.8% → 91.66% stmt.** New tests: non-block-scan first step → emits `completed` immediately; `endBlock === null` + caught up → sleeps `chainBlockTimeMs` and polls; `runSource` exhausts all 5 `BACKOFF_MS` retries → `errors.append` × 5, status = 'errored', emits 'errored'; `on()` delegates.
+  - `src/pipeline/loops` aggregate 81.43% → 87.47% stmt.
 
-### PulseChain v4 verify E2E + multi-backend verification
+## Notable non-obvious test patterns (learned the hard way)
 
-- **PR #45 `3b35a72` — feat(sdk): add verifyContract assertion to PulseChain E2E.** Extends the gated testnet harness with a second test case that calls `verifyContract` after deploy against chainId 943, with the 30s poll window covered by a 240s test timeout.
-- **PR #46 `d83f8af` — feat(sdk): multi-backend contract verification (Sourcify + Blockscout v2 + Etherscan).** Complete rewrite of `verify.ts` from one Etherscan-compat call into a parallel orchestrator firing at every reachable backend. `VerifyResult` gains `attempts: VerifyAttempt[]` recording each backend's outcome. Sourcify attempts every chain (server rejects unsupported with a clear message); Blockscout v2 and Etherscan-compat attempt when a chain has a configured explorer API URL. Any one success = verified. Sourcify requires solc `rawMetadata` alongside source — added `rawMetadata` field to the SDK artifact JSONs and a new `scripts/sync-artifacts.ts` that regenerates them from Foundry output. 9 new offline tests using a URL-routing fetch mock cover every backend-success and all-fail permutation. Web `DistributeStep` consumer unchanged (only message text shape changed on success to `"Verified via <backend>: ..."`).
+Two subtle gotchas tripped the first test runs — worth keeping in mind for future loop work:
 
-### Live E2E run this session
+- **`bus.emit` is synchronous.** If the driver emits `completed` before its first real `await` (e.g. the non-block-scan first-step branch), any handler registered *after* `loop.start()` will miss it. Fix: `const completedP = new Promise(res => bus.on('completed', res))` BEFORE `loop.start()`. Already used downstream — document if writing more loop tests.
+- **`stop()` on a driver parked in `bus.once(...)` will hang.** The stopping flag is set by `stop()`, but the driver is inside a pending Promise and can't observe it until the bus resolves. Fix: emit a wake event (`pipeline-changed` or `scan-progressed`) between `loop.stop()` and awaiting the stopPromise. Pattern used in the filter-loop `stop() mid-run` test.
 
-Ran `RUN_PULSECHAIN_E2E=1 vitest run e2e-pulsechain-v4` against the persisted account `0xeA2d0cd5E7B90650ED0C581a6E3B168Da13D7DF2`.
+## Overall coverage snapshot
 
-- **Deploy passed (11.4s):** bytecode non-empty, second successful proof that the deploy path is alive on chainId 943.
-- **Verify failed (by design, clear diagnostic):**
-  - `sourcify`: Chain 943 not supported for verification!
-  - `etherscan`: HTTP 503 (openresty: "No server is available to handle this request")
-  - `blockscout-v2`: HTTP 503 (same backend pool at `api.scan.v4.testnet.pulsechain.com` and `contracts.api.scan.v4.testnet.pulsechain.com`)
+| Area | Stmt | Prior |
+|---|---|---|
+| SDK total | **85.96%** | 84.73% |
+| `src/distributor` | **90.1%** | 89.45% |
+| `src/pipeline/loops` | **87.47%** | 81.43% |
+| `filter-loop.ts` | 81.15% | 63.76% |
+| `scanner-loop.ts` | 91.66% | 73.8% |
 
-When any of PulseScan's backends recovers (or Sourcify adds chainId 943), the verify test passes with no code changes.
+Worst remaining offenders: `src/signers` at **37.03% stmt** (CLI-only paths, still deferred per prior reasoning); `distributor-loop.ts` at **77.58% stmt** (lines 217-225, 260, 278); `filters.ts` at **75.59% stmt**.
 
-## Infrastructure observations
+## Remaining work from the priority list
 
-- **PulseScan testnet explorer is currently down.** Openresty LB shows no healthy upstream for `api.scan.v4.testnet.pulsechain.com` AND `contracts.api.scan.v4.testnet.pulsechain.com`, but `stats.api.scan.v4.testnet.pulsechain.com` returns 200 — so the LB itself is fine, only the verifier backend pool is unhealthy. Mainnet `api.scan.pulsechain.com` (chainId 369) works fine with the exact same URL pattern, confirming our config is correct. Verified by DNS+header+IP-direct probes.
-- **Sourcify coverage.** Currently lists PulseChain mainnet (369) but NOT v4 testnet (943). Worth watching — if it lands, the verify test passes immediately.
-- **Mock wallet auto-connect bug.** First Playwright run showed the mock auto-connecting because `eth_accounts` returned the address before authorization. Fix in `mock-wallet.ts`: gate behind `eth_requestAccounts` like real wallets. Saved future time: pattern documented in `titrate-web-e2e` skill.
-- **PR merge sync pattern.** `gh pr merge --squash --delete-branch` fails on local rebase with unstaged churn files. Working pattern: stash churn → merge → pull `--ff-only` → pop. Happened three times this session; consistent.
-
-## Remaining work from the re-evaluation list
-
-1. ✅ **Run live PulseChain E2E.** Done; deploy confirmed, verify blocked by live PulseScan outage.
-2. **Mock wallet Perry-mode flow.** Extend Playwright to: connect mock → navigate to a campaign → WalletStep → click Derive → mock signs EIP-712 → hot wallets appear. Needs campaign creation flow first, which is non-trivial.
-3. **Cover `distributor/registry.ts`.** Still at 25% stmt (lines 24-33). Small file; quick win.
-4. **Cover pipeline loops.** `filter-loop.ts` 64% / `scanner-loop.ts` 74%. Higher-leverage than registry but harder to mock; they're orchestration brains.
-5. **Checkpoint.** (this file) ✅
+1. ✅ **Distributor/registry.ts coverage.** Done (PR #48).
+2. ✅ **Pipeline loop coverage.** Done (PR #49).
+3. **Mock wallet Perry-mode flow.** Still pending. Highest-leverage remaining UX test — extend Playwright from connect → navigate to a campaign → WalletStep → sign EIP-712 → hot wallets derived + displayed. **Needs campaign-creation flow first**, which is non-trivial.
+4. **Retry the gated PulseChain E2E** any time — Sourcify chain add OR PulseScan recovery makes it pass without code change.
 
 ## What to do next session
 
-In the revised-priority order:
-
-1. **Mock wallet Perry-mode flow.** Highest-leverage remaining UX test. Validates the signature → derive → display pipeline end-to-end.
-2. **Distributor/registry.ts coverage.** 10-minute task; round out the distributor module.
-3. **Pipeline loop coverage.** Filter-loop + scanner-loop; event-bus integration is the interesting surface.
-4. **Retry the gated PulseChain E2E** any time — Sourcify chain add OR PulseScan recovery makes it pass without code change.
-
-## Notable non-obvious decisions this session
-
-- **Multi-backend verify over chain-pivot.** User reframed from "which endpoint is right" to "try everything" when PulseScan infra was intermittently unreachable. The resulting architecture is strictly better for every chain, not just the one that prompted it.
-- **EIP-1193 mock over Synpress.** Declined Synpress (MetaMask-pinned, heavy) in favor of an injected shim (~150 lines, zero external deps). Tests the exact same code paths wagmi runs against real wallets via EIP-6963 discovery.
-- **Distributor hot-path before signers.** Reframed from the user's initial signer-coverage pick: `distributor/disperse-parallel.ts` (4% covered) and `allowance.ts` (9%) are every-airdrop hot-path code; `src/signers/*` is CLI-only and most real users go through wagmi/Reown in the web app. Signer interface extraction deferred indefinitely.
+1. **Mock wallet Perry-mode flow.** Start by scoping the campaign-creation flow — is there a UI path today, or does it need to be built? If building, this is a small design discussion rather than a pure coverage task.
+2. **Distributor-loop coverage.** Next-lowest hanging fruit in `src/pipeline/loops`. Lines 217-225, 260, 278. Probably follows the same pattern as the filter/scanner loops in PR #49.
+3. **Retry the gated PulseChain E2E.** Zero cost, check both PulseScan health and Sourcify chainId 943 coverage.
 
 ## Session notes
 
-- Four PRs shipped cleanly. Each landed with CI green, merge, sync, on to the next.
-- **Verify is production-resilient now.** Before PR #46, any one verifier outage silently took the whole flow down. Now a single 200 from any of three backends verifies.
-- **PulseChain E2E test strictness.** Hard-fails if all 3 backends fail, with rich diagnostic. Would pass immediately if any backend recovers — no code change needed.
-- Master is clean through `d83f8af`. User's session preference: small focused PRs; direct-to-master for brand/theme migrations per `feedback_direct-to-master.md`. Feature/coverage work goes through PR flow (followed this session).
+- Two focused PRs, each green on CI. Same stash → merge → pull → pop pattern used — still reliable.
+- Coverage on SDK crossed **86% stmt** for the first time. `src/distributor` at **90.1% stmt** — tight-knit module, near its practical ceiling given the gated Anvil path still owns some branches.
+- No feature work — intentional; the session was pure coverage hardening after the big multi-backend verify feature landed in PR #46.
+- Master is clean through `952f025`. User's session preference: small focused PRs; direct-to-master for brand/theme migrations per `feedback_direct-to-master.md`. Feature/coverage work goes through PR flow (followed this session).
