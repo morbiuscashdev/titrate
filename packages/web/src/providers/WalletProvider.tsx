@@ -65,12 +65,17 @@ export type WalletContextValue = {
   readonly address: Address | undefined;
   readonly chainId: number | undefined;
   readonly perryMode: PerryModeState | null;
-  readonly deriveHotWallet: (campaignName: string, version: number) => Promise<void>;
+  readonly deriveHotWallet: (
+    campaignName: string,
+    version: number,
+    rpcUrl: string,
+  ) => Promise<void>;
   readonly deriveHotWallets: (params: {
     readonly campaignName: string;
     readonly version: number;
     readonly count: number;
     readonly offset?: number;
+    readonly rpcUrl: string;
   }) => Promise<void>;
   readonly clearPerryMode: () => void;
   readonly walletClients: readonly WalletClient[];
@@ -94,12 +99,13 @@ function WalletInner({ children }: { readonly children: ReactNode }) {
       readonly version: number;
       readonly count: number;
       readonly offset?: number;
+      readonly rpcUrl: string;
     }) => {
       if (!address) {
         throw new Error('Wallet not connected');
       }
 
-      const { campaignName, version, count, offset = 0 } = params;
+      const { campaignName, version, count, offset = 0, rpcUrl } = params;
 
       const message = createEIP712Message({
         funder: address,
@@ -123,7 +129,7 @@ function WalletInner({ children }: { readonly children: ReactNode }) {
       const clients = wallets.map((wallet) =>
         createWalletClient({
           account: privateKeyToAccount(wallet.privateKey),
-          transport: http(),
+          transport: http(rpcUrl),
         }),
       );
 
@@ -139,8 +145,8 @@ function WalletInner({ children }: { readonly children: ReactNode }) {
   );
 
   const handleDeriveHotWallet = useCallback(
-    (campaignName: string, version: number) =>
-      handleDeriveHotWallets({ campaignName, version, count: 1 }),
+    (campaignName: string, version: number, rpcUrl: string) =>
+      handleDeriveHotWallets({ campaignName, version, count: 1, rpcUrl }),
     [handleDeriveHotWallets],
   );
 

@@ -149,7 +149,7 @@ describe('useWallet', () => {
     const { result } = renderHook(() => useWallet(), { wrapper });
 
     await expect(
-      act(() => result.current.deriveHotWallet('TestCampaign', 1)),
+      act(() => result.current.deriveHotWallet('TestCampaign', 1, 'http://rpc.test')),
     ).rejects.toThrow('Wallet not connected');
   });
 
@@ -164,7 +164,7 @@ describe('useWallet', () => {
 
     const { result } = renderHook(() => useWallet(), { wrapper });
 
-    await act(() => result.current.deriveHotWallet('TestCampaign', 1));
+    await act(() => result.current.deriveHotWallet('TestCampaign', 1, 'http://rpc.test'));
 
     expect(mockedCreateEIP712Message).toHaveBeenCalledWith({
       funder: '0x1234567890abcdef1234567890abcdef12345678',
@@ -203,7 +203,7 @@ describe('useWallet', () => {
     const { result } = renderHook(() => useWallet(), { wrapper });
 
     // First derive a hot wallet
-    await act(() => result.current.deriveHotWallet('TestCampaign', 1));
+    await act(() => result.current.deriveHotWallet('TestCampaign', 1, 'http://rpc.test'));
     expect(result.current.perryMode).not.toBeNull();
 
     // Then clear it

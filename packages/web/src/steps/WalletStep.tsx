@@ -90,13 +90,18 @@ export function WalletStep() {
 
     try {
       if (walletCount === 1 && walletOffset === 0) {
-        await deriveHotWallet(activeCampaign.name, activeCampaign.version);
+        await deriveHotWallet(
+          activeCampaign.name,
+          activeCampaign.version,
+          activeCampaign.rpcUrl,
+        );
       } else {
         await deriveHotWallets({
           campaignName: activeCampaign.name,
           version: activeCampaign.version,
           count: walletCount,
           offset: walletOffset,
+          rpcUrl: activeCampaign.rpcUrl,
         });
       }
 

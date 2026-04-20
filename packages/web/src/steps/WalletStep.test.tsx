@@ -122,14 +122,14 @@ describe('WalletStep', () => {
       address: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
     };
     campaignOverrides = {
-      activeCampaign: { name: 'Test', version: 1 } as typeof defaultCampaign['activeCampaign'],
+      activeCampaign: { name: 'Test', version: 1, rpcUrl: 'http://rpc.test' } as typeof defaultCampaign['activeCampaign'],
     };
 
     render(<WalletStep />);
     fireEvent.click(screen.getByRole('button', { name: /derive hot wallets/i }));
 
     await waitFor(() => {
-      expect(mockDeriveHotWallet).toHaveBeenCalledWith('Test', 1);
+      expect(mockDeriveHotWallet).toHaveBeenCalledWith('Test', 1, 'http://rpc.test');
     });
   });
 
@@ -257,7 +257,7 @@ describe('WalletStep', () => {
       address: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
     };
     campaignOverrides = {
-      activeCampaign: { name: 'Test', version: 1 } as typeof defaultCampaign['activeCampaign'],
+      activeCampaign: { name: 'Test', version: 1, rpcUrl: 'http://rpc.test' } as typeof defaultCampaign['activeCampaign'],
     };
 
     render(<WalletStep />);
@@ -273,6 +273,7 @@ describe('WalletStep', () => {
         version: 1,
         count: 3,
         offset: 0,
+        rpcUrl: 'http://rpc.test',
       });
     });
   });
