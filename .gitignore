@@ -7,3 +7,6 @@ packages/contracts/cache/
 out/
 coverage/
 .pulsechain-testnet.local.json
+test-results/
+playwright-report/
+playwright/.cache/
