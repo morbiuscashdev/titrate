@@ -137,4 +137,143 @@ describe('filter-loop', () => {
     expect(end.filter.watermark).toBe(2);
     await rm(dir, { recursive: true });
   });
+
+  it('records errors.append and drops the row when applyFilterChain throws', async () => {
+    await addresses.append([
+      { address: '0xA', amount: null },
+      { address: '0xB', amount: null },
+    ]);
+
+    const bus = createEventBus();
+    const control = createControlSignal(DEFAULT_STAGE_CONTROL);
+    const errorEntries: unknown[] = [];
+
+    const loop = createFilterLoop({
+      publicClient: {} as PublicClient,
+      storage: {
+        addresses,
+        filtered,
+        cursor,
+        errors: { append: async (e) => { errorEntries.push(e); } },
+      },
+      pipeline: PIPELINE,
+      bus,
+      control,
+      scannerCompleted: () => true,
+      applyFilterChain: async (row) => {
+        if (row.address === '0xA') throw new Error('rpc went away');
+        return true;
+      },
+    });
+
+    await loop.start();
+    await new Promise<void>((resolve) => bus.on('completed', () => resolve()));
+
+    expect(errorEntries).toHaveLength(1);
+    const entry = errorEntries[0] as { loop: string; phase: string; message: string; context: { address: string } };
+    expect(entry.loop).toBe('filter');
+    expect(entry.phase).toBe('apply-filter');
+    expect(entry.message).toBe('rpc went away');
+    expect(entry.context.address).toBe('0xA');
+
+    const end = await cursor.read();
+    expect(end.filter.watermark).toBe(2);
+    expect(end.filter.qualifiedCount).toBe(1);
+
+    const filteredContent = await readFile(join(dir, 'filtered.csv'), 'utf8');
+    expect(filteredContent).not.toContain('0xA,');
+    expect(filteredContent).toContain('0xB,');
+    await rm(dir, { recursive: true });
+  });
+
+  it('stop() mid-run returns to idle', async () => {
+    await addresses.append([{ address: '0x1', amount: null }]);
+
+    const bus = createEventBus();
+    const control = createControlSignal(DEFAULT_STAGE_CONTROL);
+
+    const loop = createFilterLoop({
+      publicClient: {} as PublicClient,
+      storage: { addresses, filtered, cursor, errors: { append: async () => {} } },
+      pipeline: PIPELINE,
+      bus,
+      control,
+      // Never completes on its own — scanner not done + watermark short.
+      scannerCompleted: () => false,
+      applyFilterChain: async () => true,
+    });
+
+    await loop.start();
+    await new Promise((r) => setTimeout(r, 15));
+    // Driver is parked on bus.once('scan-progressed', 'pipeline-changed').
+    // stop() sets stopping=true then awaits driverPromise; we must emit to
+    // wake the driver so it re-checks the flag and exits.
+    const stopPromise = loop.stop();
+    await new Promise((r) => setTimeout(r, 0));
+    bus.emit('pipeline-changed');
+    await stopPromise;
+
+    expect(loop.status()).toBe('idle');
+    await rm(dir, { recursive: true });
+  });
+
+  it('on() delegates to the event bus', async () => {
+    const bus = createEventBus();
+    const control = createControlSignal(DEFAULT_STAGE_CONTROL);
+    const loop = createFilterLoop({
+      publicClient: {} as PublicClient,
+      storage: { addresses, filtered, cursor, errors: { append: async () => {} } },
+      pipeline: PIPELINE,
+      bus,
+      control,
+      scannerCompleted: () => true,
+      applyFilterChain: async () => true,
+    });
+
+    let seen = 0;
+    loop.on('filter-progressed', () => { seen++; });
+    bus.emit('filter-progressed');
+    expect(seen).toBe(1);
+    await rm(dir, { recursive: true });
+  });
+
+  it('catches driver throws and resets status to idle via finally', async () => {
+    const bus = createEventBus();
+    const control = createControlSignal(DEFAULT_STAGE_CONTROL);
+
+    // Force the driver to throw by giving it a cursor store whose read() throws.
+    // The .catch() logs to console.error; the .finally() flips status back to idle.
+    const consoleError = console.error;
+    const errorLogs: unknown[][] = [];
+    console.error = (...args: unknown[]) => { errorLogs.push(args); };
+
+    const loop = createFilterLoop({
+      publicClient: {} as PublicClient,
+      storage: {
+        addresses,
+        filtered,
+        cursor: {
+          read: async () => { throw new Error('cursor.read boom'); },
+          update: async () => {},
+        },
+        errors: { append: async () => {} },
+      },
+      pipeline: PIPELINE,
+      bus,
+      control,
+      scannerCompleted: () => true,
+      applyFilterChain: async () => true,
+    });
+
+    await loop.start();
+    // Allow the driver to run + fail + finally to run.
+    await new Promise((r) => setTimeout(r, 30));
+
+    console.error = consoleError;
+    expect(loop.status()).toBe('idle');
+    expect(errorLogs.length).toBeGreaterThan(0);
+    const firstArgs = errorLogs[0] as unknown[];
+    expect(firstArgs[0]).toBe('[filter-loop] driver threw:');
+    await rm(dir, { recursive: true });
+  });
 });

@@ -142,4 +142,121 @@ describe('scanner-loop', () => {
     expect(loop.status()).toBe('idle');
     await rm(dir, { recursive: true });
   });
+
+  it('completes immediately when first pipeline step is not a block-scan source', async () => {
+    const bus = createEventBus();
+    const control = createControlSignal(DEFAULT_STAGE_CONTROL);
+    // Pipeline whose first step is a filter, not a block-scan source.
+    const pipeline = {
+      steps: [{ type: 'filter', filterType: 'min-balance', params: { threshold: '1' } }],
+    } as const;
+
+    const loop = createScannerLoop({
+      publicClient: makeClient(0n),
+      storage,
+      manifest: makeManifest(),
+      pipeline: pipeline as unknown as PipelineConfig,
+      bus, control,
+      runSource: async () => [],
+    });
+
+    const completedP = new Promise<void>((resolve) => bus.on('completed', () => resolve()));
+    await loop.start();
+    await completedP;
+    expect(loop.status()).toBe('completed');
+    await rm(dir, { recursive: true });
+  });
+
+  it('polls via sleep when endBlock is null and caught up', async () => {
+    const bus = createEventBus();
+    const control = createControlSignal(DEFAULT_STAGE_CONTROL);
+    const sleepCalls: number[] = [];
+    let sleepInvoked = 0;
+
+    // startBlock is null + cursor stays at latest → enters the `sleep(chainBlockTimeMs)` branch.
+    const loop = createScannerLoop({
+      publicClient: makeClient(100n),
+      storage,
+      manifest: makeManifest({ startBlock: null, endBlock: null }),
+      pipeline: BLOCK_SCAN_PIPELINE,
+      bus, control,
+      runSource: async (_s, block) => blockAddresses(block),
+      chainBlockTimeMs: 50,
+      sleep: async (ms) => {
+        sleepCalls.push(ms);
+        sleepInvoked++;
+        // After the first catch-up sleep, stop the loop so the test finishes.
+        if (sleepInvoked === 1) {
+          setTimeout(() => { void loop.stop(); }, 0);
+        }
+        return new Promise((r) => setTimeout(r, 0));
+      },
+    });
+
+    // Pre-seed cursor so we're already at latest (100n).
+    await storage.cursor.update({ scan: { lastBlock: 100n, addressCount: 0 } });
+
+    await loop.start();
+    // Wait for the loop to settle.
+    for (let i = 0; i < 50 && loop.status() !== 'idle'; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
+
+    expect(sleepCalls).toContain(50);
+    await rm(dir, { recursive: true });
+  });
+
+  it('records errors and enters errored status when runSource exhausts backoff retries', async () => {
+    const bus = createEventBus();
+    const control = createControlSignal(DEFAULT_STAGE_CONTROL);
+    const errorEntries: unknown[] = [];
+    let erroredEmitted = false;
+    bus.on('errored', () => { erroredEmitted = true; });
+
+    const loop = createScannerLoop({
+      publicClient: makeClient(102n),
+      storage: {
+        addresses: storage.addresses,
+        cursor: storage.cursor,
+        errors: { append: async (e) => { errorEntries.push(e); } },
+      },
+      manifest: makeManifest(),
+      pipeline: BLOCK_SCAN_PIPELINE,
+      bus, control,
+      runSource: async () => { throw new Error('permanent rpc failure'); },
+      sleep: async () => {},  // skip backoff delays
+    });
+
+    await loop.start();
+    await new Promise<void>((resolve) => bus.on('errored', () => resolve()));
+
+    expect(loop.status()).toBe('errored');
+    expect(erroredEmitted).toBe(true);
+    // Each of the 5 BACKOFF_MS entries triggers one errors.append.
+    expect(errorEntries.length).toBe(5);
+    const first = errorEntries[0] as { loop: string; phase: string; message: string };
+    expect(first.loop).toBe('scanner');
+    expect(first.phase).toBe('scan-block');
+    expect(first.message).toBe('permanent rpc failure');
+    await rm(dir, { recursive: true });
+  });
+
+  it('on() delegates to the event bus', async () => {
+    const bus = createEventBus();
+    const control = createControlSignal(DEFAULT_STAGE_CONTROL);
+    const loop = createScannerLoop({
+      publicClient: makeClient(0n),
+      storage,
+      manifest: makeManifest(),
+      pipeline: BLOCK_SCAN_PIPELINE,
+      bus, control,
+      runSource: async () => [],
+    });
+
+    let seen = 0;
+    loop.on('scan-progressed', () => { seen++; });
+    bus.emit('scan-progressed');
+    expect(seen).toBe(1);
+    await rm(dir, { recursive: true });
+  });
 });
