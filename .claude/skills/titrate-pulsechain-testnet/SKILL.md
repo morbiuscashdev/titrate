@@ -26,7 +26,7 @@ RUN_PULSECHAIN_E2E=1 npx vitest run src/__tests__/e2e-pulsechain-v4
 
 The test:
 
-1. Generates a fresh private key (unless `PULSECHAIN_TESTNET_PRIVATE_KEY` is set).
+1. Resolves a signer key (see "Reuse a funded account" below).
 2. If balance < 0.5 tPLS, POSTs to the faucet and polls for funds.
 3. Deploys `TitrateSimple` with `name: 'TokenAirdrop'`.
 4. Asserts the receipt has a non-empty contract address and bytecode.
@@ -35,17 +35,32 @@ Skipped by default — `yarn test:all` stays fully offline.
 
 ## Reuse a funded account
 
-The faucet has a per-address cooldown. For repeated runs, persist a key so only the first run hits the faucet:
+The faucet cooldown has been observed as IP-based in practice, not per-address, so generating a fresh random key per run does **not** avoid rate-limit errors. The helper picks a signer in this order:
+
+1. `options.privateKey` (explicit call-site override).
+2. `PULSECHAIN_TESTNET_PRIVATE_KEY` environment variable.
+3. Persisted mnemonic at `packages/sdk/.pulsechain-testnet.local.json` (gitignored).
+4. Fresh random key (only useful for smoke-testing helpers — has no funds).
+
+### Preferred: persisted mnemonic
+
+Generate once — the mnemonic lives in a gitignored file, so the account is reused across every run:
 
 ```bash
-# Generate once, save to a .env.local (gitignored) or 1Password
+cd packages/sdk
+npx tsx scripts/gen-testnet-key.ts
+```
+
+The script prints the derived address. Fund it via the faucet (once the IP cooldown resets) or a direct transfer from another tPLS account, then every `RUN_PULSECHAIN_E2E=1` invocation reuses that account. The test keeps ≥ 0.5 tPLS on the account after each deploy, so one 10 tPLS top-up covers many runs.
+
+### Alternative: env var only
+
+```bash
 openssl rand -hex 32  # → use the 0x-prefixed hex as the key
 
 PULSECHAIN_TESTNET_PRIVATE_KEY=0x... \
   RUN_PULSECHAIN_E2E=1 npx vitest run src/__tests__/e2e-pulsechain-v4
 ```
-
-The test keeps ≥ 0.5 tPLS on the account after each deploy, so one faucet claim (10 tPLS) covers many runs before another claim is needed.
 
 ## Faucet API (no auth)
 
@@ -89,7 +104,7 @@ Reuse these for any ad-hoc script. They're test-adjacent on purpose: they import
 
 | Symptom | Likely cause |
 |---|---|
-| `Faucet claim failed (429): ...` | Per-address cooldown. Wait, or use a different key. |
+| `Faucet claim failed (429): ...` | Observed as IP-based in practice; wait for cooldown or fund the persisted account via direct transfer. Generating a fresh random key does *not* help. |
 | `Faucet returned unexpected body` | Faucet HTML page returned instead of tx hash — Heroku dyno cold-start or the faucet account is drained. Retry. |
 | `Timed out waiting for ... balance` | Faucet tx hasn't confirmed in 60s. Check PulseScan for the tx, or bump `timeoutMs`. |
 | Deploy hangs past 60s | Testnet RPC is slow or down. Try the `publicnode.com` mirror in chain config. |
