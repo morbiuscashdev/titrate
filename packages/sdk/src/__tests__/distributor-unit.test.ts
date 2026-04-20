@@ -6,6 +6,7 @@ import {
   increaseOperatorAllowance,
   getAllowance,
 } from '../distributor/allowance.js';
+import { checkRecipients } from '../distributor/registry.js';
 import type { BatchAttempt, BatchResult, ProgressEvent } from '../types.js';
 
 // ---------------------------------------------------------------------------
@@ -442,5 +443,79 @@ describe('distributor/disperse-parallel.ts', () => {
     const byIndex = new Map(results.map((r) => [r.walletIndex, r.walletAddress]));
     expect(byIndex.get(0)).toBe(addr(0xa));
     expect(byIndex.get(1)).toBe(addr(0xb));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// registry.ts
+// ---------------------------------------------------------------------------
+
+describe('distributor/registry.ts', () => {
+  const CAMPAIGN_ID: Hex =
+    '0x1111111111111111111111111111111111111111111111111111111111111111';
+  const DISTRIBUTOR = addr(0xd);
+  const ALICE = addr(0xa);
+  const BOB = addr(0xb);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('forwards address/abi/functionName/args to publicClient.readContract', async () => {
+    const readContract = vi.fn(async () => [false, true]);
+    const publicClient = fakePublicClient({ readContract } as unknown as Partial<PublicClient>);
+
+    const result = await checkRecipients({
+      contractAddress: CONTRACT,
+      distributor: DISTRIBUTOR,
+      campaignId: CAMPAIGN_ID,
+      recipients: [ALICE, BOB],
+      publicClient,
+    });
+
+    expect(result).toEqual([false, true]);
+    expect(readContract).toHaveBeenCalledTimes(1);
+    const call = (readContract as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(call).toMatchObject({
+      address: CONTRACT,
+      functionName: 'checkRecipients',
+      args: [DISTRIBUTOR, CAMPAIGN_ID, [ALICE, BOB]],
+    });
+    // abi must be present — it's the TitrateFull ABI, not inspected in detail.
+    expect(Array.isArray(call.abi)).toBe(true);
+  });
+
+  it('returns an empty array when given no recipients', async () => {
+    const readContract = vi.fn(async () => []);
+    const publicClient = fakePublicClient({ readContract } as unknown as Partial<PublicClient>);
+
+    const result = await checkRecipients({
+      contractAddress: CONTRACT,
+      distributor: DISTRIBUTOR,
+      campaignId: CAMPAIGN_ID,
+      recipients: [],
+      publicClient,
+    });
+
+    expect(result).toEqual([]);
+    const call = (readContract as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(call.args[2]).toEqual([]);
+  });
+
+  it('propagates errors from readContract', async () => {
+    const readContract = vi.fn(async () => {
+      throw new Error('execution reverted: unknown campaign');
+    });
+    const publicClient = fakePublicClient({ readContract } as unknown as Partial<PublicClient>);
+
+    await expect(
+      checkRecipients({
+        contractAddress: CONTRACT,
+        distributor: DISTRIBUTOR,
+        campaignId: CAMPAIGN_ID,
+        recipients: [ALICE],
+        publicClient,
+      }),
+    ).rejects.toThrow('execution reverted: unknown campaign');
   });
 });
