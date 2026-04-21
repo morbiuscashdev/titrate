@@ -77,6 +77,20 @@ export type WalletContextValue = {
     readonly offset?: number;
     readonly rpcUrl: string;
   }) => Promise<void>;
+  /**
+   * Derive hot wallets by signing the EIP-712 payload with a pasted private
+   * key. Bypasses wagmi entirely, so the user's connected wallet — or whether
+   * they have one at all — does not matter. Useful as an escape hatch when
+   * wagmi is on the wrong chain or the user is running without a wallet.
+   */
+  readonly deriveHotWalletsFromPrivateKey: (params: {
+    readonly privateKey: Hex;
+    readonly campaignName: string;
+    readonly version: number;
+    readonly count: number;
+    readonly offset?: number;
+    readonly rpcUrl: string;
+  }) => Promise<void>;
   readonly clearPerryMode: () => void;
   readonly walletClients: readonly WalletClient[];
 };
@@ -150,6 +164,62 @@ function WalletInner({ children }: { readonly children: ReactNode }) {
     [handleDeriveHotWallets],
   );
 
+  const handleDeriveFromPrivateKey = useCallback(
+    async (params: {
+      readonly privateKey: Hex;
+      readonly campaignName: string;
+      readonly version: number;
+      readonly count: number;
+      readonly offset?: number;
+      readonly rpcUrl: string;
+    }) => {
+      const {
+        privateKey,
+        campaignName,
+        version,
+        count,
+        offset = 0,
+        rpcUrl,
+      } = params;
+
+      const coldAccount = privateKeyToAccount(privateKey);
+      const message = createEIP712Message({
+        funder: coldAccount.address,
+        name: campaignName,
+        version,
+      });
+
+      const signature = await coldAccount.signTypedData({
+        domain: message.domain,
+        types: message.types,
+        primaryType: message.primaryType,
+        message: message.message,
+      });
+
+      const wallets = deriveMultipleWallets({
+        signature: signature as Hex,
+        count,
+        offset,
+      });
+
+      const clients = wallets.map((wallet) =>
+        createWalletClient({
+          account: privateKeyToAccount(wallet.privateKey),
+          transport: http(rpcUrl),
+        }),
+      );
+
+      setWalletClients(clients);
+      setPerryMode({
+        isActive: true,
+        coldAddress: coldAccount.address,
+        wallets,
+        offset,
+      });
+    },
+    [],
+  );
+
   const clearPerryMode = useCallback(() => {
     if (perryMode) {
       for (const wallet of perryMode.wallets) {
@@ -169,6 +239,7 @@ function WalletInner({ children }: { readonly children: ReactNode }) {
         perryMode,
         deriveHotWallet: handleDeriveHotWallet,
         deriveHotWallets: handleDeriveHotWallets,
+        deriveHotWalletsFromPrivateKey: handleDeriveFromPrivateKey,
         clearPerryMode,
         walletClients,
       }}

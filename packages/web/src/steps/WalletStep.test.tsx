@@ -7,6 +7,19 @@ const mockDeriveHotWallet = vi.fn();
 const mockClearPerryMode = vi.fn();
 
 const mockDeriveHotWallets = vi.fn();
+const mockDeriveHotWalletsFromPrivateKey = vi.fn();
+const mockSwitchChainAsync = vi.fn();
+
+let mockAccountReturn = {
+  address: undefined as `0x${string}` | undefined,
+  isConnected: false,
+  chainId: undefined as number | undefined,
+};
+let mockSwitchChainReturn = {
+  switchChainAsync: mockSwitchChainAsync,
+  isPending: false,
+  error: null as Error | null,
+};
 
 const mockAppSettingsGet = vi.fn().mockResolvedValue(null);
 const mockAppSettingsPut = vi.fn().mockResolvedValue(undefined);
@@ -19,6 +32,7 @@ const defaultWallet = {
   perryMode: null as { isActive: true; wallets: { address: string; privateKey: string }[]; coldAddress: string; offset: number } | null,
   deriveHotWallet: mockDeriveHotWallet,
   deriveHotWallets: mockDeriveHotWallets,
+  deriveHotWalletsFromPrivateKey: mockDeriveHotWalletsFromPrivateKey,
   clearPerryMode: mockClearPerryMode,
   walletClients: [] as unknown[],
 };
@@ -50,6 +64,8 @@ let mockColdWalletClient: Record<string, unknown> | null = null;
 
 vi.mock('wagmi', () => ({
   useWalletClient: () => ({ data: mockColdWalletClient }),
+  useAccount: () => mockAccountReturn,
+  useSwitchChain: () => mockSwitchChainReturn,
 }));
 
 vi.mock('../providers/WalletProvider.js', () => ({
@@ -84,6 +100,16 @@ beforeEach(() => {
   campaignOverrides = {};
   chainOverrides = {};
   mockColdWalletClient = null;
+  mockAccountReturn = {
+    address: undefined,
+    isConnected: false,
+    chainId: undefined,
+  };
+  mockSwitchChainReturn = {
+    switchChainAsync: mockSwitchChainAsync,
+    isPending: false,
+    error: null,
+  };
 });
 
 describe('WalletStep', () => {
@@ -521,5 +547,199 @@ describe('WalletStep', () => {
     // Offset should remain at default (0) since the stored value was corrupt
     const offsetInput = screen.getByLabelText('Wallet offset');
     expect(offsetInput).toHaveValue(0);
+  });
+
+  describe('chain mismatch banner', () => {
+    it('shows the banner when wallet chain differs from campaign chain', () => {
+      mockAccountReturn = {
+        address: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12' as `0x${string}`,
+        isConnected: true,
+        chainId: 1,
+      };
+      walletOverrides = {
+        isConnected: true,
+        address: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
+      };
+      campaignOverrides = {
+        activeCampaign: {
+          id: 'c',
+          name: 'X',
+          version: 1,
+          rpcUrl: 'http://x',
+          chainId: 8453,
+        } as typeof defaultCampaign['activeCampaign'],
+      };
+
+      render(<WalletStep />);
+
+      expect(screen.getByRole('alert').textContent).toContain('chain 1');
+      expect(screen.getByRole('alert').textContent).toContain('chain 8453');
+    });
+
+    it('disables Derive Hot Wallets while mismatched', () => {
+      mockAccountReturn = {
+        address: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12' as `0x${string}`,
+        isConnected: true,
+        chainId: 1,
+      };
+      walletOverrides = {
+        isConnected: true,
+        address: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
+      };
+      campaignOverrides = {
+        activeCampaign: {
+          id: 'c',
+          name: 'X',
+          version: 1,
+          rpcUrl: 'http://x',
+          chainId: 8453,
+        } as typeof defaultCampaign['activeCampaign'],
+      };
+
+      render(<WalletStep />);
+
+      const button = screen.getByRole('button', {
+        name: /derive hot wallets/i,
+      }) as HTMLButtonElement;
+      expect(button.disabled).toBe(true);
+    });
+
+    it('hides the banner when chains match', () => {
+      mockAccountReturn = {
+        address: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12' as `0x${string}`,
+        isConnected: true,
+        chainId: 8453,
+      };
+      walletOverrides = {
+        isConnected: true,
+        address: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
+      };
+      campaignOverrides = {
+        activeCampaign: {
+          id: 'c',
+          name: 'X',
+          version: 1,
+          rpcUrl: 'http://x',
+          chainId: 8453,
+        } as typeof defaultCampaign['activeCampaign'],
+      };
+
+      render(<WalletStep />);
+      expect(screen.queryByRole('alert')).toBeNull();
+    });
+  });
+
+  describe('private-key escape hatch', () => {
+    it('reveals the paste-key editor when the toggle is clicked', () => {
+      walletOverrides = {
+        isConnected: true,
+        address: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
+      };
+      campaignOverrides = {
+        activeCampaign: { id: 'c', name: 'X', version: 1, rpcUrl: 'http://x', chainId: 1 } as typeof defaultCampaign['activeCampaign'],
+      };
+
+      render(<WalletStep />);
+      expect(screen.queryByLabelText(/cold wallet private key/i)).toBeNull();
+
+      fireEvent.click(screen.getByText(/paste a private key/i));
+      expect(screen.getByLabelText(/cold wallet private key/i)).toBeTruthy();
+    });
+
+    it('rejects a pasted key with the wrong length', async () => {
+      walletOverrides = {
+        isConnected: true,
+        address: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
+      };
+      campaignOverrides = {
+        activeCampaign: { id: 'c', name: 'X', version: 1, rpcUrl: 'http://x', chainId: 1 } as typeof defaultCampaign['activeCampaign'],
+      };
+
+      render(<WalletStep />);
+      fireEvent.click(screen.getByText(/paste a private key/i));
+      fireEvent.change(screen.getByLabelText(/cold wallet private key/i), {
+        target: { value: '0xabc' },
+      });
+      fireEvent.click(
+        screen.getByRole('button', { name: /derive from pasted key/i }),
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/must be a 32-byte hex/i)).toBeTruthy();
+      });
+      expect(mockDeriveHotWalletsFromPrivateKey).not.toHaveBeenCalled();
+    });
+
+    it('forwards a valid key to deriveHotWalletsFromPrivateKey with 0x prefix', async () => {
+      walletOverrides = {
+        isConnected: true,
+        address: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
+      };
+      campaignOverrides = {
+        activeCampaign: {
+          id: 'c',
+          name: 'Test Campaign',
+          version: 2,
+          rpcUrl: 'http://rpc.local',
+          chainId: 1,
+        } as typeof defaultCampaign['activeCampaign'],
+      };
+      mockDeriveHotWalletsFromPrivateKey.mockResolvedValue(undefined);
+
+      render(<WalletStep />);
+      fireEvent.click(screen.getByText(/paste a private key/i));
+
+      const rawKey = 'ab'.repeat(32); // 64 hex chars, no 0x prefix
+      fireEvent.change(screen.getByLabelText(/cold wallet private key/i), {
+        target: { value: rawKey },
+      });
+      fireEvent.click(
+        screen.getByRole('button', { name: /derive from pasted key/i }),
+      );
+
+      await waitFor(() => {
+        expect(mockDeriveHotWalletsFromPrivateKey).toHaveBeenCalledTimes(1);
+      });
+      expect(mockDeriveHotWalletsFromPrivateKey).toHaveBeenCalledWith({
+        privateKey: `0x${rawKey}`,
+        campaignName: 'Test Campaign',
+        version: 2,
+        count: 1,
+        offset: 0,
+        rpcUrl: 'http://rpc.local',
+      });
+    });
+
+    it('keeps the paste-key button enabled even when chains mismatch', () => {
+      mockAccountReturn = {
+        address: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12' as `0x${string}`,
+        isConnected: true,
+        chainId: 1,
+      };
+      walletOverrides = {
+        isConnected: true,
+        address: '0xAbCdEf1234567890AbCdEf1234567890AbCdEf12',
+      };
+      campaignOverrides = {
+        activeCampaign: {
+          id: 'c',
+          name: 'X',
+          version: 1,
+          rpcUrl: 'http://x',
+          chainId: 8453,
+        } as typeof defaultCampaign['activeCampaign'],
+      };
+
+      render(<WalletStep />);
+      fireEvent.click(screen.getByText(/paste a private key/i));
+      fireEvent.change(screen.getByLabelText(/cold wallet private key/i), {
+        target: { value: '0x' + 'cd'.repeat(32) },
+      });
+
+      const button = screen.getByRole('button', {
+        name: /derive from pasted key/i,
+      }) as HTMLButtonElement;
+      expect(button.disabled).toBe(false);
+    });
   });
 });

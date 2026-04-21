@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useWalletClient } from 'wagmi';
 import { erc20Abi, parseEther } from 'viem';
-import type { Address } from 'viem';
+import type { Address, Hex } from 'viem';
 import { StepPanel } from '../components/StepPanel.js';
 import { WalletBadge } from '../components/WalletBadge.js';
+import { ChainMismatchBanner } from '../components/ChainMismatchBanner.js';
 import { Button, Card } from '../components/ui';
 import { useWallet } from '../providers/WalletProvider.js';
 import { useCampaign } from '../providers/CampaignProvider.js';
 import { useChain } from '../providers/ChainProvider.js';
 import { useStorage } from '../providers/StorageProvider.js';
+import { useChainMismatch } from '../hooks/useChainMismatch.js';
 
 /** Build the IDB key for a campaign's wallet high-water-mark. */
 function hwmKey(campaignId: string): string {
@@ -39,18 +41,22 @@ export function WalletStep() {
     perryMode,
     deriveHotWallet,
     deriveHotWallets,
+    deriveHotWalletsFromPrivateKey,
     clearPerryMode,
   } = useWallet();
   const { activeCampaign, setActiveStep } = useCampaign();
   const { chainConfig } = useChain();
   const { storage } = useStorage();
   const { data: coldWalletClient } = useWalletClient();
+  const chainMismatch = useChainMismatch(activeCampaign?.chainId);
 
   const [isDeriving, setIsDeriving] = useState(false);
   const [deriveError, setDeriveError] = useState<string | null>(null);
   const [walletCount, setWalletCount] = useState(1);
   const [walletOffset, setWalletOffset] = useState(0);
   const [storedHighWaterMark, setStoredHighWaterMark] = useState(-1);
+  const [showKeyPaste, setShowKeyPaste] = useState(false);
+  const [pastedKey, setPastedKey] = useState('');
 
   useEffect(() => {
     if (!storage || !activeCampaign) return;
@@ -80,6 +86,14 @@ export function WalletStep() {
   const chainName = chainConfig?.name ?? 'Unknown Chain';
   const hasMultipleWallets = (perryMode?.wallets.length ?? 0) > 1;
 
+  const persistHighWaterMark = useCallback(async () => {
+    if (!storage || !activeCampaign) return;
+    const hwm = walletOffset + walletCount - 1;
+    const entry: StoredHWM = { highWaterMark: hwm };
+    await storage.appSettings.put(hwmKey(activeCampaign.id), JSON.stringify(entry));
+    setStoredHighWaterMark(hwm);
+  }, [storage, activeCampaign, walletOffset, walletCount]);
+
   const handleDerive = useCallback(async () => {
     if (!activeCampaign) {
       return;
@@ -105,19 +119,61 @@ export function WalletStep() {
         });
       }
 
-      if (storage) {
-        const hwm = walletOffset + walletCount - 1;
-        const entry: StoredHWM = { highWaterMark: hwm };
-        await storage.appSettings.put(hwmKey(activeCampaign.id), JSON.stringify(entry));
-        setStoredHighWaterMark(hwm);
-      }
+      await persistHighWaterMark();
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to derive hot wallet';
       setDeriveError(message);
     } finally {
       setIsDeriving(false);
     }
-  }, [activeCampaign, walletCount, walletOffset, deriveHotWallet, deriveHotWallets, storage]);
+  }, [
+    activeCampaign,
+    walletCount,
+    walletOffset,
+    deriveHotWallet,
+    deriveHotWallets,
+    persistHighWaterMark,
+  ]);
+
+  const handleDeriveFromKey = useCallback(async () => {
+    if (!activeCampaign) return;
+
+    const trimmed = pastedKey.trim();
+    const normalized = trimmed.startsWith('0x') ? trimmed : `0x${trimmed}`;
+    if (normalized.length !== 66) {
+      setDeriveError('Private key must be a 32-byte hex string (64 chars + 0x prefix).');
+      return;
+    }
+
+    setIsDeriving(true);
+    setDeriveError(null);
+
+    try {
+      await deriveHotWalletsFromPrivateKey({
+        privateKey: normalized as Hex,
+        campaignName: activeCampaign.name,
+        version: activeCampaign.version,
+        count: walletCount,
+        offset: walletOffset,
+        rpcUrl: activeCampaign.rpcUrl,
+      });
+      await persistHighWaterMark();
+      setPastedKey('');
+      setShowKeyPaste(false);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to derive from private key';
+      setDeriveError(message);
+    } finally {
+      setIsDeriving(false);
+    }
+  }, [
+    activeCampaign,
+    pastedKey,
+    walletCount,
+    walletOffset,
+    deriveHotWalletsFromPrivateKey,
+    persistHighWaterMark,
+  ]);
 
   const handleClear = useCallback(async () => {
     clearPerryMode();
@@ -160,9 +216,16 @@ export function WalletStep() {
 
   return (
     <StepPanel title="Wallet" description="Connect your wallet and optionally derive a hot wallet for distribution.">
+      <ChainMismatchBanner
+        mismatch={chainMismatch}
+        campaignChainName={chainConfig?.name}
+      />
+
       {!isConnected && (
         <Card className="text-center">
-          <p className="font-mono text-sm text-[color:var(--fg-muted)]">Connect your wallet using the button in the header.</p>
+          <p className="font-mono text-sm text-[color:var(--fg-muted)]">
+            Connect your wallet using the button in the header, or paste a private key below.
+          </p>
         </Card>
       )}
 
@@ -219,10 +282,56 @@ export function WalletStep() {
                 <Button
                   variant="primary"
                   onClick={handleDerive}
-                  disabled={isDeriving || !activeCampaign}
+                  disabled={isDeriving || !activeCampaign || chainMismatch.mismatched}
                 >
                   {isDeriving ? 'Deriving...' : 'Derive Hot Wallets'}
                 </Button>
+
+                {/* Escape hatch: sign with a pasted private key. Bypasses
+                    wagmi entirely, so the user can still derive even when
+                    the connected wallet is on the wrong chain. */}
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowKeyPaste((v) => !v)}
+                    className="font-mono text-xs underline decoration-dotted text-[color:var(--fg-muted)] hover:text-[color:var(--fg-primary)]"
+                  >
+                    {showKeyPaste ? 'Hide private-key option' : 'Or paste a private key instead'}
+                  </button>
+                </div>
+
+                {showKeyPaste && (
+                  <div className="space-y-2 border-2 border-[color:var(--edge)] bg-[color:var(--bg-page)] p-3">
+                    <label
+                      htmlFor="wallet-step-private-key"
+                      className="block font-mono text-xs uppercase tracking-[0.1em] text-[color:var(--fg-muted)]"
+                    >
+                      Cold wallet private key
+                    </label>
+                    <input
+                      id="wallet-step-private-key"
+                      type="password"
+                      autoComplete="off"
+                      spellCheck={false}
+                      aria-label="Cold wallet private key"
+                      placeholder="0x…"
+                      value={pastedKey}
+                      onChange={(e) => setPastedKey(e.target.value)}
+                      className="w-full rounded-none border-2 border-[color:var(--edge)] bg-white text-[color:var(--color-cream-900)] font-mono px-2 py-1 text-sm focus:outline-none focus:border-[color:var(--color-pink-500)]"
+                    />
+                    <p className="font-mono text-[10px] text-[color:var(--fg-muted)]">
+                      The key stays in memory only — it's used once to sign the EIP-712 derivation payload locally, never sent over the wire.
+                    </p>
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      onClick={handleDeriveFromKey}
+                      disabled={isDeriving || !activeCampaign || pastedKey.trim().length === 0}
+                    >
+                      {isDeriving ? 'Deriving…' : 'Derive from pasted key'}
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
 

@@ -69,8 +69,15 @@ vi.mock('viem', async () => {
   };
 });
 
+const mockSignTypedDataLocal = vi.fn();
+
 vi.mock('viem/accounts', () => ({
-  privateKeyToAccount: vi.fn(() => ({ address: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef' })),
+  privateKeyToAccount: vi.fn((pk: string) => ({
+    address: pk === '0x' + 'cd'.repeat(32)
+      ? '0xcafecafecafecafecafecafecafecafecafecafe'
+      : '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+    signTypedData: mockSignTypedDataLocal,
+  })),
 }));
 
 import { WalletProvider, useWallet } from './WalletProvider.js';
@@ -187,6 +194,66 @@ describe('useWallet', () => {
         address: '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
         privateKey: '0x' + 'ab'.repeat(32),
       }],
+      offset: 0,
+    });
+  });
+
+  it('deriveHotWalletsFromPrivateKey signs locally and sets perryMode without wagmi', async () => {
+    mockSignTypedDataLocal.mockResolvedValue('0xaacceeff11223344');
+
+    const { result } = renderHook(() => useWallet(), { wrapper });
+
+    await act(() =>
+      result.current.deriveHotWalletsFromPrivateKey({
+        privateKey: ('0x' + 'cd'.repeat(32)) as `0x${string}`,
+        campaignName: 'Pasted',
+        version: 3,
+        count: 2,
+        offset: 5,
+        rpcUrl: 'http://rpc.test',
+      }),
+    );
+
+    expect(mockedCreateEIP712Message).toHaveBeenCalledWith({
+      funder: '0xcafecafecafecafecafecafecafecafecafecafe',
+      name: 'Pasted',
+      version: 3,
+    });
+    expect(mockSignTypedDataLocal).toHaveBeenCalledOnce();
+    // wagmi's signTypedDataAsync must NOT have been touched for this path.
+    expect(mockSignTypedDataAsync).not.toHaveBeenCalled();
+
+    expect(mockedDeriveMultipleWallets).toHaveBeenCalledWith({
+      signature: '0xaacceeff11223344',
+      count: 2,
+      offset: 5,
+    });
+
+    expect(result.current.perryMode).toMatchObject({
+      isActive: true,
+      coldAddress: '0xcafecafecafecafecafecafecafecafecafecafe',
+      offset: 5,
+    });
+  });
+
+  it('deriveHotWalletsFromPrivateKey defaults offset to 0 when omitted', async () => {
+    mockSignTypedDataLocal.mockResolvedValue('0xaabb');
+
+    const { result } = renderHook(() => useWallet(), { wrapper });
+
+    await act(() =>
+      result.current.deriveHotWalletsFromPrivateKey({
+        privateKey: ('0x' + 'cd'.repeat(32)) as `0x${string}`,
+        campaignName: 'NoOffset',
+        version: 1,
+        count: 1,
+        rpcUrl: 'http://rpc.test',
+      }),
+    );
+
+    expect(mockedDeriveMultipleWallets).toHaveBeenCalledWith({
+      signature: '0xaabb',
+      count: 1,
       offset: 0,
     });
   });
