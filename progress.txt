@@ -1,67 +1,109 @@
 # Titrate — Progress Checkpoint
 
-## Date: 2026-04-20 (evening, post-session 4)
+## Date: 2026-04-21 (post-session 5)
 
 ## Current state
 
-- **Branch:** `master` at `952f025`. 2 PRs merged this pass (#48–#49).
+- **Branch:** `master` at `a2104a4`. 14 commits landed this session, all direct-to-master per the small-focused preference.
 - **Open PRs:** none.
 - **Working tree:** clean aside from the usual `.remember/tmp/save-session.pid` + `.yarn/install-state.gz` churn.
-- **CI:** green on master through the entire PR chain.
-- **Tests:** SDK 631 passing + 53 gated skipped (was 623 + 53). Web unit 645 (unchanged). Playwright 5/4 (unchanged).
-- **Coverage:** SDK **85.96% stmt / 87.5% line** (was 84.73% / 86.13%). `src/distributor` **90.1% stmt** (was 89.45%). `src/pipeline/loops` **87.47% stmt** (was 81.43%).
+- **Tests:**
+  - SDK **691 passing + 53 gated skipped** (was 631 + 53) — **+60 tests**.
+  - Web unit **686 passing** (was 645) — **+41 tests**.
+  - Playwright E2E **8 passing + 2 gated skipped** (was 5) — **+5 new specs/tests**.
+- **SDK coverage: 89.13% stmt / 79.72% branch / 90.57% line** (was 85.96% / — / 87.5%). `src/pipeline` is 100% statement/line. `src/wallet` hit 100% statement.
 - **Production deploy:** https://app-production-35a3.up.railway.app — Railway auto-deploys master.
 
 ## Shipped this session
 
-Ran from the prior checkpoint at `4f22e69` to HEAD at `952f025`. 2 PRs — both offline coverage work, no feature changes.
+Spans `76d048f` → `a2104a4`. Three major themes: new web features, SDK offline coverage push, real-chain E2E infrastructure.
 
-### Distributor registry offline coverage
+### Web: provider-key UX + chain guardrails
 
-- **PR #48 `7ed26a5` — test(sdk): cover distributor/registry.ts offline.** Three new offline tests for `checkRecipients` in `distributor-unit.test.ts`. Previously only exercised by the anvilUp-gated integration test, leaving it at **25% stmt** in default runs. Mocks `publicClient.readContract` to assert the function forwards address/abi/functionName/args correctly, handles an empty recipients array, and propagates readContract errors. `src/distributor` 89.45% → 90.1% stmt.
+- **`e6a6617` — "Compatible with" section on landing page.** Etherscan/Blockscout/Sourcify/TrueBlocks/Your-RPC chips.
+- **`9e591c3` + `d1249db` + `3008cbe` — One-click RPC auto-load with inline key editor.** Added buttons for valve.city / Alchemy / Infura in CampaignStep's RPC URL section. Replaced an earlier `window.prompt()` approach with an inline editor: prefix/suffix spans framing an input that takes only the key. Pastes a full URL → `splitTemplate()` extracts the key. Persisted via `storage.appSettings`. 16 new tests total.
+- **`494624f` — Chain-mismatch guardrail + private-key signer escape hatch.** Two runtime-error reductions for WalletStep:
+  1. `useChainMismatch(campaignChainId)` hook (8 tests) + `ChainMismatchBanner` component (7 tests). Banner renders when wagmi's chainId disagrees with the active campaign's; Derive Hot Wallets is disabled while mismatched so users don't kick off signatures guaranteed to fail.
+  2. `deriveHotWalletsFromPrivateKey` on WalletProvider signs the EIP-712 derivation payload with a pasted private key via viem's `LocalAccount.signTypedData`, bypassing wagmi entirely. Exposed in WalletStep as a collapsible "Or paste a private key instead" affordance (type=password, autoComplete=off, spellCheck=false).
+- **`5f0d2ca` — Fix: status badge fades under hover actions on campaign cards.** The `group` wrapper in HomePage pins action buttons at top-right while StatusBadge was also top-right inside the Card. Added `group-hover:opacity-0 group-hover:pointer-events-none` so the floating actions visibly replace the tag instead of overlapping it.
 
-### Pipeline loop edge-path coverage
+### SDK: offline coverage
 
-- **PR #49 `952f025` — test(sdk): cover filter-loop + scanner-loop edge paths.** 8 new offline tests. Targeted the two lowest-coverage files in `src/pipeline/loops`.
-  - `filter-loop.ts` **63.76% → 81.15% stmt.** New tests: applyFilterChain throw → errors.append + row dropped + watermark still advances; `stop()` mid-run → status returns to idle; `on()` delegates to the event bus; driver throw → `console.error` logged and `.finally()` resets status via a cursor store whose `read()` throws.
-  - `scanner-loop.ts` **73.8% → 91.66% stmt.** New tests: non-block-scan first step → emits `completed` immediately; `endBlock === null` + caught up → sleeps `chainBlockTimeMs` and polls; `runSource` exhausts all 5 `BACKOFF_MS` retries → `errors.append` × 5, status = 'errored', emits 'errored'; `on()` delegates.
-  - `src/pipeline/loops` aggregate 81.43% → 87.47% stmt.
+Four targeted files, all via mocked-module patterns (`vi.hoisted` + `vi.mock` + top-level `await import`) to give the default offline run the same coverage that Anvil-gated tests would.
 
-## Notable non-obvious test patterns (learned the hard way)
+- **`c731c2a` — `filters.ts` RPC-driven executors.** 20 tests for `contract-check`, `min-balance`, `nonce-range`, `token-recipients` by stubbing `scanner/properties.js` and `scanner/logs.js`. **45.66% → 100% stmt.**
+- **`c256652` — `distributor-loop.ts` intervention + error + lifecycle branches.** 16 tests covering reconcile confirmed/intervention/unknown-index, drain-tail partial flush, select-wallet-null, disperse-throw, outcome=dropped, round-robin, pause/resume, stop while paused. **67.24% → 98.27% stmt / 100% fn.**
+- **`3727e49` — `scanner-loop.ts` range/backoff/polling.** 13 tests for endBlock vs latest clamp, startBlock fast-forward, backoff exhaustion, scan-block retry recovery, default runSource, inner-loop pause, chainBlockTimeMs polling. **91.66% → 97.61% stmt / 100% line.**
+- **`71ace92` — `sources.ts` csv/block-scan/union executors.** 11 tests by mocking `scanner/blocks.js`. **90.9% → 100% stmt / 100% fn / 100% line.**
 
-Two subtle gotchas tripped the first test runs — worth keeping in mind for future loop work:
+Net effect: `src/pipeline` hit **100% statement / 100% line** coverage offline.
 
-- **`bus.emit` is synchronous.** If the driver emits `completed` before its first real `await` (e.g. the non-block-scan first-step branch), any handler registered *after* `loop.start()` will miss it. Fix: `const completedP = new Promise(res => bus.on('completed', res))` BEFORE `loop.start()`. Already used downstream — document if writing more loop tests.
-- **`stop()` on a driver parked in `bus.once(...)` will hang.** The stopping flag is set by `stop()`, but the driver is inside a pending Promise and can't observe it until the bus resolves. Fix: emit a wake event (`pipeline-changed` or `scan-progressed`) between `loop.stop()` and awaiting the stopPromise. Pattern used in the filter-loop `stop() mid-run` test.
+### Web-E2E: real-chain infrastructure
+
+Three commits that together make "drive a campaign end-to-end through the UI on a real chain" actually possible.
+
+- **`aadf618` (landed end of last session, counted here for context) — Perry-mode derive E2E.** Two specs: seeded-campaign (IDB pre-populated) + full UI walkthrough. Both against a mock wallet on localhost. Flushed a latent `transport: http()` bug in WalletProvider — `http()` needs an rpcUrl, fixed by threading `activeCampaign.rpcUrl` through derive call signatures.
+- **`986d752` — Gated PulseChain v4 walkthrough via paste-key derive.** First real-chain web E2E. `helpers/pulsechain-v4.ts` (chain descriptor, faucet claim, `ensureFunded` that skips the spec with a reason if the faucet rejects). `full-campaign-v4.spec.ts` gated by `RUN_PULSECHAIN_E2E_WEB=1` + `PULSECHAIN_TESTNET_PRIVATE_KEY`. Walks the whole wizard against live v4 RPC with the mismatch banner visible, then uses the paste-key escape hatch to derive. Asserts no `HotWalletDerivation` sign hits the mock wallet (`StorageEncryption` unlock is expected — surprise while tracing the first failure). Ran in 13.4s against the live chain.
+- **`208e19d` — Headless wallet bridge + real v4 Fund Gas broadcast.** Second test in the v4 spec. `helpers/headless-wallet.ts` uses `page.exposeBinding` to bridge EIP-1193 RPC calls to a node-side viem `{public,wallet}Client`. Signs real sigs, broadcasts real txs. `reportChainId` option tells wagmi chain 1 while signing on chain 943, sidestepping AppKit's "unsupported chain" prompt without touching prod wagmi config. Spec derives a hot wallet, clicks Fund Gas, polls v4 for the receipt, asserts hot balance += 0.05 tPLS and cold -= that + gas. 27.3s runtime.
+- **`a2104a4` — Anvil variant with MockERC20 + Fund Tokens.** `helpers/anvil.ts` spawns `anvil` on port 8559 (`anvilInstalled()` auto-skips when Foundry isn't on PATH), deploys MockERC20 from the Foundry artifact, mints 1M to the cold wallet. Spec walks the wizard with the headless wallet bound to Anvil account #0 (prefunded 10000 ETH), derives, Fund Gas, **and** Fund Tokens — the latter exercises `writeContract({functionName: 'transfer'})` for `BigInt(uniformAmount)` wei. 2.3s test execution, 46s including vite build. This variant runs offline, fast, deterministic.
+
+## On-chain state notes
+
+- **Persisted v4 key:** `packages/sdk/.pulsechain-testnet.local.json` (gitignored) — address `0xeA2d0cd5E7B90650ED0C581a6E3B168Da13D7DF2`.
+- **Faucet claim history this session:** 1 additional claim (tx `0xe60c3f693f...`). Balance after: 19.99 tPLS → 19.94 post-first-test-run.
+- **Derived hot wallet on v4:** `0xA04BA2Cd435F9C8933B8ac96C54A1Bd1d0CB6163` — holds ~0.1 tPLS from E2E runs. Same key+campaign deterministically yields this address.
+- **Alt v4 RPC:** `https://rpc-testnet-pulsechain.g4mm4.io` — community mirror, used when the Heroku dyno primary is cold. `selectLiveRpc()` probes both.
 
 ## Overall coverage snapshot
 
-| Area | Stmt | Prior |
-|---|---|---|
-| SDK total | **85.96%** | 84.73% |
-| `src/distributor` | **90.1%** | 89.45% |
-| `src/pipeline/loops` | **87.47%** | 81.43% |
-| `filter-loop.ts` | 81.15% | 63.76% |
-| `scanner-loop.ts` | 91.66% | 73.8% |
+| Area | Stmt | Prior | Fn | Line |
+|---|---|---|---|---|
+| SDK total | **89.13%** | 85.96% | 90.46% | 90.57% |
+| `src/pipeline` | **100%** | — | 100% | 100% |
+| `src/pipeline/loops` | 93.95% | 87.47% | 93.93% | 96.93% |
+| `src/distributor` | 90.1% | 90.1% | 95.12% | 90.88% |
+| `src/wallet` | **100%** | — | 100% | 100% |
+| `filters.ts` | **100%** | 75.59% | 100% | 100% |
+| `distributor-loop.ts` | **98.27%** | 77.58% | 100% | 98.09% |
+| `scanner-loop.ts` | **97.61%** | 91.66% | 86.66% | 100% |
+| `sources.ts` | **100%** | 90.9% | 100% | 100% |
 
-Worst remaining offenders: `src/signers` at **37.03% stmt** (CLI-only paths, still deferred per prior reasoning); `distributor-loop.ts` at **77.58% stmt** (lines 217-225, 260, 278); `filters.ts` at **75.59% stmt**.
+Worst remaining offenders: `src/signers` **37.03% stmt** (CLI-only, still deferred); `filter-loop.ts` **81.15% stmt** (lines 40–46, error-seam branch); `retroactive.ts` **86.2% stmt**.
 
-## Remaining work from the priority list
+## Notable test patterns worth keeping
 
-1. ✅ **Distributor/registry.ts coverage.** Done (PR #48).
-2. ✅ **Pipeline loop coverage.** Done (PR #49).
-3. **Mock wallet Perry-mode flow.** Still pending. Highest-leverage remaining UX test — extend Playwright from connect → navigate to a campaign → WalletStep → sign EIP-712 → hot wallets derived + displayed. **Needs campaign-creation flow first**, which is non-trivial.
-4. **Retry the gated PulseChain E2E** any time — Sourcify chain add OR PulseScan recovery makes it pass without code change.
+- **`vi.hoisted` + `vi.mock` + top-level `await import`** — filter/source/distributor unit tests all use this shape to mock cross-module dependencies while keeping a single shared `vi.fn` they can reconfigure per-test.
+- **In-memory loop fixtures (`memory-storage.ts`)** — drop-in replacements for `createAppendableCSV` / `createCursorStore` / `createAppendableJSONL`. No tmpdir, no fs, no flakes. Saved as a feedback memory: **test each piece, maximize determinism**.
+- **`vi.fn<RunSourceFn>(...)`** preserves the function signature through `mock.calls`, so assertions on `c[1]` type-check correctly. Without the generic, vitest infers `[][]`.
+- **`page.exposeBinding` for headless RPC** — eliminates the need to run actual EIP-712 crypto inside Playwright's addInitScript context. Node-side viem handles real signing + broadcasting; browser just forwards.
+- **Report chainId X, broadcast on chainId Y** — the `reportChainId` option on the headless wallet lets wagmi see a chain it knows while the underlying viem walletClient signs + broadcasts on a different one. Sidesteps AppKit's "unsupported chain" prompt without adding PulseChain v4 to the prod networks list.
 
-## What to do next session
+## What to run locally
 
-1. **Mock wallet Perry-mode flow.** Start by scoping the campaign-creation flow — is there a UI path today, or does it need to be built? If building, this is a small design discussion rather than a pure coverage task.
-2. **Distributor-loop coverage.** Next-lowest hanging fruit in `src/pipeline/loops`. Lines 217-225, 260, 278. Probably follows the same pattern as the filter/scanner loops in PR #49.
-3. **Retry the gated PulseChain E2E.** Zero cost, check both PulseScan health and Sourcify chainId 943 coverage.
+```
+# Fast offline suite (everything except gated v4):
+yarn workspace @titrate/web playwright test
+
+# Full v4 real-chain walkthrough (needs funded key):
+RUN_PULSECHAIN_E2E_WEB=1 \
+  PULSECHAIN_TESTNET_PRIVATE_KEY=0x... \
+  yarn workspace @titrate/web playwright test e2e/full-campaign-v4.spec.ts
+
+# Anvil-based full walkthrough (needs Foundry in PATH):
+yarn workspace @titrate/web playwright test e2e/full-campaign-anvil.spec.ts
+```
+
+## Remaining priority list
+
+1. **DistributeStep E2E.** The only campaign step not yet covered end-to-end. Would extend `full-campaign-anvil.spec.ts` with: deploy `TitrateSimple`, approve operator, walk to Distribute, click Start, wait N batches, click Stop, assert cursor + batches.jsonl. Real SDK integration territory — probably a separate helper for the distributor contract.
+2. **Fund Tokens for the v4 spec.** Would need to pre-deploy (or deploy-per-run) a token on v4. Anvil variant already covers this; adding to v4 is mostly about stability of the faucet + RPC mirrors.
+3. **`filter-loop.ts` lines 40–46** — only remaining non-lifecycle gap in `src/pipeline/loops`. A second pass at the error-seam branch probably buys <5% but closes the set.
+4. **`src/signers`** — 37% stmt, all CLI-specific flows. Still deferred; needs a design pass on what's worth testing (WalletConnect signer, Ledger stub).
 
 ## Session notes
 
-- Two focused PRs, each green on CI. Same stash → merge → pull → pop pattern used — still reliable.
-- Coverage on SDK crossed **86% stmt** for the first time. `src/distributor` at **90.1% stmt** — tight-knit module, near its practical ceiling given the gated Anvil path still owns some branches.
-- No feature work — intentional; the session was pure coverage hardening after the big multi-backend verify feature landed in PR #46.
-- Master is clean through `952f025`. User's session preference: small focused PRs; direct-to-master for brand/theme migrations per `feedback_direct-to-master.md`. Feature/coverage work goes through PR flow (followed this session).
+- Coverage crossed **89% stmt** on SDK. `src/pipeline` + `src/wallet` both at 100%.
+- The "real-chain test harness" evolved in three commits: paste-key escape hatch (no RPC needed for signing) → headless wallet bridge (real signing/broadcasts against v4) → anvil variant (no network at all, + MockERC20 for token flows).
+- v4 faucet claimed 1× this session (10 tPLS → address now at ~19.94). Persistent key reused across runs to avoid per-IP cooldowns.
+- User noted the prior session's paste-key assertion failed on a `StorageEncryption` sign call (not the `HotWalletDerivation` one we cared about) — learning: the StorageProvider auto-prompts on connect to derive an IDB encryption key, and that pass-through is expected. Assertion now filters by `primaryType`.
+- User called out a UX regression on hover — action buttons stacked on top of the Draft status tag. Fixed with `group-hover:opacity-0`. Added a class-assertion test so this doesn't silently regress.
