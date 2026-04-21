@@ -9,7 +9,16 @@ import {
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 
 const FAUCET_BASE_URL = 'https://faucet.v4.testnet.pulsechain.com';
-const DEFAULT_RPC_URL = 'https://rpc.v4.testnet.pulsechain.com';
+/**
+ * RPC fallback list — the primary v4 endpoint is a single Heroku dyno that
+ * periodically returns 5xx / hangs. `rpc-testnet-pulsechain.g4mm4.io` is a
+ * community mirror; adding more mirrors here is a drop-in change.
+ */
+const RPC_URLS = [
+  'https://rpc.v4.testnet.pulsechain.com',
+  'https://rpc-testnet-pulsechain.g4mm4.io',
+] as const;
+const DEFAULT_RPC_URL = RPC_URLS[0];
 
 /**
  * Minimal duplicate of the SDK's PulseChain v4 helper, local to the web E2E
@@ -36,6 +45,43 @@ export type TestnetAccount = {
   readonly rpcUrl: string;
   readonly publicClient: PublicClient;
 };
+
+/**
+ * Probes the v4 RPC mirrors and returns the first one that answers
+ * `eth_chainId` with `0x3af` (943) within the timeout. Throws if none
+ * respond — the spec should `test.skip()` on that.
+ */
+export async function selectLiveRpc(
+  timeoutMs = 10_000,
+  candidates: readonly string[] = RPC_URLS,
+): Promise<string> {
+  for (const url of candidates) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'eth_chainId',
+          params: [],
+        }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (!resp.ok) continue;
+      const json = (await resp.json()) as { result?: string };
+      if (json.result === '0x3af') return url;
+    } catch {
+      // try next candidate
+    }
+  }
+  throw new Error(
+    `No responsive PulseChain v4 RPC in ${candidates.join(', ')}`,
+  );
+}
 
 /**
  * Resolves a testnet account. Prefers `PULSECHAIN_TESTNET_PRIVATE_KEY` so
