@@ -31,7 +31,12 @@ export function CampaignCard({ name, chainName, tokenSymbol, addressCount, batch
     >
       <div className="flex items-start justify-between gap-2">
         <h3 className="font-sans text-sm font-extrabold tracking-tight text-[color:var(--fg-primary)] min-w-0 truncate">{name}</h3>
-        <StatusBadge status={statusMap[status]} label={status} />
+        {/* Fades out when the card wrapper (which carries the `group` class
+            in HomePage) is hovered, so the floating action buttons don't
+            stack on top of the status tag. */}
+        <span className="transition-opacity group-hover:opacity-0 group-hover:pointer-events-none group-focus-within:opacity-0 group-focus-within:pointer-events-none">
+          <StatusBadge status={statusMap[status]} label={status} />
+        </span>
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 font-mono text-xs text-[color:var(--fg-muted)]">
         <span>{chainName}</span>

@@ -100,4 +100,13 @@ describe('CampaignCard', () => {
     render(<CampaignCard {...props} status="complete" />);
     expect(screen.getByText('complete')).toBeInTheDocument();
   });
+
+  it('wraps the status badge so group-hover can fade it out under floating actions', () => {
+    render(<CampaignCard {...props} status="draft" />);
+    const badge = screen.getByText('draft');
+    const wrapper = badge.parentElement as HTMLElement;
+    expect(wrapper.className).toContain('group-hover:opacity-0');
+    expect(wrapper.className).toContain('group-hover:pointer-events-none');
+    expect(wrapper.className).toContain('transition-opacity');
+  });
 });
